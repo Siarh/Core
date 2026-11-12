@@ -50,7 +50,8 @@ local function freshSession()
             resist = 0, barrier = 0, absorb = 0, runesAbsorb = 0,
             toMount = 0, multipliersAbsorb = 0,
             overallAbsorbed = 0, overallPrevented = 0,
-            totalAbsorbedSamples = 0, totalPreventedSamples = 0
+            totalAbsorbedSamples = 0, totalPreventedSamples = 0,
+            shieldPoolLoss = 0, shieldPoolGain = 0, shieldPoolSamples = 0
         },
         determination = { sum = 0, min = nil, max = nil, samples = 0,
             above50 = 0, above67 = 0, above90 = 0 },
@@ -188,8 +189,9 @@ function AOUA.OnHealthChanged(params)
         end
     end
     local beforeFrac
-    if real and delta ~= nil and limit and limit > 0 then
-        beforeFrac = (value - delta) / limit
+    local limitDelta = tonumber(params.healthLimitDelta) or 0
+    if real and delta ~= nil and limit and (limit - limitDelta) > 0 then
+        beforeFrac = (value - delta) / (limit - limitDelta)
     elseif afterFrac ~= nil and percentDelta ~= nil then
         beforeFrac = afterFrac - percentDelta / 100
     end
@@ -207,6 +209,19 @@ function AOUA.OnHealthChanged(params)
     end
     if value ~= nil then
         AOUA.HpCache[id] = { value = value, limit = limit, real = real }
+    end
+    local additionalDelta = tonumber(params.additionalDelta)
+    if additionalDelta ~= nil and avatar and avatar.GetId then
+        local ok, playerId = pcall(avatar.GetId)
+        if ok and id == playerId then
+            local d = AOUA.Session.defense
+            d.shieldPoolSamples = d.shieldPoolSamples + 1
+            if additionalDelta < 0 then
+                d.shieldPoolLoss = d.shieldPoolLoss - additionalDelta
+            elseif additionalDelta > 0 then
+                d.shieldPoolGain = d.shieldPoolGain + additionalDelta
+            end
+        end
     end
 end
 
@@ -374,7 +389,9 @@ local function defenseReport()
         ", multiplierAbsorb=" .. fmt(d.multipliersAbsorb) ..
         "\nAPI totals: absorbed=" .. fmt(d.overallAbsorbed) ..
         " (" .. fmt(d.totalAbsorbedSamples) .. " samples), prevented=" ..
-        fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)"
+        fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)" ..
+        "\nShield pool change (not necessarily damage absorbed): loss=" .. fmt(d.shieldPoolLoss) ..
+        ", gain=" .. fmt(d.shieldPoolGain) .. ", samples=" .. fmt(d.shieldPoolSamples)
 end
 
 local function determinationReport()
