@@ -255,11 +255,7 @@ function RetrieveDDEvent(params)
 	if not params then return end
 	if params.isFall then return end
 	
-	-- Forward to analytics (build 28)
-	if AOUA and AOUA.OnHit then
-		pcall(AOUA.OnHit, nil, enumMode.Dps, params, params.determination)
-	end
-	
+
 	local collectedDps
 	
 	if Settings.ModeDPS then
@@ -277,11 +273,7 @@ function RetrieveDDEventIN(params)
 	if not params then return end
 	--if params.isFall then return end
 	
-	-- Forward to analytics (build 28)
-	if AOUA and AOUA.OnHit then
-		pcall(AOUA.OnHit, nil, enumMode.Def, params, params.determination)
-	end
-	
+
 	local collectedDef
 
 	if Settings.ModeDEF then
@@ -296,22 +288,14 @@ end
 function RetrieveHealEvent(params)
 	if not params then return end
 	
-	-- Forward to analytics (build 28)
-	if AOUA and AOUA.OnHit then
-		pcall(AOUA.OnHit, nil, enumMode.Hps, params, params.determination)
-	end
-	
+
 	DPSMeterGUI.DPSMeter:CollectHealData(params)
 end 
 
 function RetrieveHealEventIN(params)
 	if not params then return end
 	
-	-- Forward to analytics (build 28)
-	if AOUA and AOUA.OnHit then
-		pcall(AOUA.OnHit, nil, enumMode.IHps, params, params.determination)
-	end
-	
+
 	DPSMeterGUI.DPSMeter:CollectHealDataIN(params)
 end 
 --------------------------------------------------------------------------------
