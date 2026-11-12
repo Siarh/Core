@@ -151,3 +151,7 @@ To compare against the literal coefficient from the alternate reading of the sup
     python aou_analyze.py records.txt --resolve-coefficient 0.015
 
 The coefficient is printed in the report. This does not resolve the source-specification ambiguity: with a 0..100 pool, 0.0015 corresponds to +1.5% per 10 pool points at 1000 Resolve, while 0.015 corresponds to +15% per 10 points.
+
+Important integration note
+--------------------------
+The in-game Lua optimizer (`Scripts/AoUMeterOptim.lua`) still uses the literal 0.015 coefficient in its current branch revision. The offline calculator and saved-record analyzer default to 0.0015. This discrepancy is intentionally not hidden: the supplied equation and the stated +1.5% per 10 pool points imply different coefficients. Do not treat the Lua optimizer and offline engine as numerically equivalent for Resolve until a controlled Sunshine 6.0 test settles the coefficient. Both interpretations remain testable offline.
