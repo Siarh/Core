@@ -90,5 +90,7 @@ Live diagnostics follow-up (based on the latest Sunshine 6.0 report):
 Whole-fight DD recommendation update:
 - The in-game DD allocator now scores Mastery / Resolve / Ruthlessness by the equal-weight geometric mean across four target-HP quarters (87.5%, 62.5%, 37.5%, 12.5%).
 - This keeps Mastery and Resolve valuable from the opening hit while allowing Ruthlessness to contribute progressively as the target loses health; the low-HP execute phase is not allowed to dominate solely due to unusually large finishing hits.
-- Current fight Resolve average is still used as the pool input. This is a measured-fight approximation, not a per-second future Resolve forecast; controlled Resolve coefficient and pool-growth validation remain outstanding.
+- The addon now samples the observed Resolve pool separately in each target-HP quarter and uses those four measured averages in the DD curve objective; phases without samples fall back to the whole-fight average.
+- This captures the observed Resolve build-up across a fight without inventing a future per-second Resolve trajectory. The target-HP buckets are based on the health value exposed at the combat event and remain subject to the existing HP attribution confidence.
+- Controlled Resolve coefficient and pool-growth validation remain outstanding.
 - No class-specific Fury/Neistoystvo mechanic was added.
