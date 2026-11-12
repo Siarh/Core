@@ -482,8 +482,8 @@ local function multA(M, R, U, L, pool, h, curve)
 end
 
 -- Split Tp points between Mastery / Resolve / Ruthlessness (Luck is fixed).
--- The objective is the equal-weight geometric mean across four target HP phases,
--- not a snapshot at the current target HP.
+-- With curve=true, use the weighted log-average across exact HP phase boundaries;
+-- healing retains its previous current-target-HP objective.
 local function optA(fx, Tp, pool, h, curve)
 	Tp = math.floor(Tp + 0.5)
 	local memo = {}
