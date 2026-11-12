@@ -1132,15 +1132,15 @@ end
 function TUMeter:UpdateData(fightId, combatantID, mode, params, spellInfo)
 	local Fight = self.FightsList[fightId]
 
-	-- DPScope build 27 analytics hook: collect only events for the current fight.
-	if fightId == self.Fight.Current and AOUA and type(AOUA.OnHit) == "function" then
-		pcall(AOUA.OnHit, nil, mode, params, spellInfo and spellInfo.Determination)
-	end
 	local member = {}
 	member.id = combatantID
 	local Combatant = Fight:GetCombatant(member)
 
 	if Combatant and Combatant:IsClose() then -- don't record data from combatant too far
+		-- Analytics runs once per event in the current fight and receives the real combatant.
+		if fightId == self.Fight.Current and AOUA and type(AOUA.OnHit) == "function" then
+			pcall(AOUA.OnHit, Combatant, mode, params, spellInfo and spellInfo.Determination)
+		end
 		Combatant.Data[mode].Amount = Combatant.Data[mode].Amount + params.amount
 
 		if spellInfo then
