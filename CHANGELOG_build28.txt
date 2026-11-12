@@ -45,3 +45,4 @@ Additional defensive telemetry:
 - Captures player additional-health pool increases/decreases from EVENT_OBJECT_HEALTH_CHANGED as shield-pool changes.
 - These are deliberately reported as pool changes, not automatically equated with damage absorbed (expiry and other causes can also change the pool).
 - Reconstructs pre-event health ratio using healthLimitDelta when maximum HP changes in the same event.
+- Health event subscriptions are deduplicated and capped at 64 watched objects to limit event overhead; unmatched transitions are discarded instead of reused by later hits.
