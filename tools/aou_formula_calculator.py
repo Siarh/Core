@@ -222,6 +222,9 @@ def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg
         stats.get("resolve", 0.0), pool_used,
         cfg.get("resolve_coefficient", 0.0015),
     )
+    # Ruthlessness is applied after resistance, block/parry and measured rune
+    # absorption, matching the supplied hit sequence. This matters when rune_absorbed
+    # is an absolute amount rather than a percentage.
     u_mult = ruthlessness_multiplier(stats.get("ruthlessness", 0.0), target_hp)
     if "critical" in event and not expected_crit:
         crit_mult = 2.0 if bool(event["critical"]) else 1.0
@@ -232,11 +235,14 @@ def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg
 
     resistance = _event_resistance(event, cfg)
     resist_mult = resistance_multiplier(resistance) if mode == "dps" else 1.0
-    base_after_stats = raw * might_mult * m_mult * r_mult * u_mult * crit_mult
+    base_after_stats = raw * might_mult * m_mult * r_mult * crit_mult
     after_resist = base_after_stats * resist_mult
     after_block, blocked, parried, rune_absorbed = _reduction_after_resist(after_resist, event)
+    # The user-supplied order places Ruthlessness after block/parry. Keep rune
+    # absorption upstream as well, so a fixed absorbed amount is not amplified.
+    after_ruthlessness = after_block * u_mult
     caution = caution_multiplier(event.get("target_caution", 0.0), target_hp) if mode == "dps" else 1.0
-    amount = after_block * caution
+    amount = after_ruthlessness * caution
 
     wound_absorb = max(0.0, num(event.get("healing_absorb", event.get("wound_absorb", 0.0)))) if mode == "hps" else 0.0
     effective = None
