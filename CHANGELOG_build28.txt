@@ -22,3 +22,17 @@ Limitations
 - HP phase attribution depends on the game's health API and event target IDs.
 - Effective healing estimates require consecutive HP observations; reported overload is preferred when present.
 - No claim of a validated stat optimum is made without controlled combat samples.
+
+
+API integration update:
+- Added per-object EVENT_OBJECT_HEALTH_CHANGED watches for observed targets and group units.
+- Health deltas (healthDelta / healthPercentsDelta) are captured and correlated with personal damage/healing events when target, direction, and available amount agree.
+- Exact HP transitions can be marked reported; percent-only transitions remain estimated.
+- /aou stats now prints raw avatar.GetInnateStats() fields (sysName, effective, base, equipment, talents, enchants, buffs, fairyBonus, secondary) without assuming undocumented stat-name mappings.
+- /aou phase reports health-change event coverage and unknown HP samples.
+
+Caveats:
+- Health-change event ordering relative to damage/healing callbacks must be validated in Sunshine 6.0 combat.
+- Exact enemy HP and absorb values may be unavailable by design; percentage deltas are estimates for personal event attribution.
+- Innate-stat enum names are exposed by the API, but their equivalence to Mastery / Determination / Ruthlessness must be validated against the Sunshine 6.0 client before using them as optimizer coefficients.
+- No Lua runtime or in-game test has been run for this update.
