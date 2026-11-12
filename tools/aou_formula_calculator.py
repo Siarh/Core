@@ -324,8 +324,10 @@ def calculate_incoming(event: dict[str, Any], stats: dict[str, Any], cfg: dict[s
     outgoing = max(0.0, num(event.get("outgoing_damage", 0.0)))
     bt = outgoing * bloodthirst_fraction(stats.get("bloodthirst", 0.0))
     return {
-        "raw_incoming": raw, "incoming_after_defense": taken,
+        "raw_incoming": raw, "after_resistance": after_resist,
+        "incoming_after_defense": taken,
         "resistance_rating": rating, "resistance_multiplier": resist_mult,
+        "resistance_reduction": raw - after_resist,
         "blocked": blocked, "parried": parried, "rune_absorbed": rune_absorbed,
         "caution_multiplier": caution, "bloodthirst_return": bt,
     }
@@ -389,7 +391,9 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
     phase_unknown_events = 0
     half_totals = [0.0, 0.0]
     half_events = [0, 0]
+    half_known_events = [0, 0]
     half_seconds = [math.ceil(duration / 2), math.floor(duration / 2)]
+    tank_schools: dict[str, dict[str, float]] = {}
     warnings: list[str] = []
     event_count = 0
 
@@ -403,27 +407,46 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
                 incoming_total += calc["incoming_after_defense"]
                 bloodthirst += calc["bloodthirst_return"]
                 rune_total += calc["rune_absorbed"]
-                resist_saved += calc["raw_incoming"] - calc["raw_incoming"] * calc["resistance_multiplier"]
+                resist_saved += calc["resistance_reduction"]
+                school = _school_key(event) or "unknown"
+                row = tank_schools.setdefault(school, {"events": 0, "raw": 0.0, "resistance_reduction": 0.0, "blocked": 0.0, "parried": 0.0, "rune_absorbed": 0.0, "after_defense": 0.0})
+                row["events"] += 1
+                row["raw"] += calc["raw_incoming"]
+                row["resistance_reduction"] += calc["resistance_reduction"]
+                row["blocked"] += calc["blocked"]
+                row["parried"] += calc["parried"]
+                row["rune_absorbed"] += calc["rune_absorbed"]
+                row["after_defense"] += calc["incoming_after_defense"]
+                half_index = 0 if (sec - first) < math.ceil(duration / 2) else 1
+                half_totals[half_index] += calc["incoming_after_defense"]
+                half_events[half_index] += 1
+                half_known_events[half_index] += 1
                 continue
 
             calc = calculate_event(event, mode, stats, cfg, pool, expected_crit=expected_crit)
             second_total += calc["nominal"]
-            measured_for_phase = calc["nominal"] if mode == "dps" else (calc["effective"] if calc["effective"] is not None else 0.0)
-            half_index = 0 if (sec - first) < math.ceil(duration / 2) else 1
-            half_totals[half_index] += measured_for_phase
-            half_events[half_index] += 1
-            if event.get("target_hp") is not None:
-                hp_fraction = clamp(num(event.get("target_hp")), 0.0, 1.0)
-                phase_key = "100_75" if hp_fraction >= 0.75 else "75_50" if hp_fraction >= 0.50 else "50_25" if hp_fraction >= 0.25 else "25_0"
-                phase = phases[phase_key]
-                phase["events"] += 1
-                phase["amount"] += measured_for_phase
-                if event.get("critical") is not None:
-                    phase["crit_known"] += 1
-                    if bool(event.get("critical")):
-                        phase["crit_events"] += 1
+            measured_known = mode == "dps" or calc["effective"] is not None
+            if measured_known:
+                measured_for_phase = calc["nominal"] if mode == "dps" else calc["effective"]
+                half_index = 0 if (sec - first) < math.ceil(duration / 2) else 1
+                half_totals[half_index] += measured_for_phase
+                half_known_events[half_index] += 1
+                if event.get("target_hp") is not None:
+                    hp_fraction = clamp(num(event.get("target_hp")), 0.0, 1.0)
+                    phase_key = "100_75" if hp_fraction >= 0.75 else "75_50" if hp_fraction >= 0.50 else "50_25" if hp_fraction >= 0.25 else "25_0"
+                    phase = phases[phase_key]
+                    phase["events"] += 1
+                    phase["amount"] += measured_for_phase
+                    if event.get("critical") is not None:
+                        phase["crit_known"] += 1
+                        if bool(event.get("critical")):
+                            phase["crit_events"] += 1
+                else:
+                    phase_unknown_events += 1
             else:
                 phase_unknown_events += 1
+            half_index = 0 if (sec - first) < math.ceil(duration / 2) else 1
+            half_events[half_index] += 1
             bloodthirst += calc["bloodthirst_return"]
             fury_absorb += calc["fury_healing_absorption"]
             rune_total += calc["rune_absorbed"]
@@ -449,6 +472,8 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
                 pool = min(100.0, pool + gain)
             if event.get("resolve_pool_after") is not None:
                 pool = clamp(num(event["resolve_pool_after"]), 0.0, 100.0)
+            if event.get("player_died") or event.get("owner_died"):
+                pool = 0.0
             resolve_event_values.append(pool)
 
         if mode in ("dps", "hps"):
@@ -472,14 +497,18 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
             "average_per_event": item["amount"] / item["events"] if item["events"] else None,
             "critical_percent": (item["crit_events"] / item["crit_known"] * 100.0) if item["crit_known"] else None,
         }
-    first_rate = half_totals[0] / max(1, half_seconds[0])
-    second_rate = half_totals[1] / max(1, half_seconds[1]) if half_seconds[1] else None
+    first_complete = half_known_events[0] == half_events[0]
+    second_complete = half_known_events[1] == half_events[1]
+    first_rate = (half_totals[0] / max(1, half_seconds[0])) if first_complete else None
+    second_rate = (half_totals[1] / max(1, half_seconds[1])) if second_complete and half_seconds[1] else None
     stability = {
-        "first_half_total": half_totals[0], "second_half_total": half_totals[1],
+        "first_half_total_known": half_totals[0], "second_half_total_known": half_totals[1],
         "first_half_per_second": first_rate,
         "second_half_per_second": second_rate,
-        "second_vs_first_percent": ((second_rate / first_rate - 1.0) * 100.0) if second_rate is not None and first_rate > 0 else None,
-        "event_amount_spread_between_halves_percent": ((max(half_totals) - min(half_totals)) / (sum(half_totals) / 2.0) * 100.0) if sum(half_totals) > 0 else None,
+        "second_vs_first_percent": ((second_rate / first_rate - 1.0) * 100.0) if second_rate is not None and first_rate is not None and first_rate > 0 else None,
+        "known_event_amount_spread_between_halves_percent": ((max(half_totals) - min(half_totals)) / (sum(half_totals) / 2.0) * 100.0) if sum(half_totals) > 0 else None,
+        "first_half_effective_coverage_percent": (half_known_events[0] / max(1, half_events[0]) * 100.0),
+        "second_half_effective_coverage_percent": (half_known_events[1] / max(1, half_events[1]) * 100.0),
         "half_seconds": half_seconds,
     }
     result: dict[str, Any] = {
@@ -487,6 +516,7 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
         "hp_phase_breakdown": phase_report,
         "hp_phase_unknown_events": phase_unknown_events,
         "half_battle_stability": stability,
+        "incoming_by_school": tank_schools if mode == "tank" else None,
         "bloodthirst_return": bloodthirst,
         "fury_healing_absorption": fury_absorb,
         "rune_absorbed": rune_total,
