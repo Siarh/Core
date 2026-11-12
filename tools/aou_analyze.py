@@ -94,7 +94,7 @@ def main():
         dps = [d["dps"] for d in ds]; mean = st.mean(dps)
         sd = (st.pstdev(dps) / mean * 100) if len(dps) > 1 and mean else 0
         crit = [d["crits"] / d["hits"] * 100 for d in ds if d.get("hits")]
-        mod = st.mean(model(d) for d in ds)
+        mod = st.mean(model(d, resolve_coefficient) for d in ds)
         rows.append((key, ds, mean, sd, st.mean(d["pool"] for d in ds), st.mean(d["thp"] for d in ds),
                      st.mean(crit) if crit else 0, mod))
     ref_row = next((r for r in rows if ref and r[0].endswith(ref)), rows[0] if rows else None)
