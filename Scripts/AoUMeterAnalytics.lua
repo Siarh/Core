@@ -154,6 +154,11 @@ function AOUA.OnHit(combatant, mode, params, determination)
     end
     if not kind then return end
 
+    -- The data pipeline supplies the resolved combatant; keep analytics personal.
+    if not combatant or not combatant.ID or not avatar or not avatar.GetId then return end
+    local okId, playerId = pcall(avatar.GetId)
+    if not okId or combatant.ID ~= playerId then return end
+
     local amount
     if kind == "healing" or kind == "receivedHeal" then
         amount = N(params.heal or params.amount)
