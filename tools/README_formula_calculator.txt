@@ -78,6 +78,10 @@ Formulas included
 * Will: full-second control accumulation and time to immunity; 4-second immunity.
 * Might, level multiplier, power scale, Fortitude/Endurance HP, four resistance
   families, block/parry, and separately measured rune absorption.
+* Hit order: Might/level, Mastery, Resolve, critical, resistance, block/parry,
+  measured rune absorption, Ruthlessness, then target Caution. Ruthlessness is
+  applied after fixed rune absorption so an absolute absorbed amount is not
+  multiplied a second time.
 * Death marker: an event with player_died=true or owner_died=true resets Resolve to 0.
 
 Explicit unresolved ambiguities
