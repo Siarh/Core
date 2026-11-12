@@ -142,6 +142,11 @@ local function recordHealthPhase(kind, params, amount, confidence)
         local ok, target = pcall(Optim.GetTarget)
         if ok then id = target end
     end
+    -- Keep the previous percentage-only snapshot: GetHealthInfo may expose enemy HP
+    -- as valuePercents only, without absolute HP. That snapshot is the best available
+    -- pre-hit estimate for the next event; using the current post-hit percentage for
+    -- every hit incorrectly pins an entire fight to one phase.
+    local previous = id and AOUA.HpCache[id] or nil
     local value, limit, real = safeHealth(id)
     local transition = AOUA.HealthTransitions[id]
     local expectedDirection = (kind == "damage") and -1 or 1
@@ -175,10 +180,20 @@ local function recordHealthPhase(kind, params, amount, confidence)
         AOUA.HealthTransitions[id] = nil
         if transition.exact then confidence = "reported" else confidence = "estimated" end
     elseif kind == "damage" and real then
-        -- Fallback only: reconstruct pre-hit HP from a post-hit snapshot.
+        -- Fallback only: reconstruct pre-hit HP from a post-hit exact snapshot.
         frac = math.min(1, math.max(0, (value + amount) / limit))
-    elseif kind == "healing" or kind == "receivedHeal" then
+    elseif kind == "damage" and not real and previous and previous.value ~= nil
+        and previous.limit and previous.limit > 0 then
+        -- Enemy API often reports only percentages. Use the preceding sample as
+        -- pre-hit HP instead of repeatedly classifying by the current post-hit HP.
+        frac = previous.value / previous.limit
+        confidence = "estimated"
+    elseif (kind == "healing" or kind == "receivedHeal") and real then
         frac = math.min(1, math.max(0, (value - amount) / limit))
+    elseif (kind == "healing" or kind == "receivedHeal") and not real
+        and previous and previous.value ~= nil and previous.limit and previous.limit > 0 then
+        frac = previous.value / previous.limit
+        confidence = "estimated"
     else
         frac = value / limit
     end
