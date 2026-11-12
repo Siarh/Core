@@ -16,6 +16,10 @@ From the tools folder:
     python .\aou_formula_calculator.py .\aou_profile_template.json
     python .\aou_formula_calculator.py .\profile.json --out .\report.json
 
+Run unit tests:
+
+    python -m unittest -v .\test_aou_formula_calculator.py
+
 Run calculator tests:
 
     python -m unittest -v .\test_aou_formula_calculator.py
@@ -115,6 +119,15 @@ TANK allocates Fortitude, Endurance, Bloodthirst, Caution and the four resistanc
 families. Will is available in PvP only with an explicit control_weight.
 The allocation is a greedy marginal search, not an exhaustive global optimum.
 Recommendations are model outputs, not proof of a best in-game build.
+
+Reports also contain event amounts by target-HP phase (when target_hp is known)
+and first-half / second-half activity rates. Critical percentages are shown only
+for events where the actual critical flag is known. During counterfactual stat
+allocation, Luck uses expected critical value rather than replaying the old
+critical/not-critical flags. HPS optimization requires effective-heal data that
+can be recalculated for alternative stats: target HP/missing HP, or a reusable
+effective-heal ratio. A bare historical effective_heal number is reported but
+not reused as though it would stay fixed under a different build.
 
 Event log format
 ----------------
