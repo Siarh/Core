@@ -5,6 +5,7 @@ on:
     branches: [build28-source]
     paths:
       - "tools/aou_formula_calculator.py"
+      - "tools/aou_analyze.py"
       - "tools/test_aou_formula_calculator.py"
       - "tools/aou_profile_template.json"
       - ".github/workflows/aou-formula-tests.yml"
