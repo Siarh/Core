@@ -404,6 +404,10 @@ function Optim.OnHit(combatant, mode, params, rage)
 		if bin < 1 then bin = 1 end
 		if not o.hist then o.hist = {} end
 		o.hist[bin] = (o.hist[bin] or 0) + amount
+		if not o.histN then o.histN = {} end
+		if not o.histLog then o.histLog = {} end
+		o.histN[bin] = (o.histN[bin] or 0) + 1
+		o.histLog[bin] = (o.histLog[bin] or 0) + math.log(math.max(amount, 1))
 
 		-- Whole-fight phase journal. Keep both arithmetic totals and log totals:
 		-- a single execute proc must not dominate the model used for stat optimization.
@@ -471,8 +475,10 @@ local function lnF(M, R, U, L, pool, h, mm)
 	local m = masteryMult(M)
 	local r = 1 + R / 1000 * pool * 0.015
 	local u = 1 + mm(U) * (1 - h)
+	local tc = (Optim.TargetCaution and h < 0.40) and Optim.TargetCaution or 0
 	return math.log(math.max(m, 1e-12)) + math.log(math.max(r, 1e-12))
 		+ math.log(math.max(u, 1e-12)) + math.log(1 + c)
+		+ math.log(math.max(1 - tc, 0.05))
 end
 
 -- Whole-fight DD objective: trapezoidal average over four equal target-HP quarters.
@@ -1058,6 +1064,45 @@ end
 -- Each line: { text key, now, optimal, delta }
 -- activeMode: the mode shown in the window (Dps = damage, Hps = healing, else the role)
 --------------------------------------------------------------------------------
+-- Estimate a target's Caution from the observed HP histogram.
+-- This is deliberately conservative: it is used only when there are enough
+-- events on both sides of 40% HP. It is an anti-stat estimate, not a claim
+-- that the target's exact stat was read from the API.
+local function estimateTargetCaution(o, M, R, U, L, pool)
+	if not o or not o.histN or not o.histLog then return 0, 0 end
+	local lowN, highN = 0, 0
+	local lowR, highR = 0, 0
+	local m = mf(U / 1000)
+	local mm = function() return m end
+	for bin = 1, 10 do
+		local n = o.histN[bin] or 0
+		if n > 0 then
+			local obs = (o.histLog[bin] or 0) / n
+			local h = (bin - 0.5) / 10
+			local phase = (h > 0.75) and 1 or (h > 0.50) and 2 or (h > 0.25) and 3 or 4
+			local pp = type(pool) == "table" and (pool[phase] or pool.fallback) or pool
+			local pred = lnF(M, R, U, L, pp, h, mm)
+			local residual = obs - pred
+			if h < 0.40 then
+				lowR = lowR + residual * n
+				lowN = lowN + n
+			else
+				highR = highR + residual * n
+				highN = highN + n
+			end
+		end
+	end
+	if lowN < 30 or highN < 30 then return 0, 0 end
+	local delta = (lowR / lowN) - (highR / highN)
+	local factor = clamp(math.exp(delta), 0.35, 1)
+	local caution = clamp(1 - factor, 0, 0.65)
+	-- Confidence grows with sample size but is capped because skill/rotation
+	-- mix can also change with HP.
+	local confidence = clamp(math.min(lowN, highN) / 250, 0, 1) * 100
+	if math.abs(delta) < 0.01 then confidence = confidence * 0.5 end
+	return caution, confidence
+end
+
 function Optim.BuildLines(c, fightTime, activeMode)
 	local cfg = Optim.Cfg
 	if cfg.on ~= 1 then return nil end
@@ -1162,13 +1207,18 @@ function Optim.BuildLines(c, fightTime, activeMode)
 
 	local phi = Optim.HealAbsorbFrac(c)   -- wounds / resists take this share of the healing (Bloodthirst returns less)
 
+	-- PvP anti-stat model: estimate target Caution from the part of the observed
+	-- damage/heal curve below 40% HP. Do not use it unless confidence is sufficient.
+	local targetCaut, targetCautConf = estimateTargetCaution(o, nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool)
+	Optim.TargetCaution = (cfg.mode == "pvp" and targetCautConf >= 60) and targetCaut or 0
+
 	-- cache: recompute only when the inputs change noticeably
 	local function lg(x) return math.floor(math.log(x + 1) * 8) end
 	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
 	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
 	-- at most once per 4 calls unless the stats themselves changed
-	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
+	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), math.floor(Optim.TargetCaution * 100), math.floor(targetCautConf), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
 	local memo = Optim.Memo
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
@@ -1251,6 +1301,9 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptStab", F1(stabNow * 100) .. "%", F1(stabOpt * 100) .. "%", string.format("%+.1f", (stabOpt - stabNow) * 100) .. " pp")
 		addT("OptPhase", string.format("%.2f/%.2f/%.2f/%.2f", curPhase[1], curPhase[2], curPhase[3], curPhase[4]),
 			string.format("%.2f/%.2f/%.2f/%.2f", optPhase[1], optPhase[2], optPhase[3], optPhase[4]), "")
+		if cfg.mode == "pvp" and targetCautConf > 0 then
+			addT("OptAnti", "Caution " .. F1(targetCaut * 100) .. "%", "conf " .. F1(targetCautConf) .. "%", "")
+		end
 		-- Marginal gains are measured against the same whole-fight HP curve, not one target-HP snapshot.
 		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, useCurve) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
@@ -1598,6 +1651,3 @@ function Optim.OnSlash(text)
                     " OnSlash=" .. tostring(slashOK) ..
                     " args=" .. argText)
                 return true
-        end
-
-        if AOUA and AOUA.OnSlash then
