@@ -132,14 +132,18 @@ local function recordHealthPhase(kind, params, amount, confidence)
     local transition = AOUA.HealthTransitions[id]
     local expectedDirection = (kind == "damage") and -1 or 1
     local useTransition = false
-    if transition and transition.direction == expectedDirection and transition.beforeFrac ~= nil then
-        if transition.delta ~= nil then
-            local difference = math.abs(math.abs(transition.delta) - amount)
-            useTransition = difference <= math.max(2, amount * 0.05)
-        else
-            -- Percent-only delta: useful phase estimate, but not a measured HP amount.
-            useTransition = true
+    if transition then
+        if transition.direction == expectedDirection and transition.beforeFrac ~= nil then
+            if transition.delta ~= nil then
+                local difference = math.abs(math.abs(transition.delta) - amount)
+                useTransition = difference <= math.max(2, amount * 0.05)
+            else
+                -- Percent-only delta: useful phase estimate, but not a measured HP amount.
+                useTransition = true
+            end
         end
+        -- Never let an unmatched or opposite-direction transition leak into a later hit.
+        if not useTransition then AOUA.HealthTransitions[id] = nil end
     end
     if value == nil and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
