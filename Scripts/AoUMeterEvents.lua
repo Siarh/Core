@@ -440,6 +440,7 @@ local paramsBlockHealIN = {}
 local paramsBlockID = {}
 local eventRegistredDDAndHealUnits = {}
 local healthWatchRegistered = {}
+local healthWatchCount = 0
 
 function RetrieveHealthChangedEvent(params)
 	if params and AOUA and type(AOUA.OnHealthChanged) == "function" then
@@ -448,10 +449,13 @@ function RetrieveHealthChangedEvent(params)
 end
 
 function RegisterHealthWatch(id)
-	if not id or healthWatchRegistered[id] then return end
+	if not id or healthWatchRegistered[id] or healthWatchCount >= 64 then return end
 	local ok = pcall(common.RegisterEventHandler, RetrieveHealthChangedEvent,
 		"EVENT_OBJECT_HEALTH_CHANGED", { id = id })
-	if ok then healthWatchRegistered[id] = true end
+	if ok then
+		healthWatchRegistered[id] = true
+		healthWatchCount = healthWatchCount + 1
+	end
 end
 
 function metricReset()
@@ -462,6 +466,7 @@ function metricReset()
 		common.UnRegisterEvent("EVENT_OBJECT_HEALTH_CHANGED")
 		eventRegistredDDAndHealUnits = {}
 		healthWatchRegistered = {}
+		healthWatchCount = 0
 	end
 	paramsBlockDD = {}
 	paramsBlockHeal = {}
