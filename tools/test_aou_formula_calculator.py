@@ -156,6 +156,23 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(baseline["effective"], 500)
         self.assertEqual(stronger["effective"], 1000)
 
+    def test_tank_school_breakdown_preserves_resistance_families(self):
+        activity = {"mode": "tank", "samples": [
+            {"second": 0, "incoming_raw": 1000, "damage_school": "physical"},
+            {"second": 1, "incoming_raw": 1000, "damage_school": "fire"},
+        ]}
+        stats = {"resistances": {"armor": 20, "elements": 10, "divine": 10, "nature": 10}}
+        result = calc.simulate(activity, stats, {"level": 1, "max_hp": 100000})
+        self.assertEqual(result["incoming_by_school"]["armor"]["resistance_reduction"], 500)
+        self.assertEqual(result["incoming_by_school"]["elements"]["resistance_reduction"], 0)
+
+    def test_resolve_pool_resets_on_death_marker(self):
+        activity = {"mode": "dps", "samples": [
+            {"second": 0, "raw": 10000, "target_hp": 0.5, "player_died": True}
+        ]}
+        result = calc.simulate(activity, {"resolve": 1000}, {"level": 1, "max_hp": 100000, "initial_resolve": 80})
+        self.assertEqual(result["resolve_final"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
