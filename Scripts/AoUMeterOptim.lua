@@ -1446,7 +1446,9 @@ function Optim.OnSlash(text)
                         probe=true, scan=true, mode=true, role=true,
                         flag=true, hp=true, tw=true, font=true,
                         lastev=true, hptest=true, reset=true,
-                        ping=true
+                        ping=true, adiag=true, stats=true, phase=true,
+                        heal=true, defstat=true, diff=true, log=true,
+                        prof=true
                 }
                 if not bare[first] then return false end
                 text = "/aou " .. text
