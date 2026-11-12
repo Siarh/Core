@@ -2,6 +2,7 @@
 -- File: AoUMeterOptim.lua
 -- Desc: Optimal stat distribution from combat data (Allods Online 7.0 formulas)
 --       Mastery / Resolve / Ruthlessness / Luck, Fortitude / Will / Bloodthirst
+--       Build28: whole-fight HP curve + stability penalty + phase-normalized combat model.
 --------------------------------------------------------------------------------
 Global("Optim", {})
 
@@ -106,6 +107,10 @@ Optim.RU = {
 	OptU = "Беспощадность",
 	OptL = "Удача",
 	OptMult = "Множитель урона",
+	OptWhole = "Весь бой",
+	OptStab = "Стабильность",
+	OptPhase = "Фазы HP",
+	OptAnti = "Антистат",
 	OptS = "Стойкость",
 	OptW = "Воля",
 	OptB = "Кровожадность",
@@ -344,7 +349,7 @@ function Optim.OnHit(combatant, mode, params, rage)
 
 	local o = d.Opt
 	if not o then
-		o = { hw = 0, hs = 0, pw = 0, ps = 0, hpSamples = 0, poolSamples = 0, amount = 0 }
+		o = { hw = 0, hs = 0, pw = 0, ps = 0, hpSamples = 0, poolSamples = 0, amount = 0, phase = {} }
 		d.Opt = o
 	end
 
@@ -399,6 +404,17 @@ function Optim.OnHit(combatant, mode, params, rage)
 		if bin < 1 then bin = 1 end
 		if not o.hist then o.hist = {} end
 		o.hist[bin] = (o.hist[bin] or 0) + amount
+
+		-- Whole-fight phase journal. Keep both arithmetic totals and log totals:
+		-- a single execute proc must not dominate the model used for stat optimization.
+		local phase = (frac > 0.75) and 1 or (frac > 0.50) and 2 or (frac > 0.25) and 3 or 4
+		if not o.phase then o.phase = {} end
+		local pr = o.phase[phase] or { sum = 0, n = 0, logSum = 0 }
+		pr.sum = pr.sum + amount
+		pr.n = pr.n + 1
+		pr.logSum = pr.logSum + math.log(math.max(amount, 1))
+		o.phase[phase] = pr
+
 		-- Resolve is sampled on each outgoing DD hit and grouped by the target's
 		-- pre-hit HP quarter. This preserves its build-up over the course of a fight.
 		if rage and mode == enumMode.Dps then
@@ -464,14 +480,53 @@ end
 -- grows progressively without letting the execute endpoint dominate the whole score.
 local HP_CURVE = { 1.00, 0.75, 0.50, 0.25, 0.00 }
 local HP_CURVE_WEIGHT = { 0.125, 0.25, 0.25, 0.25, 0.125 }
-local function lnCurveF(M, R, U, L, pool, mm)
+local HP_PHASE_MID = { 0.875, 0.625, 0.375, 0.125 }
+
+-- Whole Fight Score is the weighted log-average of the four HP quarters.
+-- A separate stability penalty prevents an execute-heavy build from winning
+-- merely because its last quarter is spectacular. PvP gets the stronger
+-- penalty because the fight can end in any HP zone.
+local function curveStabilityWeight()
+	return (Optim.Cfg.mode == "pvp") and 0.28 or 0.14
+end
+
+local function lnCurveStats(M, R, U, L, pool, mm)
 	local total = 0
+	local vals = {}
 	for i = 1, #HP_CURVE do
 		local phase = math.min(i, 4)
 		local phasePool = type(pool) == "table" and (pool[phase] or pool.fallback) or pool
-		total = total + HP_CURVE_WEIGHT[i] * lnF(M, R, U, L, phasePool, HP_CURVE[i], mm)
+		vals[i] = lnF(M, R, U, L, phasePool, HP_CURVE[i], mm)
+		total = total + HP_CURVE_WEIGHT[i] * vals[i]
 	end
-	return total
+	local mean = 0
+	for i = 1, 4 do
+		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
+		mean = mean + 0.25 * lnF(M, R, U, L, phasePool, HP_PHASE_MID[i], mm)
+	end
+	local variance = 0
+	for i = 1, 4 do
+		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
+		local v = lnF(M, R, U, L, phasePool, HP_PHASE_MID[i], mm)
+		variance = variance + 0.25 * (v - mean) * (v - mean)
+	end
+	return total - curveStabilityWeight() * variance, math.exp(total), math.exp(-math.sqrt(math.max(0, variance))), variance
+end
+
+local function lnCurveF(M, R, U, L, pool, mm)
+	local score = lnCurveStats(M, R, U, L, pool, mm)
+	return score
+end
+
+local function curvePhaseMultipliers(M, R, U, L, pool)
+	local out = {}
+	local m = mf(U / 1000)
+	local mm = function() return m end
+	for i = 1, 4 do
+		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
+		out[i] = math.exp(lnF(M, R, U, L, phasePool, HP_PHASE_MID[i], mm))
+	end
+	return out
 end
 
 local function multA(M, R, U, L, pool, h, curve)
@@ -1169,6 +1224,30 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local m0 = multA(nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool, h, not heal)
 		local m1 = multA(optA3[1], optA3[2], optA3[3], L, heal and pool or curvePool, h, not heal)
 		addT("OptMult", "x" .. F2(m0), "x" .. F2(m1), string.format("%+.1f", (m1 / m0 - 1) * 100) .. "%")
+
+		-- Whole-fight score and phase stability are calculated from the formula
+		-- curve, not from raw hit averages, so rare class procs cannot distort
+		-- the recommended stat split.
+		local curPhase = curvePhaseMultipliers(nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool)
+		local optPhase = curvePhaseMultipliers(optA3[1], optA3[2], optA3[3], L, heal and pool or curvePool)
+		local function stabRatio(vals)
+			local lo, hi = vals[1], vals[1]
+			for i = 2, 4 do lo = math.min(lo, vals[i]); hi = math.max(hi, vals[i]) end
+			if hi <= 0 then return 1 end
+			return lo / hi
+		end
+		local wholeNow = 0
+		local wholeOpt = 0
+		for i = 1, 4 do
+			wholeNow = wholeNow + 0.25 * math.log(math.max(curPhase[i], 1e-12))
+			wholeOpt = wholeOpt + 0.25 * math.log(math.max(optPhase[i], 1e-12))
+		end
+		wholeNow, wholeOpt = math.exp(wholeNow), math.exp(wholeOpt)
+		local stabNow, stabOpt = stabRatio(curPhase), stabRatio(optPhase)
+		addT("OptWhole", "x" .. F2(wholeNow), "x" .. F2(wholeOpt), string.format("%+.1f", (wholeOpt / wholeNow - 1) * 100) .. "%")
+		addT("OptStab", F1(stabNow * 100) .. "%", F1(stabOpt * 100) .. "%", string.format("%+.1f", (stabOpt - stabNow) * 100) .. " pp")
+		addT("OptPhase", string.format("%.2f/%.2f/%.2f/%.2f", curPhase[1], curPhase[2], curPhase[3], curPhase[4]),
+			string.format("%.2f/%.2f/%.2f/%.2f", optPhase[1], optPhase[2], optPhase[3], optPhase[4]), "")
 		-- Marginal gains are measured against the same whole-fight HP curve, not one target-HP snapshot.
 		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, not heal) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
@@ -1598,166 +1677,3 @@ function Optim.OnSlash(text)
 	elseif cmd == "thp" then
 		local v = tonumber(args[3])
 		if v then
-			setk("thp", clamp(math.floor(v + 0.5), 0, 100))
-			say("thp = " .. cfg.thp)
-		else
-			say("/aou thp 0..100")
-		end
-	elseif cmd == "free" then
-		local v = tonumber(args[3])
-		if v then
-			setk("free", math.max(0, math.floor(v + 0.5)))
-			say("free = " .. cfg.free)
-		else
-			say("/aou free N")
-		end
-	elseif cmd == "bal" then
-		local v = tonumber(args[3])
-		if v then
-			setk("bal", clamp(v, 0, 3))
-			say("bal = " .. cfg.bal)
-		else
-			say("/aou bal 0..3")
-		end
-	elseif cmd == "auto" then
-		setk("auto", (args[3] == "off") and 0 or 1)
-		say("auto = " .. (cfg.auto == 1 and "on" or "off"))
-	elseif cmd == "hptest" then
-		local tg = Optim.GetTarget()
-		say("target id: " .. tostring(tg))
-		if tg then
-			local ok, r = pcall(function() return object.GetHealthInfo(tg) end)
-			summarize("GetHealthInfo(target)", ok, r)
-		end
-		say("hp reads: ok=" .. Optim.Hp.ok .. " fail=" .. Optim.Hp.fail .. " last=" .. Optim.Hp.last)
-	elseif cmd == "healtrace" then
-		local tr = Optim.HealTrace
-		say("heal events: " .. Optim.HealStat.n .. ", same health read as the previous event: " .. Optim.HealStat.same
-			.. " (" .. F1(Optim.HealStat.n > 0 and Optim.HealStat.same / Optim.HealStat.n * 100 or 0) .. "%)")
-		for i = 1, #tr do
-			local e = tr[i]
-			sayLong(i .. ": " .. (e.mine and "self" or "ally") .. " heal=" .. I(e.heal) .. " hp=" .. I(e.value) .. "/" .. I(e.limit)
-				.. (e.real and "" or " (percent only)") .. " pre=" .. F1(e.pre * 100) .. "%" .. (e.same and " same-read" or ""))
-		end
-	elseif cmd == "lastev" then
-		local mode = (args[3] == "dmg") and enumMode.Dps or enumMode.Hps
-		local ev = Optim.LastEv[mode]
-		if not ev then
-			say("no event captured yet (hit or heal something first)")
-		else
-			summarize(mode == enumMode.Dps and "last damage event" or "last heal event", true, ev)
-		end
-	elseif cmd == "mark" then
-        say("mark: handler reached")
-
-        local label = "x"
-        if #args >= 3 then
-                label = table.concat(args, "_", 3)
-        end
-
-        local makeOK, fields = pcall(function()
-                return Optim.MakeRecord(label)
-        end)
-
-        if not makeOK then
-                sayLong("mark: MakeRecord failed: " .. tostring(fields))
-        elseif not fields then
-                say("mark: no fight data (fight or player not found)")
-        else
-                say("mark: snapshot created; columns=" .. tostring(#fields))
-
-                local saveCallOK, saveOK, n, verified = pcall(function()
-                        return Optim.SaveRecord(fields)
-                end)
-
-                if not saveCallOK then
-                        sayLong("mark: SaveRecord failed: " .. tostring(saveOK))
-                else
-                        say("mark save: ok=" .. tostring(saveOK) ..
-                            " number=" .. tostring(n) ..
-                            " verified=" .. tostring(verified))
-                end
-        end
-
-        elseif cmd == "rec" then
-		local sub = args[3] or "list"
-		if sub == "clear" then
-    local ok, verified = Optim.RecClear()
-    if ok and verified then
-        say("records cleared (verified)")
-    elseif ok then
-        say("clear written, but read-back not confirmed")
-    else
-        say("ERROR: records clear write failed")
-    end
-		elseif sub == "export" then
-			Optim.RecExport(tonumber(args[4]) or 100)
-		else
-			Optim.RecList(tonumber(args[4]) or 10)
-		end
-	elseif cmd == "probe" then
-		Optim.Probe()
-	elseif cmd == "scan" then
-		Optim.Scan(args[3])
-	elseif cmd == "mode" then
-		if args[3] == "pvp" or args[3] == "pve" then
-			setk("mode", args[3])
-			say("mode = " .. cfg.mode)
-		else
-			say("/aou mode pve|pvp")
-		end
-	elseif cmd == "role" then
-		if args[3] == "dd" or args[3] == "heal" or args[3] == "auto" then
-			setk("role", args[3])
-			say("role = " .. cfg.role)
-		else
-			say("/aou role dd|heal|auto")
-		end
-	elseif cmd == "flag" then
-		setk("flag", (args[3] == "off") and 0 or 1)
-		say("redistribute = " .. (cfg.flag == 1 and "on" or "off"))
-	elseif cmd == "hp" then
-		local v = tonumber(args[3])
-		if v then
-			setk("hp", math.max(0, math.floor(v + 0.5)))
-			say("hp = " .. cfg.hp)
-		else
-			say("/aou hp N")
-		end
-	elseif cmd == "tw" then
-		local v = tonumber(args[3])
-		if v then
-			setk("tw", clamp(math.floor(v + 0.5), 1, 10))
-			say("tw = " .. cfg.tw)
-		else
-			say("/aou tw 1..10")
-		end
-	elseif cmd == "font" then
-		local v = tonumber(args[3])
-		if v and v >= 1 and v <= 3 then
-			setk("font", math.floor(v))
-			say("font = " .. cfg.font)
-		else
-			say("/aou font 1|2|3")
-		end
-	elseif cmd == "ver" then
-		say("DPScope build 25, recalcs " .. Optim.Perf.recalcs .. "/" .. Optim.Perf.calls .. ", font = " .. cfg.font .. ", localization = " .. tostring(localization))
-	elseif cmd == "reset" then
-		Optim.ResetCfg()
-		say(Optim.Text("OptReset"))
-	elseif cmd == "show" then
-		say("mode=" .. cfg.mode .. " role=" .. cfg.role .. " flag=" .. cfg.flag .. " tw=" .. cfg.tw .. " hp=" .. cfg.hp)
-		say("atk fM=" .. cfg.fM .. " fR=" .. cfg.fR .. " fU=" .. cfg.fU .. " L=" .. cfg.L .. " eM=" .. cfg.eM .. " eR=" .. cfg.eR .. " eU=" .. cfg.eU)
-		say("hp reads: ok=" .. Optim.Hp.ok .. " fail=" .. Optim.Hp.fail .. " last=" .. Optim.Hp.last)
-		say("def fS=" .. cfg.fS .. " fW=" .. cfg.fW .. " fB=" .. cfg.fB .. " eS=" .. cfg.eS .. " eW=" .. cfg.eW .. " eB=" .. cfg.eB)
-		say("base bM=" .. cfg.bM .. " bR=" .. cfg.bR .. " bU=" .. cfg.bU .. " bS=" .. cfg.bS .. " bW=" .. cfg.bW .. " bB=" .. cfg.bB .. " caut=" .. cfg.caut .. " eq=" .. cfg.eq .. " thp=" .. cfg.thp .. " free=" .. cfg.free .. " bal=" .. cfg.bal .. " auto=" .. cfg.auto)
-	else
-		say(Optim.Text("OptHelp1"))
-		say(Optim.Text("OptHelp2"))
-		say(Optim.Text("OptHelp3"))
-	end
-
-	Optim.Memo.key = nil
-	Optim.SaveCfg()
-	return true
-end
