@@ -20,10 +20,6 @@ Run unit tests:
 
     python -m unittest -v .\test_aou_formula_calculator.py
 
-Run calculator tests:
-
-    python -m unittest -v .\test_aou_formula_calculator.py
-
 Profile structure
 -----------------
 settings: character level, actual max HP or class_k, Might, Resolve formula
@@ -81,6 +77,7 @@ Formulas included
 * Will: full-second control accumulation and time to immunity; 4-second immunity.
 * Might, level multiplier, power scale, Fortitude/Endurance HP, four resistance
   families, block/parry, and separately measured rune absorption.
+* Death marker: an event with player_died=true or owner_died=true resets Resolve to 0.
 
 Explicit unresolved ambiguities
 -------------------------------
@@ -127,7 +124,10 @@ allocation, Luck uses expected critical value rather than replaying the old
 critical/not-critical flags. HPS optimization requires effective-heal data that
 can be recalculated for alternative stats: target HP/missing HP, or a reusable
 effective-heal ratio. A bare historical effective_heal number is reported but
-not reused as though it would stay fixed under a different build.
+not reused as though it would stay fixed under a different build. DD/HPS stat
+optimization is refused when any target HP sample is missing, because otherwise
+the Ruthlessness contribution would be silently treated as zero. Reports group
+Tank incoming mitigation by physical, elements, divine and nature resistance.
 
 Event log format
 ----------------
