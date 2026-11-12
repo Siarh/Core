@@ -1070,6 +1070,8 @@ end
 -- that the target's exact stat was read from the API.
 local function estimateTargetCaution(o, M, R, U, L, pool)
 	if not o or not o.histN or not o.histLog then return 0, 0 end
+	local savedTC = Optim.TargetCaution
+	Optim.TargetCaution = 0
 	local lowN, highN = 0, 0
 	local lowR, highR = 0, 0
 	local m = mf(U / 1000)
@@ -1092,7 +1094,7 @@ local function estimateTargetCaution(o, M, R, U, L, pool)
 			end
 		end
 	end
-	if lowN < 30 or highN < 30 then return 0, 0 end
+	if lowN < 30 or highN < 30 then Optim.TargetCaution = savedTC or 0; return 0, 0 end
 	local delta = (lowR / lowN) - (highR / highN)
 	local factor = clamp(math.exp(delta), 0.35, 1)
 	local caution = clamp(1 - factor, 0, 0.65)
@@ -1100,6 +1102,7 @@ local function estimateTargetCaution(o, M, R, U, L, pool)
 	-- mix can also change with HP.
 	local confidence = clamp(math.min(lowN, highN) / 250, 0, 1) * 100
 	if math.abs(delta) < 0.01 then confidence = confidence * 0.5 end
+	Optim.TargetCaution = savedTC or 0
 	return caution, confidence
 end
 
@@ -1598,56 +1601,3 @@ end
 function Optim.OnSlash(text)
         text = tostring(text or "")
         text = string.gsub(text, "^%s+", "")
-
-        local rawFirst = string.match(text, "^%S+") or ""
-        local first = string.lower(rawFirst)
-
-        if first == "/aou" then
-                text = "/aou" .. string.sub(text, #rawFirst + 1)
-        elseif first == "/dpscope" then
-                text = "/dpscope" .. string.sub(text, #rawFirst + 1)
-        elseif first == "aou" then
-                text = "/aou" .. string.sub(text, #rawFirst + 1)
-        elseif first == "dpscope" then
-                text = "/dpscope" .. string.sub(text, #rawFirst + 1)
-        else
-                local bare = {
-                        help=true, show=true, mark=true, rec=true,
-                        fix=true, free=true, base=true, atk=true,
-                        def=true, caut=true, eq=true, thp=true,
-                        bal=true, auto=true, off=true, on=true,
-                        probe=true, scan=true, mode=true, role=true,
-                        flag=true, hp=true, tw=true, font=true,
-                        lastev=true, hptest=true, reset=true,
-                        ping=true, adiag=true, stats=true, phase=true,
-                        heal=true, defstat=true, diff=true, log=true,
-                        prof=true
-                }
-                if not bare[first] then return false end
-                text = "/aou " .. text
-        end
-
-        local args = {}
-        local pos = 1
-        while true do
-                local s, e = string.find(text, "%S+", pos)
-                if not s then break end
-                args[#args + 1] = string.sub(text, s, e)
-                pos = e + 1
-        end
-
-        if args[1] ~= "/aou" and args[1] ~= "/dpscope" then
-                return false
-        end
-
-        local cfg = Optim.Cfg
-        local cmd = string.lower(args[2] or "help")
-
-        if cmd == "adiag" then
-                local moduleOK = (AOUA ~= nil)
-                local slashOK = moduleOK and (type(AOUA.OnSlash) == "function")
-                local argText = table.concat(args, "|")
-                say("AOUA module=" .. tostring(moduleOK) ..
-                    " OnSlash=" .. tostring(slashOK) ..
-                    " args=" .. argText)
-                return true
