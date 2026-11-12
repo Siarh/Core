@@ -2,9 +2,15 @@ import math
 import unittest
 
 import aou_formula_calculator as calc
+import aou_analyze
 
 
 class FormulaTests(unittest.TestCase):
+    def test_saved_record_analyzer_resolve_default_matches_formula_engine(self):
+        record = {"M": 0, "R": 1000, "U": 0, "L": 0, "pool": 10, "thp": 100}
+        self.assertAlmostEqual(aou_analyze.model(record), 1.015)
+        self.assertAlmostEqual(aou_analyze.model(record, 0.015), 1.15)
+
     def test_mastery_positive_and_negative(self):
         self.assertAlmostEqual(calc.mastery_multiplier(1000), 2.0)
         self.assertAlmostEqual(calc.mastery_multiplier(-500), 2 / 3)
