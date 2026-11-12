@@ -448,12 +448,29 @@ local function lnF(M, R, U, L, pool, h, mm)
 		+ math.log(math.max(u, 1e-12)) + math.log(1 + c)
 end
 
-local function multA(M, R, U, L, pool, h)
-	local m = mf(U / 1000)
-	return math.exp(lnF(M, R, U, L, pool, h, function() return m end))
+-- Whole-fight DD objective: give equal weight to the four target-HP quarters.
+-- Ruthlessness contributes progressively as target HP falls; Mastery and Resolve
+-- contribute throughout. Equal phase weighting prevents the final execute window
+-- from dominating the recommendation merely because its hits are unusually large.
+local HP_CURVE = { 0.875, 0.625, 0.375, 0.125 }
+local function lnCurveF(M, R, U, L, pool, mm)
+	local total = 0
+	for i = 1, #HP_CURVE do
+		total = total + lnF(M, R, U, L, pool, HP_CURVE[i], mm)
+	end
+	return total / #HP_CURVE
 end
 
--- split Tp points between Mastery / Resolve / Ruthlessness (Luck is fixed); also returns the best ln(multiplier)
+local function multA(M, R, U, L, pool, h)
+	local m = mf(U / 1000)
+	-- h is retained in the signature for compatibility with existing callers;
+	-- recommendations and displayed multipliers use the full 100-to-0% curve.
+	return math.exp(lnCurveF(M, R, U, L, pool, function() return m end))
+end
+
+-- Split Tp points between Mastery / Resolve / Ruthlessness (Luck is fixed).
+-- The objective is the equal-weight geometric mean across four target HP phases,
+-- not a snapshot at the current target HP.
 local function optA(fx, Tp, pool, h)
 	Tp = math.floor(Tp + 0.5)
 	local memo = {}
@@ -469,7 +486,7 @@ local function optA(fx, Tp, pool, h)
 	local function f(x, u)
 		local r = Tp - x - u
 		if r < 0 then return -1e18 end
-		return lnF(fx[1] + x, fx[2] + r, fx[3] + u, fx[4], pool, h, mm)
+		return lnCurveF(fx[1] + x, fx[2] + r, fx[3] + u, fx[4], pool, mm)
 	end
 	if Tp <= 0 then return 0, 0, 0, f(0, 0) end
 	local s = math.max(1, math.ceil(Tp / 20))
@@ -1131,7 +1148,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local m0 = multA(nowA[1], nowA[2], nowA[3], L, pool, h)
 		local m1 = multA(optA3[1], optA3[2], optA3[3], L, pool, h)
 		addT("OptMult", "x" .. F2(m0), "x" .. F2(m1), string.format("%+.1f", (m1 / m0 - 1) * 100) .. "%")
-		-- why a stat is added or removed: gain of the damage / healing multiplier for +50 points in each stat
+		-- Marginal gains are measured against the same whole-fight HP curve, not one target-HP snapshot.
 		local function gain(M, R, U) return (multA(M, R, U, L, pool, h) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
 			string.format("R%+.1f", gain(nowA[1], nowA[2] + 50, nowA[3])), string.format("B%+.1f", gain(nowA[1], nowA[2], nowA[3] + 50)))
