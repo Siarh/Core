@@ -267,8 +267,15 @@ function AOUA.OnHit(combatant, mode, params, determination)
             -- when a previous real HP snapshot for this recipient is available.
             local hp, maxHp, real = safeHealth(params.unitId)
             local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
-            if hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
-                local gained = math.max(0, hp - previous.value)
+            local transition = params.unitId and AOUA.HealthTransitions[params.unitId] or nil
+            local gained
+            if transition and transition.direction == 1 and transition.delta and transition.delta > 0 then
+                -- Exact healthDelta may arrive before the healing callback.
+                gained = transition.delta
+            elseif hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
+                gained = math.max(0, hp - previous.value)
+            end
+            if gained ~= nil then
                 local afterLoss = math.max(0, amount - reportedLoss)
                 effective = math.min(afterLoss, gained)
                 overheal = math.max(0, afterLoss - effective)
