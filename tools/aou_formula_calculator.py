@@ -207,7 +207,7 @@ def _target_missing_hp(event: dict[str, Any]) -> float | None:
     return None
 
 
-def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg: dict[str, Any], pool: float) -> dict[str, Any]:
+def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg: dict[str, Any], pool: float, expected_crit: bool = False) -> dict[str, Any]:
     """Calculate one outgoing damage/heal event. 'raw' is pre-formula amount."""
     raw = max(0.0, num(event.get("raw")))
     pool_used = clamp(num(event.get("resolve_pool", pool)), 0.0, 100.0)
@@ -223,7 +223,7 @@ def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg
         cfg.get("resolve_coefficient", 0.0015),
     )
     u_mult = ruthlessness_multiplier(stats.get("ruthlessness", 0.0), target_hp)
-    if "critical" in event:
+    if "critical" in event and not expected_crit:
         crit_mult = 2.0 if bool(event["critical"]) else 1.0
         crit_basis = "event"
     else:
@@ -242,14 +242,27 @@ def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg
     effective = None
     overheal = None
     if mode == "hps":
-        if event.get("effective_heal") is not None:
-            effective = clamp(num(event["effective_heal"]), 0.0, amount)
-            overheal = max(0.0, amount - wound_absorb - effective)
+        healable = max(0.0, amount - wound_absorb)
+        if event.get("effective_heal_fraction") is not None:
+            fraction = clamp(num(event["effective_heal_fraction"]), 0.0, 1.0)
+            effective = min(healable, amount * fraction)
+            overheal = max(0.0, healable - effective)
         else:
             available = _target_missing_hp(event)
             if available is not None:
-                effective = min(max(0.0, amount - wound_absorb), available)
-                overheal = max(0.0, amount - wound_absorb - effective)
+                effective = min(healable, available)
+                overheal = max(0.0, healable - effective)
+            elif event.get("effective_heal") is not None and event.get("observed_nominal") is not None:
+                observed_nominal = num(event.get("observed_nominal"))
+                if observed_nominal > 0:
+                    fraction = clamp(num(event["effective_heal"]) / observed_nominal, 0.0, 1.0)
+                    effective = min(healable, amount * fraction)
+                    overheal = max(0.0, healable - effective)
+            elif event.get("effective_heal") is not None:
+                # Useful as a historical measured value, but not enough to
+                # recalculate healing under alternative stat allocations.
+                effective = clamp(num(event["effective_heal"]), 0.0, healable)
+                overheal = max(0.0, healable - effective)
 
     bt_base = amount * bloodthirst_fraction(stats.get("bloodthirst", 0.0))
     bt_return = bt_base / 3.0 if mode == "hps" else bt_base
@@ -324,7 +337,8 @@ def _objective(result: dict[str, Any], mode: str, cfg: dict[str, Any]) -> tuple[
     if mode == "hps":
         count = result.get("events", 0)
         coverage = result.get("effective_heal_events", 0)
-        if count > 0 and coverage == count:
+        optimization_coverage = result.get("effective_heal_optimization_events", 0)
+        if count > 0 and coverage == count and optimization_coverage == count:
             score = num(result.get("effective_heal_total"))
             score += num(cfg.get("healer_bloodthirst_weight", 0.0)) * num(result.get("bloodthirst_return"))
             return score, "effective_heal_plus_weighted_self_sustain"
@@ -341,7 +355,7 @@ def _objective(result: dict[str, Any], mode: str, cfg: dict[str, Any]) -> tuple[
     return None, "unsupported_mode"
 
 
-def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any], expected_crit: bool = False) -> dict[str, Any]:
     mode = str(activity.get("mode", "dps")).lower()
     if mode not in ("dps", "hps", "tank"):
         raise ValueError("mode должен быть dps, hps или tank")
@@ -366,8 +380,16 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
     total_damage = nominal_heal = effective_heal = overheal = 0.0
     bloodthirst = fury_absorb = incoming_total = rune_total = resist_saved = 0.0
     effective_heal_events = 0
+    effective_heal_optimization_events = 0
     resolve_event_values: list[float] = []
     per_second: list[dict[str, float]] = []
+    phase_keys = ("100_75", "75_50", "50_25", "25_0")
+    phase_labels = {"100_75": "100-75%", "75_50": "75-50%", "50_25": "50-25%", "25_0": "25-0%"}
+    phases = {key: {"events": 0, "amount": 0.0, "crit_events": 0, "crit_known": 0} for key in phase_keys}
+    phase_unknown_events = 0
+    half_totals = [0.0, 0.0]
+    half_events = [0, 0]
+    half_seconds = [math.ceil(duration / 2), math.floor(duration / 2)]
     warnings: list[str] = []
     event_count = 0
 
@@ -384,8 +406,24 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
                 resist_saved += calc["raw_incoming"] - calc["raw_incoming"] * calc["resistance_multiplier"]
                 continue
 
-            calc = calculate_event(event, mode, stats, cfg, pool)
+            calc = calculate_event(event, mode, stats, cfg, pool, expected_crit=expected_crit)
             second_total += calc["nominal"]
+            measured_for_phase = calc["nominal"] if mode == "dps" else (calc["effective"] if calc["effective"] is not None else 0.0)
+            half_index = 0 if (sec - first) < math.ceil(duration / 2) else 1
+            half_totals[half_index] += measured_for_phase
+            half_events[half_index] += 1
+            if event.get("target_hp") is not None:
+                hp_fraction = clamp(num(event.get("target_hp")), 0.0, 1.0)
+                phase_key = "100_75" if hp_fraction >= 0.75 else "75_50" if hp_fraction >= 0.50 else "50_25" if hp_fraction >= 0.25 else "25_0"
+                phase = phases[phase_key]
+                phase["events"] += 1
+                phase["amount"] += measured_for_phase
+                if event.get("critical") is not None:
+                    phase["crit_known"] += 1
+                    if bool(event.get("critical")):
+                        phase["crit_events"] += 1
+            else:
+                phase_unknown_events += 1
             bloodthirst += calc["bloodthirst_return"]
             fury_absorb += calc["fury_healing_absorption"]
             rune_total += calc["rune_absorbed"]
@@ -398,6 +436,10 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
                     effective_heal += calc["effective"]
                     overheal += num(calc["overheal"])
                     effective_heal_events += 1
+                    hp_evidence = (event.get("target_max_hp") is not None and event.get("target_hp") is not None) or event.get("missing_hp") is not None
+                    ratio_evidence = event.get("effective_heal_fraction") is not None or (event.get("effective_heal") is not None and event.get("observed_nominal") is not None and num(event.get("observed_nominal")) > 0)
+                    if hp_evidence or ratio_evidence:
+                        effective_heal_optimization_events += 1
 
             # Pool grows per event, using the pool-dependent k at that event.
             if owner_hp > 0:
@@ -421,8 +463,30 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
         secs = max(0.0, num(window))
         control_total += min(secs, float(threshold)) if threshold is not None else secs
 
+    phase_report = {}
+    for key in phase_keys:
+        item = phases[key]
+        phase_report[phase_labels[key]] = {
+            "events": item["events"],
+            "amount": item["amount"],
+            "average_per_event": item["amount"] / item["events"] if item["events"] else None,
+            "critical_percent": (item["crit_events"] / item["crit_known"] * 100.0) if item["crit_known"] else None,
+        }
+    first_rate = half_totals[0] / max(1, half_seconds[0])
+    second_rate = half_totals[1] / max(1, half_seconds[1]) if half_seconds[1] else None
+    stability = {
+        "first_half_total": half_totals[0], "second_half_total": half_totals[1],
+        "first_half_per_second": first_rate,
+        "second_half_per_second": second_rate,
+        "second_vs_first_percent": ((second_rate / first_rate - 1.0) * 100.0) if second_rate is not None and first_rate > 0 else None,
+        "event_amount_spread_between_halves_percent": ((max(half_totals) - min(half_totals)) / (sum(half_totals) / 2.0) * 100.0) if sum(half_totals) > 0 else None,
+        "half_seconds": half_seconds,
+    }
     result: dict[str, Any] = {
         "mode": mode, "events": event_count, "seconds": duration,
+        "hp_phase_breakdown": phase_report,
+        "hp_phase_unknown_events": phase_unknown_events,
+        "half_battle_stability": stability,
         "bloodthirst_return": bloodthirst,
         "fury_healing_absorption": fury_absorb,
         "rune_absorbed": rune_total,
@@ -445,6 +509,7 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
             "effective_heal_total": effective_heal if effective_heal_events == event_count else None,
             "effective_heal_known_sum": effective_heal,
             "effective_heal_events": effective_heal_events,
+            "effective_heal_optimization_events": effective_heal_optimization_events,
             "effective_heal_coverage_percent": coverage * 100.0,
             "overheal_known_sum": overheal,
             "per_second_effective_heal": (effective_heal / duration) if effective_heal_events == event_count else None,
@@ -491,7 +556,7 @@ def _optimizable_stats(mode: str, cfg: dict[str, Any]) -> list[str]:
 
 
 def _score_for_optimization(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any]) -> tuple[float | None, str]:
-    result = simulate(activity, stats, cfg)
+    result = simulate(activity, stats, cfg, expected_crit=True)
     mode = str(activity.get("mode", "dps")).lower()
     score_value, basis = _objective(result, mode, cfg)
     if score_value is None:
