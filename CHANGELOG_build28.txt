@@ -46,3 +46,13 @@ Additional defensive telemetry:
 - These are deliberately reported as pool changes, not automatically equated with damage absorbed (expiry and other causes can also change the pool).
 - Reconstructs pre-event health ratio using healthLimitDelta when maximum HP changes in the same event.
 - Health event subscriptions are deduplicated and capped at 64 watched objects to limit event overhead; unmatched transitions are discarded instead of reused by later hits.
+
+
+Offline formula engine update:
+- Replaced the first prototype in tools/aou_formula_calculator.py with event-level DD / HEAL / TANK simulation and separate per-activity recommendations.
+- Added Might, level multiplier, Mastery, Resolve, Ruthlessness, Luck/critical expectation, Bloodthirst, Fury healing absorption, Caution, Will, Endurance/Fortitude health, school resistances, block/parry and measured rune absorption.
+- HPS optimisation now requires effective-heal evidence for every event unless allow_nominal_hps_optimization=true is explicitly selected.
+- Resolve gain is simulated per event with the pool-dependent k and once-per-second decay; no guessed fixed divisor such as 2.4 is hard-coded. A per-event resolve_divisor_multiplier may be supplied.
+- The Resolve multiplier coefficient ambiguity (0.0015 versus 0.015) is surfaced in report warnings and remains configurable.
+- Added a three-activity profile template and 21 unit tests. Greedy allocation is explicitly labelled approximate, not exhaustive.
+- This is an offline Python engine; raw event journaling/export from the live Lua addon is not yet connected.
