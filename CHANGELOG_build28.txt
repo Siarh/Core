@@ -80,3 +80,9 @@ Saved-record analyzer correction:
 - Added a regression test comparing both interpretations. GitHub Actions passed all 29 formula/analyzer tests.
 
 - Explicitly documented that the legacy in-game Lua optimizer still uses 0.015 while the offline calculator/analyzer default to 0.0015; no silent change was made pending a controlled Sunshine 6.0 coefficient test.
+
+
+Live diagnostics follow-up (based on the latest Sunshine 6.0 report):
+- Enemy HP phase attribution now keeps the previous percentage-only HP snapshot and uses it as the next hit's pre-hit estimate. This addresses the failure mode where every hit was classified from the current post-hit percentage. Such samples remain explicitly estimated; they are not exact HP measurements.
+- Automatic integer display of innate stats now truncates fractional API values (`floor`) instead of rounding half-up, matching the game's displayed integer convention (459/800/460 versus 460/800/461). Raw API values are still retained internally for calculations.
+- Lua runtime validation is still pending in-game. The health-change callback produced only 3 events in the supplied report, so phase results must be rechecked after this change; the code does not claim exact phase reconstruction.
