@@ -75,6 +75,14 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(out["rune_absorbed"], 250)
         self.assertEqual(out["nominal"], 750)
 
+    def test_ruthlessness_is_applied_after_absolute_rune_absorption(self):
+        stats = {"ruthlessness": 1000}
+        event = {"raw": 1000, "target_hp": 0.0, "rune_absorbed": 100}
+        out = calc.calculate_event(event, "dps", stats, {"level": 1}, 0)
+        expected = 900 * calc.ruthlessness_multiplier(1000, 0.0)
+        self.assertAlmostEqual(out["nominal"], expected)
+        self.assertEqual(out["rune_absorbed"], 100)
+
     def test_fury_only_applies_to_player_in_combat(self):
         stats = {"fury": 100}
         yes = calc.calculate_event({"raw": 1000, "target_is_player": True, "in_combat": True}, "dps", stats, {"level": 1}, 0)
