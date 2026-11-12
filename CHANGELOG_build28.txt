@@ -1,0 +1,24 @@
+DPScope build 28 - Allods Sunshine 6.0
+======================================
+
+Changes
+- Analytics runs from the resolved DPScope combatant pipeline, once per event in the current fight.
+- Personal analytics are filtered to the local player; party member events are not mixed into personal totals.
+- Damage and healing phase reports use target HP snapshots where the game API exposes them.
+- Healing report separates nominal, effective and overheal values. HP-delta estimates are labelled separately; unavailable values remain unknown.
+- Defensive report exposes event components and API-reported totals separately to avoid double counting.
+- Determination pool sampling records observed values and thresholds; missing values are not converted to zero.
+- Existing DPScope commands and stored user test records are not cleared by this update.
+
+Commands
+/aou phase   - damage by target HP phase
+/aou heal    - healing efficiency and overheal
+/aou defstat - defensive event statistics
+/aou stats   - observed determination pool statistics
+/aou diff    - combined analytics summary
+
+Limitations
+- Mastery and Ruthlessness coefficients are not calibrated for Sunshine 6.0.
+- HP phase attribution depends on the game's health API and event target IDs.
+- Effective healing estimates require consecutive HP observations; reported overload is preferred when present.
+- No claim of a validated stat optimum is made without controlled combat samples.
