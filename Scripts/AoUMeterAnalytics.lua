@@ -59,7 +59,9 @@ end
 
 AOUA.Session = AOUA.Session or freshSession()
 local function ensureSession()
-    if not AOUA.Session.damage or not AOUA.Session.phases then
+    if not AOUA.Session.damage or not AOUA.Session.phases or
+        not AOUA.Session.defense or not AOUA.Session.determination or
+        not AOUA.Session.targetHealth then
         AOUA.Session = freshSession()
     end
 end
