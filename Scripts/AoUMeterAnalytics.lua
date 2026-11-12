@@ -191,8 +191,8 @@ function AOUA.OnHit(combatant, mode, params, determination)
             local hp, maxHp, real = safeHealth(params.unitId)
             local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
             if hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
-                local missing = math.max(0, maxHp - previous.value)
-                effective = math.min(amount, missing)
+                local gained = math.max(0, hp - previous.value)
+                effective = math.min(amount, gained)
                 overheal = math.max(0, amount - effective)
                 method = "hp-estimate"
             end
