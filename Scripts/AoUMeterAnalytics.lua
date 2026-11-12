@@ -330,6 +330,8 @@ local function phaseReport(kind)
     end
     out[#out + 1] = "Phase total=" .. fmt(total) ..
         ", HP samples measured/estimated=" .. fmt(measured) .. "/" .. fmt(estimated)
+    out[#out + 1] = "Health-change API events=" .. fmt(AOUA.Session.targetHealth.changedEvents or 0) ..
+        ", phase samples unknown=" .. fmt(AOUA.Session.targetHealth.unknown)
     return table.concat(out, "\n")
 end
 
