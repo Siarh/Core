@@ -399,6 +399,16 @@ function Optim.OnHit(combatant, mode, params, rage)
 		if bin < 1 then bin = 1 end
 		if not o.hist then o.hist = {} end
 		o.hist[bin] = (o.hist[bin] or 0) + amount
+		-- Resolve is sampled on each outgoing DD hit and grouped by the target's
+		-- pre-hit HP quarter. This preserves its build-up over the course of a fight.
+		if rage and mode == enumMode.Dps then
+			local phase = (frac > 0.75) and 1 or (frac > 0.50) and 2 or (frac > 0.25) and 3 or 4
+			if not o.poolHist then o.poolHist = {} end
+			local row = o.poolHist[phase] or { sum = 0, n = 0 }
+			row.sum = row.sum + rage
+			row.n = row.n + 1
+			o.poolHist[phase] = row
+		end
 	end
 	if rage then
 		o.pw = o.pw + amount
@@ -456,7 +466,8 @@ local HP_CURVE = { 0.875, 0.625, 0.375, 0.125 }
 local function lnCurveF(M, R, U, L, pool, mm)
 	local total = 0
 	for i = 1, #HP_CURVE do
-		total = total + lnF(M, R, U, L, pool, HP_CURVE[i], mm)
+		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
+		total = total + lnF(M, R, U, L, phasePool, HP_CURVE[i], mm)
 	end
 	return total / #HP_CURVE
 end
@@ -1020,6 +1031,13 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	end
 
 	local pool = o.ps / o.pw
+	-- Prefer the observed Resolve average in each target-HP quarter; fall back
+	-- to the whole-fight average when a phase has no samples.
+	local curvePool = { fallback = pool }
+	for phase = 1, 4 do
+		local row = o.poolHist and o.poolHist[phase]
+		curvePool[phase] = (row and row.n > 0) and (row.sum / row.n) or pool
+	end
 	local hKnown = o.hw > 0
 	local h = hKnown and (o.hs / o.hw) or (cfg.thp / 100)
 	add("OptPool", F1(pool))
@@ -1091,7 +1109,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
 	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
 	-- at most once per 4 calls unless the stats themselves changed
-	local dynKey = table.concat({ math.floor(pool / 3), math.floor(h * 20), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
+	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
 	local memo = Optim.Memo
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
@@ -1126,13 +1144,13 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			fxA, fxD, poolA, poolD = { fM + eM, fR + eR, fU + eU, L }, { fS + eS, fW + eW, fB + eB }, 0, 0
 		end
 		if offOK and haveDef then
-			local A, D, fa = optJ(fxA, poolA, fxD, poolD, F, pool, h, o2, cfg.bal, not heal)
+			local A, D, fa = optJ(fxA, poolA, fxD, poolD, F, heal and pool or curvePool, h, o2, cfg.bal, not heal)
 			optA3 = { fxA[1] + A[1], fxA[2] + A[2], fxA[3] + A[3] }
 			optD3 = { fxD[1] + D[1], fxD[2] + D[2], fxD[3] + D[3] }
 			faOpt = fa
 		elseif offOK then
 			local pa = poolA + (defOK and baseAt or F)
-			local a1, b1, u1 = optA(fxA, pa, pool, h, not heal)
+			local a1, b1, u1 = optA(fxA, pa, heal and pool or curvePool, h, not heal)
 			optA3 = { fxA[1] + a1, fxA[2] + b1, fxA[3] + u1 }
 			faOpt = baseAt
 		end
@@ -1146,11 +1164,11 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptR", I(nowA[2]), I(optA3[2]), S(optA3[2] - nowA[2]))
 		addT("OptU", I(nowA[3]), I(optA3[3]), S(optA3[3] - nowA[3]))
 		addT("OptL", I(L), I(L), "0")
-		local m0 = multA(nowA[1], nowA[2], nowA[3], L, pool, h, not heal)
-		local m1 = multA(optA3[1], optA3[2], optA3[3], L, pool, h, not heal)
+		local m0 = multA(nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool, h, not heal)
+		local m1 = multA(optA3[1], optA3[2], optA3[3], L, heal and pool or curvePool, h, not heal)
 		addT("OptMult", "x" .. F2(m0), "x" .. F2(m1), string.format("%+.1f", (m1 / m0 - 1) * 100) .. "%")
 		-- Marginal gains are measured against the same whole-fight HP curve, not one target-HP snapshot.
-		local function gain(M, R, U) return (multA(M, R, U, L, pool, h, not heal) / m0 - 1) * 100 end
+		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, not heal) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
 			string.format("R%+.1f", gain(nowA[1], nowA[2] + 50, nowA[3])), string.format("B%+.1f", gain(nowA[1], nowA[2], nowA[3] + 50)))
 		-- feedback: the new multiplier changes the damage (healing), therefore the pool; calibrate c from the measured pool
@@ -1165,7 +1183,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			end)
 			if okp and cfit and pnew then
 				local pAdj = clamp(pool + (pnew - poolc), 0, 100)
-				local m1c = multA(optA3[1], optA3[2], optA3[3], L, pAdj, h, not heal)
+				local m1c = multA(optA3[1], optA3[2], optA3[3], L, heal and pAdj or curvePool, h, not heal)
 				addT("OptPoolFb", F1(poolc), F1(pnew), "c=" .. F2(cfit))
 				addT("OptMultFb", "x" .. F2(m0), "x" .. F2(m1c), string.format("%+.1f", (m1c / m0 - 1) * 100) .. "%")
 			end
