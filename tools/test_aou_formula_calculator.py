@@ -118,6 +118,44 @@ class FormulaTests(unittest.TestCase):
         keys = calc._optimizable_stats("tank", {"mode": "pvp", "control_weight": 1.0})
         self.assertIn("will", keys)
 
+    def test_counterfactual_optimizer_uses_expected_crit_not_recorded_crit_flag(self):
+        event = {"raw": 1000, "critical": False}
+        stats = {"luck": 100}
+        actual = calc.calculate_event(event, "dps", stats, {"level": 1}, 0)
+        expected = calc.calculate_event(event, "dps", stats, {"level": 1}, 0, expected_crit=True)
+        self.assertEqual(actual["crit_multiplier"], 1.0)
+        self.assertAlmostEqual(expected["crit_multiplier"], 1.1)
+
+    def test_phase_breakdown_and_half_battle_stability(self):
+        activity = {"mode": "dps", "samples": [
+            {"second": 0, "raw": 100, "target_hp": 0.9},
+            {"second": 1, "raw": 200, "target_hp": 0.6},
+            {"second": 2, "raw": 300, "target_hp": 0.3},
+            {"second": 3, "raw": 400, "target_hp": 0.1},
+        ]}
+        result = calc.simulate(activity, {}, {"level": 1})
+        self.assertEqual(result["hp_phase_breakdown"]["100-75%"]["amount"], 100)
+        self.assertEqual(result["hp_phase_breakdown"]["75-50%"]["amount"], 200)
+        self.assertEqual(result["hp_phase_breakdown"]["50-25%"]["amount"], 300)
+        self.assertEqual(result["hp_phase_breakdown"]["25-0%"]["amount"], 400)
+        self.assertEqual(result["half_battle_stability"]["first_half_per_second"], 150)
+        self.assertEqual(result["half_battle_stability"]["second_half_per_second"], 350)
+
+    def test_hps_direct_absolute_effective_heal_not_reused_for_stat_optimization(self):
+        activity = {"mode": "hps", "samples": [{"second": 0, "raw": 1000, "effective_heal": 700}]}
+        result = calc.simulate(activity, {}, {"level": 1})
+        self.assertEqual(result["effective_heal_total"], 700)
+        self.assertEqual(result["effective_heal_optimization_events"], 0)
+        opt = calc.optimize(activity, {"mastery": 100}, 3, {"level": 1})
+        self.assertEqual(opt["status"], "insufficient_data")
+
+    def test_hps_effective_heal_ratio_scales_with_candidate_heal(self):
+        event = {"raw": 1000, "effective_heal": 500, "observed_nominal": 1000}
+        baseline = calc.calculate_event(event, "hps", {}, {"level": 1}, 0)
+        stronger = calc.calculate_event(event, "hps", {"mastery": 1000}, {"level": 1}, 0)
+        self.assertEqual(baseline["effective"], 500)
+        self.assertEqual(stronger["effective"], 1000)
+
 
 if __name__ == "__main__":
     unittest.main()
