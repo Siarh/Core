@@ -56,3 +56,13 @@ Offline formula engine update:
 - The Resolve multiplier coefficient ambiguity (0.0015 versus 0.015) is surfaced in report warnings and remains configurable.
 - Added a three-activity profile template and 21 unit tests. Greedy allocation is explicitly labelled approximate, not exhaustive.
 - This is an offline Python engine; raw event journaling/export from the live Lua addon is not yet connected.
+
+
+Offline formula engine hardening:
+- Reports damage/healing totals by target HP phase when pre-event HP is supplied, plus first-half/second-half activity rate comparisons.
+- HPS recommendations now require data that can be recalculated under alternative stats (target missing HP or an effective-heal ratio); bare fixed effective-heal totals are reported but are not reused for build comparisons.
+- Counterfactual optimisation uses expected critical probability from Luck instead of replaying historical crit/not-crit flags.
+- Missing target HP is disclosed and DD/HPS allocation recommendations are refused when Ruthlessness cannot be modelled safely.
+- Tank incoming mitigation is grouped by physical, elemental, divine and nature school, retaining separate resistance, block, parry and rune totals.
+- Resolve pool can reset on explicit player_died / owner_died event markers.
+- Formula engine has 25 unit tests covering the supplied formulas, data-coverage guards, phase/stability output and allocation budgets. Python tests were run in the development environment; the engine has not yet been connected to live Lua event export or validated with a new in-game fight.
