@@ -7,6 +7,7 @@
 AOUA = AOUA or {}
 AOUA.Version = "28"
 AOUA.HpCache = AOUA.HpCache or {}
+AOUA.HealthTransitions = AOUA.HealthTransitions or {}
 AOUA.Profile = AOUA.Profile or "pve"
 AOUA.Session = AOUA.Session or {}
 
@@ -52,7 +53,7 @@ local function freshSession()
         },
         determination = { sum = 0, min = nil, max = nil, samples = 0,
             above50 = 0, above67 = 0, above90 = 0 },
-        targetHealth = { samples = 0, estimated = 0, unknown = 0 },
+        targetHealth = { samples = 0, estimated = 0, unknown = 0, changedEvents = 0 },
         started = false
     }
 end
@@ -112,32 +113,40 @@ local function recordHealthPhase(kind, params, amount, confidence)
         if ok then id = target end
     end
     local value, limit, real = safeHealth(id)
-    if value == nil then
+    local transition = AOUA.HealthTransitions[id]
+    local expectedDirection = (kind == "damage") and -1 or 1
+    local useTransition = false
+    if transition and transition.direction == expectedDirection and transition.beforeFrac ~= nil then
+        if transition.delta ~= nil then
+            local difference = math.abs(math.abs(transition.delta) - amount)
+            useTransition = difference <= math.max(2, amount * 0.05)
+        else
+            -- Percent-only delta: useful phase estimate, but not a measured HP amount.
+            useTransition = true
+        end
+    end
+    if value == nil and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
         return
     end
-    -- A percentage-only post-heal sample cannot reconstruct pre-heal HP.
-    if (kind == "healing" or kind == "receivedHeal") and not real then
+    if (kind == "healing" or kind == "receivedHeal") and not real and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
         return
     end
 
-    AOUA.HpCache[id] = { value = value, limit = limit, real = real }
-    local frac = value / limit
-    if kind == "damage" then
-        if real then
-            -- HP is sampled after the hit; adding event damage estimates pre-hit HP.
-            frac = math.min(1, math.max(0, (value + amount) / limit))
-        else
-            -- valuePercents is already a percentage. Never add raw damage to it.
-        end
+    if value ~= nil then AOUA.HpCache[id] = { value = value, limit = limit, real = real } end
+    local frac
+    if useTransition then
+        frac = transition.beforeFrac
+        AOUA.HealthTransitions[id] = nil
+        if transition.exact then confidence = "reported" else confidence = "estimated" end
+    elseif kind == "damage" and real then
+        -- Fallback only: reconstruct pre-hit HP from a post-hit snapshot.
+        frac = math.min(1, math.max(0, (value + amount) / limit))
     elseif kind == "healing" or kind == "receivedHeal" then
-        if real then
-            -- amount is effective healing; reported overload gives stronger confidence.
-            frac = math.min(1, math.max(0, (value - amount) / limit))
-        else
-            -- Percentage-only healing was rejected above.
-        end
+        frac = math.min(1, math.max(0, (value - amount) / limit))
+    else
+        frac = value / limit
     end
     if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
 
@@ -152,6 +161,48 @@ local function recordHealthPhase(kind, params, amount, confidence)
             b.hpEstimated = b.hpEstimated + 1
             AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
         end
+    end
+end
+
+-- Health-change events provide the before/after delta directly. They are
+-- correlated with personal damage/heal events by target, direction and (when
+-- exact HP is available) amount; percent-only transitions remain estimates.
+function AOUA.OnHealthChanged(params)
+    if type(params) ~= "table" or not params.id then return end
+    ensureSession()
+    local id = params.id
+    local delta = tonumber(params.healthDelta)
+    local percentDelta = tonumber(params.healthPercentsDelta)
+    local value, limit, real = safeHealth(id)
+    local afterFrac
+    if value ~= nil and limit and limit > 0 then
+        afterFrac = value / limit
+    elseif percentDelta ~= nil then
+        local old = AOUA.HpCache[id]
+        if old and old.value ~= nil and old.limit and old.limit > 0 then
+            afterFrac = old.value / old.limit + percentDelta / 100
+        end
+    end
+    local beforeFrac
+    if real and delta ~= nil and limit and limit > 0 then
+        beforeFrac = (value - delta) / limit
+    elseif afterFrac ~= nil and percentDelta ~= nil then
+        beforeFrac = afterFrac - percentDelta / 100
+    end
+    if beforeFrac ~= nil then
+        beforeFrac = math.max(0, math.min(1, beforeFrac))
+        local directionDelta = delta
+        if directionDelta == nil then directionDelta = percentDelta end
+        AOUA.HealthTransitions[id] = {
+            beforeFrac = beforeFrac,
+            direction = directionDelta and (directionDelta < 0 and -1 or (directionDelta > 0 and 1 or 0)) or 0,
+            delta = delta,
+            exact = (delta ~= nil and real == true)
+        }
+        AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents + 1
+    end
+    if value ~= nil then
+        AOUA.HpCache[id] = { value = value, limit = limit, real = real }
     end
 end
 
@@ -314,6 +365,40 @@ local function determinationReport()
         pct(d.above67, d.samples) .. "/" .. pct(d.above90, d.samples)
 end
 
+local function innateStatsReport()
+    if not avatar or type(avatar.GetInnateStats) ~= "function" then
+        return "Innate stats: API unavailable."
+    end
+    local ok, list = pcall(avatar.GetInnateStats)
+    if not ok or type(list) ~= "table" then
+        return "Innate stats: read failed."
+    end
+    local out = { "Innate stats (raw API values; no stat-name assumptions):" }
+    for _, e in pairs(list) do
+        if type(e) == "table" and type(e.sysName) == "string" then
+            local line = e.sysName ..
+                " eff=" .. fmt(e.effective) ..
+                " base=" .. fmt(e.base) ..
+                " talents=" .. fmt(e.talents) ..
+                " equip=" .. fmt(e.equipment) ..
+                " enchants=" .. fmt(e.enchants) ..
+                " buffs=" .. fmt(e.buffs) ..
+                " fairy=" .. fmt(e.fairyBonus)
+            local secondary = e.secondary and e.secondary.current
+            if type(secondary) == "table" then
+                local values = {}
+                for _, k in ipairs({ "N1", "N2", "N3", "N4" }) do
+                    if secondary[k] ~= nil then values[#values + 1] = k .. "=" .. fmt(secondary[k]) end
+                end
+                if #values > 0 then line = line .. " secondary{" .. table.concat(values, ",") .. "}" end
+            end
+            out[#out + 1] = line
+        end
+    end
+    if #out == 1 then out[#out + 1] = "No innate-stat entries returned." end
+    return table.concat(out, "\n")
+end
+
 local function getCommand(input)
     local s = ""
     if type(input) == "string" then s = input
@@ -357,7 +442,8 @@ function AOUA.OnSlash(input)
     end
     if cmd == "stats" then
         return true, determinationReport() ..
-            "\nMastery/Ruthlessness: no isolated causal coefficient is inferred from these event fields."
+            "\nMastery/Ruthlessness: no isolated causal coefficient is inferred from these event fields." ..
+            "\n" .. innateStatsReport()
     end
     if cmd == "log" then
         local out = { "AOUA recent events:" }
@@ -387,6 +473,7 @@ function AOUA.OnSlash(input)
     end
     if cmd == "reset" then
         AOUA.Session = freshSession()
+        AOUA.HealthTransitions = {}
         return true, "AOUA session statistics reset."
     end
     return false
