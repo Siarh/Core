@@ -66,6 +66,9 @@ local function ensureSession()
         AOUA.Session = freshSession()
     end
 end
+if AOUA.Session.targetHealth.changedEvents == nil then
+    AOUA.Session.targetHealth.changedEvents = 0
+end
 ensureSession()
 
 local function safeHealth(id)
@@ -192,7 +195,7 @@ function AOUA.OnHealthChanged(params)
     if beforeFrac ~= nil then
         beforeFrac = math.max(0, math.min(1, beforeFrac))
         local directionDelta = delta
-        if directionDelta == nil then directionDelta = percentDelta end
+        if directionDelta == nil or directionDelta == 0 then directionDelta = percentDelta end
         AOUA.HealthTransitions[id] = {
             beforeFrac = beforeFrac,
             direction = directionDelta and (directionDelta < 0 and -1 or (directionDelta > 0 and 1 or 0)) or 0,
