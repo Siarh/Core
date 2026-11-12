@@ -1,0 +1,3 @@
+Запуск калькулятора.
+cd "E:\Allods Sunshine\ao_Sunshine\data\Mods\Addons\DPScope\tools"
+python .\aou_formula_calculator.py .\aou_profile_template.json --out .\report.json

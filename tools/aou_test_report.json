@@ -1,0 +1,49 @@
+{
+  "formula_model": "AOU server formulas supplied by user",
+  "mastery_multiplier": 1.337,
+  "crit_percent": 16.0,
+  "ruthlessness_m": 0.7447323750016273,
+  "bloodthirst_fraction": 0,
+  "will": {
+    "seconds": null,
+    "gain_percent": 0
+  },
+  "activities": {
+    "dummy_DPS": {
+      "simulation": {
+        "mode": "dps",
+        "events": 2,
+        "seconds": 2,
+        "total": 5781787.247070698,
+        "per_second": 2890893.623535349,
+        "resolve_average": 22.0,
+        "resolve_final": 29,
+        "bloodthirst_return": 0.0,
+        "fury_healing_absorption": 0.0,
+        "crit_chance_percent": 16.0
+      }
+    },
+    "group_HPS": {
+      "simulation": {
+        "mode": "hps",
+        "events": 2,
+        "seconds": 2,
+        "total": 372889.3961840526,
+        "per_second": 186444.6980920263,
+        "resolve_average": 0.0,
+        "resolve_final": 0,
+        "bloodthirst_return": 0.0,
+        "fury_healing_absorption": 0.0,
+        "crit_chance_percent": 16.0
+      }
+    }
+  },
+  "warnings": [
+    "resolve_coefficient по умолчанию 0.0015: это согласуется с текстом «1.5% за 10 пунктов шкалы». В исходной записи 0.015 — противоречие; его можно задать в JSON.",
+    "resolve_gain_divisor по умолчанию 2.4 — предварительная калибровка по трём записям, не подтверждённая константа сервера.",
+    "Для точных рекомендаций нужны события с raw, временем и HP цели. Агрегированные записи user.cfg не содержат всей этой информации.",
+    "Блок/парирование и сопротивление принимаются как данные события. Рунное поглощение пока не моделируется.",
+    "Могущество для лечения по умолчанию выключено; включается settings.might_affects_healing=true.",
+    "Рекомендация — жадный поиск целых очков, не глобальный перебор всех сочетаний."
+  ]
+}

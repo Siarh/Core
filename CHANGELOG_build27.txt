@@ -1,0 +1,10 @@
+DPScope build 27
+================
+
+- Added AoUMeterAnalytics.lua.
+- Analytics loads before AoUMeterData.lua.
+- Combat events are forwarded to AOUA.OnHit.
+- Added /aou adiag diagnostics and analytics slash routing.
+- Added /aou diff, /aou log and /aou prof handling through analytics.
+- Existing DPScope commands and record storage are preserved.
+- This package does not clear or reset any user records.

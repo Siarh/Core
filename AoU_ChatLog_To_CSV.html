@@ -1,0 +1,32 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AoU Chat Export → CSV</title>
+<style>body{font:15px system-ui;max-width:1000px;margin:28px auto;padding:0 16px;background:#111821;color:#e8edf5}section{background:#1b2735;border:1px solid #3b4c61;border-radius:12px;padding:16px;margin:14px 0}textarea{width:100%;height:280px;box-sizing:border-box;background:#0c131d;color:#eaf1fb;border:1px solid #465970;border-radius:8px;padding:12px;font:13px monospace}button{background:#3278c8;color:white;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;margin:8px 8px 0 0}input{margin:8px 0}small{color:#aab8ca}.ok{color:#8fe0b2}.err{color:#ffadad}table{border-collapse:collapse;width:100%;font-size:13px}td,th{border-bottom:1px solid #3a4a5e;padding:7px;text-align:left}</style></head><body>
+<h1>AoU Meter — сохранение журнала боя</h1>
+<p>Загрузите текстовый файл с копией строк <code>AOUCSV</code> из игрового чата или вставьте их в поле ниже. Конвертер соберёт части экспорта и создаст CSV.</p>
+<section><label>Файл с копией чата: <input id="file" type="file" accept=".txt,.log,.csv,text/plain"></label><textarea id="src" placeholder="Вставьте сюда строки AOUCSV|... из чата"></textarea><button id="make">Собрать CSV</button><button id="clear">Очистить</button><p id="status" class="small"></p></section>
+<section><h2>Предпросмотр</h2><div id="preview"><small>Пока нет данных.</small></div><button id="download" disabled>Скачать AoU_combat_log.csv</button></section>
+<script>
+let csvText='';
+const $=id=>document.getElementById(id);
+$('file').addEventListener('change',async e=>{const f=e.target.files[0];if(f)$('src').value=await f.text();});
+$('clear').onclick=()=>{$('src').value='';$('status').textContent='';$('preview').innerHTML='<small>Пока нет данных.</small>';csvText='';$('download').disabled=true;};
+$('make').onclick=()=>{
+ try{
+  const chunks={},totals={};let seen=0;
+  for(const line of $('src').value.split(/\r?\n/)){
+   const m=line.match(/AOUCSV\|([^|\s]+)\|(\d+)\|(\d+)\|(.*)$/);if(!m)continue;
+   const [,kind,ps,ts,payload]=m;if(kind==='BEGIN'||kind==='END')continue;
+   const part=Number(ps),total=Number(ts);(chunks[kind]??={})[part]=payload;totals[kind]=total;seen++;
+  }
+  const assemble=k=>{const a=chunks[k],n=totals[k];if(!a)throw Error('Не найдена строка '+k);let s='';for(let i=1;i<=n;i++){if(!(i in a))throw Error('В строке '+k+' отсутствует часть '+i+' из '+n);s+=a[i];}return s;};
+  const header=assemble('H').split('|');const keys=Object.keys(chunks).filter(k=>/^R\d+$/.test(k)).sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
+  if(!keys.length)throw Error('Не найдены записи боя. Выполните /aou rec export.');
+  const rows=keys.map(k=>{let r=assemble(k).split('|');while(r.length<header.length)r.push('');return r.slice(0,header.length);});
+  const quote=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  csvText='\ufeff'+[header,...rows].map(r=>r.map(quote).join(';')).join('\r\n');
+  const table=document.createElement('table');const thead=document.createElement('tr');header.forEach(h=>{const th=document.createElement('th');th.textContent=h;thead.appendChild(th);});const head=document.createElement('thead');head.appendChild(thead);table.appendChild(head);
+  const body=document.createElement('tbody');rows.slice(0,5).forEach(r=>{const tr=document.createElement('tr');r.slice(0,10).forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td);});body.appendChild(tr);});table.appendChild(body);$('preview').innerHTML='';$('preview').appendChild(table);
+  $('status').innerHTML='<span class="ok">Готово: '+rows.length+' записей, '+seen+' частей экспорта. Можно скачать CSV.</span>';$('download').disabled=false;
+ }catch(e){$('status').innerHTML='<span class="err">Ошибка: '+e.message+'</span>';csvText='';$('download').disabled=true;}
+};
+$('download').onclick=()=>{if(!csvText)return;const blob=new Blob([csvText],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='AoU_combat_log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+</script></body></html>

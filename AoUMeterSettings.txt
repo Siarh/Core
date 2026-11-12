@@ -1,0 +1,66 @@
+--------------------------------------------------------------------------------
+-- File: AoUMeterSettings.txt
+-- Desc: Configuration file
+-- Mod by: Resha
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- Settings
+--------------------------------------------------------------------------------
+
+Settings.ModeDPS  = true					-- enable DPS mode
+Settings.ModeHPS  = true					-- enable HPS mode
+Settings.ModeDEF  = true					-- enable DEF mode
+Settings.ModeIHPS = true					-- enable DEF mode
+Settings.DPSMeterMode = enumMode.Dps 	-- default mode: enumMode.Dps, enumMode.Hps, enumMode.Def
+Settings.MaxCombatants = 24              -- Number of maximum combatants to display
+Settings.MainPanelWidth = enumWidth.Auto -- To determine the width of the main panel (with player list)
+                                            -- enumWidth.Auto: depends on localization: Ru -> Wide else Normal
+                                            -- enumWidth.Normal or enumWidth.Wide to force one of the option
+Settings.MainPanelWideSize = 352         -- Width of the main panel in wider mode (must be > 294)
+
+--------------------------------------------------------------------------------
+-- Stat optimizer (window of a player: block "Stat optimizer", only for yourself)
+-- These values are the defaults. Values typed in the chat (/aou ...) are saved by the game
+-- and override this file; "/aou reset" removes them and brings back the values below.
+-- Edit the file, then reload the addons (or restart the game).
+--------------------------------------------------------------------------------
+Settings.Opt = {
+	mode = "pve",   -- "pve" or "pvp"
+	role = "auto",  -- "auto", "dd" or "heal"
+	flag = 1,       -- 1: redistribute the free points (e*), 0: keep the current ones
+	tw   = 4,       -- PvP: wanted seconds of control until immunity (1..10), for Will
+	hp   = 0,       -- max health, only needed if the game does not give it (0 = automatic)
+	auto = 1,       -- 1: the addon reads the character stats itself (then only fM..fB below are needed), 0: use the manual values below
+	font = 1,       -- Russian text rendering: 1 = locale files (default), 2 = cp1251 conversion, 3 = raw UTF-8. Try 2 if you see garbled letters
+
+	-- Offense. f* = development milestones only (never moved), e* = equipment + effects (free points)
+	fM = 0,  -- Mastery,      fixed
+	fR = 0,  -- Resolve,      fixed
+	fU = 0,  -- Ruthlessness, fixed
+	L  = 0,  -- Luck, TOTAL (it never receives points from other stats)
+	eM = 0,  -- Mastery,      free
+	eR = 0,  -- Resolve,      free
+	eU = 0,  -- Ruthlessness, free
+
+	-- Defense. f* = development milestones only (never moved), e* = equipment + effects (free points)
+	fS = 0,  -- Fortitude,   fixed
+	fW = 0,  -- Will,        fixed
+	fB = 0,  -- Bloodthirst, fixed
+	eS = 0,  -- Fortitude,   free
+	eW = 0,  -- Will,        free
+	eB = 0,  -- Bloodthirst, free
+
+	-- Free points (the "base" points you place yourself, e.g. 370 in total). They can go into ANY stat, offense or defense.
+	-- Type how they are placed now (only needed once; with auto = 1 the rest is read from the game).
+	bM = 0, bR = 0, bU = 0,  -- Mastery, Resolve, Ruthlessness
+	bS = 0, bW = 0, bB = 0,  -- Fortitude, Will, Bloodthirst
+	caut = 0,                -- Caution points; 0 = read from the game (ENUM_InnateStats_Endurance: base 100 + milestones)
+	eq = 1,                  -- 1 (default): equipment bonuses can be switched with insignias inside their group (offense / defense); 0: only the free points move
+	thp = 50,                -- average target health %, used only when the game does not give it
+	free = 0,                -- total free points to place anywhere (e.g. 370). 0 = use the sum of bM..bB
+	bal = 1,                 -- weight of defense when splitting the free points: damage x survival^bal (0 = only damage, up to 3)
+}
+
+-- Gap in pixels between the spell list and the stat optimizer block (about 1 cm at 100% scale; make it smaller to bring the block closer)
+Settings.OptGap = 36

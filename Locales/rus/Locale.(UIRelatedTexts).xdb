@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<UIRelatedTexts>
+  <items>
+    <Item>
+      <name>Ability</name>
+      <resource href="Ability.txt" />
+    </Item>
+    <Item>
+      <name>Abs</name>
+      <resource href="Abs.txt" />
+    </Item>
+    <Item>
+      <name>Avg</name>
+      <resource href="Avg.txt" />
+    </Item>
+    <Item>
+      <name>Dmg</name>
+      <resource href="Dmg.txt" />
+    </Item>
+    <Item>
+      <name>DEF</name>
+      <resource href="DEF.txt" />
+    </Item>
+    <Item>
+      <name>DPS</name>
+      <resource href="DPS.txt" />
+    </Item>
+    <Item>
+      <name>HPS</name>
+      <resource href="HPS.txt" />
+    </Item>
+    <Item>
+      <name>Max</name>
+      <resource href="Max.txt" />
+    </Item>
+    <Item>
+      <name>Min</name>
+      <resource href="Min.txt" />
+    </Item>
+    <Item>
+      <name>Type</name>
+      <resource href="Type.txt" />
+    </Item>
+    <Item>
+      <name>Description</name>
+      <resource href="Description.txt" />
+    </Item>
+    <Item>
+      <name>Overload</name>
+      <resource href="Overload.txt" />
+    </Item>
+    <Item>
+      <name>Absorbed</name>
+      <resource href="Absorbed.txt" />
+    </Item>
+    <Item>
+      <name>Barrier</name>
+      <resource href="Barrier.txt" />
+    </Item>
+    <Item>
+      <name>Blocked</name>
+      <resource href="Blocked.txt" />
+    </Item>
+    <Item>
+      <name>Critical</name>
+      <resource href="Critical.txt" />
+    </Item>
+    <Item>
+      <name>Dodge</name>
+      <resource href="Dodge.txt" />
+    </Item>
+    <Item>
+      <name>Glancing</name>
+      <resource href="Glancing.txt" />
+    </Item>
+    <Item>
+      <name>Miss</name>
+      <resource href="Miss.txt" />
+    </Item>
+    <Item>
+      <name>Normal</name>
+      <resource href="Normal.txt" />
+    </Item>
+    <Item>
+      <name>Parry</name>
+      <resource href="Parry.txt" />
+    </Item>
+    <Item>
+      <name>Resisted</name>
+      <resource href="Resisted.txt" />
+    </Item>
+    <Item>
+      <name>Lethality</name>
+      <resource href="Lethality.txt" />
+    </Item>
+    <Item>
+      <name>Mount</name>
+      <resource href="Mount.txt" />
+    </Item>
+    <Item>
+      <name>Multiplier</name>
+      <resource href="Multiplier.txt" />
+    </Item>
+    <Item>
+      <name>Pet</name>
+      <resource href="Pet.txt" />
+    </Item>
+    <Item>
+      <name>Current</name>
+      <resource href="Current.txt" />
+    </Item>
+    <Item>
+      <name>Overall</name>
+      <resource href="Overall.txt" />
+    </Item>
+    <Item>
+      <name>Previous</name>
+      <resource href="Previous.txt" />
+    </Item>
+    <Item>
+      <name>Rune</name>
+      <resource href="Rune.txt" />
+    </Item>
+    <Item>
+      <name>GlobalInfo</name>
+      <resource href="GlobalInfo.txt" />
+    </Item>
+    <Item>
+      <name>Determination</name>
+      <resource href="Determination.txt" />
+    </Item>
+	<Item>
+      <name>DamagePool</name>
+      <resource href="DamagePool.txt" />
+    </Item>
+	<Item>
+      <name>FromBarrier</name>
+      <resource href="FromBarrier.txt" />
+    </Item>
+    <Item>
+      <name>OptTitle</name>
+      <resource href="OptTitle.txt" />
+    </Item>
+    <Item>
+      <name>OptNow</name>
+      <resource href="OptNow.txt" />
+    </Item>
+    <Item>
+      <name>OptOpt</name>
+      <resource href="OptOpt.txt" />
+    </Item>
+    <Item>
+      <name>OptDiff</name>
+      <resource href="OptDiff.txt" />
+    </Item>
+    <Item>
+      <name>OptNoData</name>
+      <resource href="OptNoData.txt" />
+    </Item>
+    <Item>
+      <name>OptHelpRow</name>
+      <resource href="OptHelpRow.txt" />
+    </Item>
+    <Item>
+      <name>OptSet</name>
+      <resource href="OptSet.txt" />
+    </Item>
+    <Item>
+      <name>OptPool</name>
+      <resource href="OptPool.txt" />
+    </Item>
+    <Item>
+      <name>OptTHP</name>
+      <resource href="OptTHP.txt" />
+    </Item>
+    <Item>
+      <name>OptM</name>
+      <resource href="OptM.txt" />
+    </Item>
+    <Item>
+      <name>OptR</name>
+      <resource href="OptR.txt" />
+    </Item>
+    <Item>
+      <name>OptU</name>
+      <resource href="OptU.txt" />
+    </Item>
+    <Item>
+      <name>OptL</name>
+      <resource href="OptL.txt" />
+    </Item>
+    <Item>
+      <name>OptMult</name>
+      <resource href="OptMult.txt" />
+    </Item>
+    <Item>
+      <name>OptS</name>
+      <resource href="OptS.txt" />
+    </Item>
+    <Item>
+      <name>OptW</name>
+      <resource href="OptW.txt" />
+    </Item>
+    <Item>
+      <name>OptB</name>
+      <resource href="OptB.txt" />
+    </Item>
+    <Item>
+      <name>OptHP</name>
+      <resource href="OptHP.txt" />
+    </Item>
+    <Item>
+      <name>OptTTL</name>
+      <resource href="OptTTL.txt" />
+    </Item>
+    <Item>
+      <name>OptHpNeed</name>
+      <resource href="OptHpNeed.txt" />
+    </Item>
+    <Item>
+      <name>OptSavedAtk</name>
+      <resource href="OptSavedAtk.txt" />
+    </Item>
+    <Item>
+      <name>OptSavedDef</name>
+      <resource href="OptSavedDef.txt" />
+    </Item>
+    <Item>
+      <name>OptUsageAtk</name>
+      <resource href="OptUsageAtk.txt" />
+    </Item>
+    <Item>
+      <name>OptUsageDef</name>
+      <resource href="OptUsageDef.txt" />
+    </Item>
+    <Item>
+      <name>OptReset</name>
+      <resource href="OptReset.txt" />
+    </Item>
+    <Item>
+      <name>OptHelp1</name>
+      <resource href="OptHelp1.txt" />
+    </Item>
+    <Item>
+      <name>OptHelp2</name>
+      <resource href="OptHelp2.txt" />
+    </Item>
+    <Item>
+      <name>OptHelp3</name>
+      <resource href="OptHelp3.txt" />
+    </Item>
+    <Item>
+      <name>OptModeD</name>
+      <resource href="OptModeD.txt" />
+    </Item>
+    <Item>
+      <name>OptModeH</name>
+      <resource href="OptModeH.txt" />
+    </Item>
+    <Item>
+      <name>OptSavedFix</name>
+      <resource href="OptSavedFix.txt" />
+    </Item>
+    <Item>
+      <name>OptUsageFix</name>
+      <resource href="OptUsageFix.txt" />
+    </Item>
+    <Item>
+      <name>OptFree</name>
+      <resource href="OptFree.txt" />
+    </Item>
+    <Item>
+      <name>OptSavedBase</name>
+      <resource href="OptSavedBase.txt" />
+    </Item>
+    <Item>
+      <name>OptUsageBase</name>
+      <resource href="OptUsageBase.txt" />
+    </Item>
+    <Item>
+      <name>OptMitHdrD</name>
+      <resource href="OptMitHdrD.txt" />
+    </Item>
+    <Item>
+      <name>OptMitHdrH</name>
+      <resource href="OptMitHdrH.txt" />
+    </Item>
+    <Item>
+      <name>OptMitVal</name>
+      <resource href="OptMitVal.txt" />
+    </Item>
+    <Item>
+      <name>OptSchHdr</name>
+      <resource href="OptSchHdr.txt" />
+    </Item>
+    <Item>
+      <name>OptSchA</name>
+      <resource href="OptSchA.txt" />
+    </Item>
+    <Item>
+      <name>OptSchE</name>
+      <resource href="OptSchE.txt" />
+    </Item>
+    <Item>
+      <name>OptSchN</name>
+      <resource href="OptSchN.txt" />
+    </Item>
+    <Item>
+      <name>OptSchL</name>
+      <resource href="OptSchL.txt" />
+    </Item>
+    <Item>
+      <name>OptColRes</name>
+      <resource href="OptColRes.txt" />
+    </Item>
+    <Item>
+      <name>OptColAbs</name>
+      <resource href="OptColAbs.txt" />
+    </Item>
+    <Item>
+      <name>OptColBlk</name>
+      <resource href="OptColBlk.txt" />
+    </Item>
+    <Item>
+      <name>OptColShare</name>
+      <resource href="OptColShare.txt" />
+    </Item>
+    <Item>
+      <name>OptColRune</name>
+      <resource href="OptColRune.txt" />
+    </Item>
+    <Item>
+      <name>OptColWound</name>
+      <resource href="OptColWound.txt" />
+    </Item>
+    <Item>
+      <name>OptColOver</name>
+      <resource href="OptColOver.txt" />
+    </Item>
+    <Item>
+      <name>OptPhi</name>
+      <resource href="OptPhi.txt" />
+    </Item>
+    <Item>
+      <name>OptCaut</name>
+      <resource href="OptCaut.txt" />
+    </Item>
+    <Item>
+      <name>OptErr</name>
+      <resource href="OptErr.txt" />
+    </Item>
+    <Item>
+      <name>OptMarg</name>
+      <resource href="OptMarg.txt" />
+    </Item>
+    <Item>
+      <name>OptHealSplit</name>
+      <resource href="OptHealSplit.txt" />
+    </Item>
+    <Item>
+      <name>OptPoolFb</name>
+      <resource href="OptPoolFb.txt" />
+    </Item>
+    <Item>
+      <name>OptMultFb</name>
+      <resource href="OptMultFb.txt" />
+    </Item>
+  </items>
+</UIRelatedTexts>
+

@@ -1,0 +1,73 @@
+{
+  "settings": {
+    "level": 100,
+    "max_hp": 10000000,
+    "initial_resolve": 0,
+    "resolve_gain_divisor": 2.4,
+    "resolve_coefficient": 0.0015,
+    "might": 20,
+    "power_scale": 10,
+    "default_target_resistance": 10,
+    "might_affects_healing": false
+  },
+  "stats": {
+    "mastery": 337,
+    "resolve": 1043,
+    "ruthlessness": 338,
+    "luck": 160,
+    "might": 20,
+    "bloodthirst": 0,
+    "fury": 0,
+    "caution": 100,
+    "will": 0
+  },
+  "fixed_stats": {
+    "mastery": 337,
+    "resolve": 1043,
+    "ruthlessness": 338,
+    "luck": 160,
+    "might": 20,
+    "bloodthirst": 0,
+    "fury": 0,
+    "caution": 100,
+    "will": 0
+  },
+  "allocation_budget": 0,
+  "activities": {
+    "dummy_DPS": {
+      "mode": "dps",
+      "samples": [
+        {
+          "second": 0,
+          "raw": 100000,
+          "target_hp": 0.50,
+          "target_resistance": 10,
+          "block_fraction": 0,
+          "parry_fraction": 0,
+          "target_caution": 0
+        },
+        {
+          "second": 1,
+          "raw": 100000,
+          "target_hp": 0.49,
+          "target_resistance": 10
+        }
+      ]
+    },
+    "group_HPS": {
+      "mode": "hps",
+      "samples": [
+        {
+          "second": 0,
+          "raw": 80000,
+          "target_hp": 0.35
+        },
+        {
+          "second": 1,
+          "raw": 80000,
+          "target_hp": 0.30
+        }
+      ]
+    }
+  }
+}
