@@ -415,9 +415,10 @@ function Optim.OnHit(combatant, mode, params, rage)
 		pr.logSum = pr.logSum + math.log(math.max(amount, 1))
 		o.phase[phase] = pr
 
-		-- Resolve is sampled on each outgoing DD hit and grouped by the target's
-		-- pre-hit HP quarter. This preserves its build-up over the course of a fight.
-		if rage and mode == enumMode.Dps then
+		-- Resolve is sampled on each outgoing damage/heal event and grouped by the
+		-- affected target's pre-event HP quarter. This preserves its build-up over
+		-- the course of a fight for both DD and HEAL models.
+		if rage and (mode == enumMode.Dps or mode == enumMode.Hps) then
 			local phase = (frac > 0.75) and 1 or (frac > 0.50) and 2 or (frac > 0.25) and 3 or 4
 			if not o.poolHist then o.poolHist = {} end
 			local row = o.poolHist[phase] or { sum = 0, n = 0 }
@@ -537,8 +538,9 @@ local function multA(M, R, U, L, pool, h, curve)
 end
 
 -- Split Tp points between Mastery / Resolve / Ruthlessness (Luck is fixed).
--- With curve=true, use the weighted log-average across exact HP phase boundaries;
--- healing retains its previous current-target-HP objective.
+-- With curve=true, use the weighted log-average across exact HP phase boundaries
+-- for both DD and HEAL. Stability is penalized so one extreme phase cannot win
+-- the whole optimization by itself.
 local function optA(fx, Tp, pool, h, curve)
 	Tp = math.floor(Tp + 0.5)
 	local memo = {}
@@ -1191,6 +1193,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			pvp = (cfg.mode == "pvp"), tw = clamp(math.floor(cfg.tw + 0.5), 1, 10), phi = phi, c = cc }
 	end
 
+	local useCurve = (o.phase ~= nil)
 	local optA3, optD3, faOpt = nowA, nowD, baseAt
 	if cfg.flag == 1 then
 		-- eq = 1: bonuses of equipment / effects can move inside their group; eq = 0: only the free points move
@@ -1201,13 +1204,13 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			fxA, fxD, poolA, poolD = { fM + eM, fR + eR, fU + eU, L }, { fS + eS, fW + eW, fB + eB }, 0, 0
 		end
 		if offOK and haveDef then
-			local A, D, fa = optJ(fxA, poolA, fxD, poolD, F, heal and pool or curvePool, h, o2, cfg.bal, not heal)
+			local A, D, fa = optJ(fxA, poolA, fxD, poolD, F, heal and pool or curvePool, h, o2, cfg.bal, useCurve)
 			optA3 = { fxA[1] + A[1], fxA[2] + A[2], fxA[3] + A[3] }
 			optD3 = { fxD[1] + D[1], fxD[2] + D[2], fxD[3] + D[3] }
 			faOpt = fa
 		elseif offOK then
 			local pa = poolA + (defOK and baseAt or F)
-			local a1, b1, u1 = optA(fxA, pa, heal and pool or curvePool, h, not heal)
+			local a1, b1, u1 = optA(fxA, pa, heal and pool or curvePool, h, useCurve)
 			optA3 = { fxA[1] + a1, fxA[2] + b1, fxA[3] + u1 }
 			faOpt = baseAt
 		end
@@ -1221,8 +1224,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptR", I(nowA[2]), I(optA3[2]), S(optA3[2] - nowA[2]))
 		addT("OptU", I(nowA[3]), I(optA3[3]), S(optA3[3] - nowA[3]))
 		addT("OptL", I(L), I(L), "0")
-		local m0 = multA(nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool, h, not heal)
-		local m1 = multA(optA3[1], optA3[2], optA3[3], L, heal and pool or curvePool, h, not heal)
+		local m0 = multA(nowA[1], nowA[2], nowA[3], L, heal and pool or curvePool, h, useCurve)
+		local m1 = multA(optA3[1], optA3[2], optA3[3], L, heal and pool or curvePool, h, useCurve)
 		addT("OptMult", "x" .. F2(m0), "x" .. F2(m1), string.format("%+.1f", (m1 / m0 - 1) * 100) .. "%")
 
 		-- Whole-fight score and phase stability are calculated from the formula
@@ -1249,7 +1252,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptPhase", string.format("%.2f/%.2f/%.2f/%.2f", curPhase[1], curPhase[2], curPhase[3], curPhase[4]),
 			string.format("%.2f/%.2f/%.2f/%.2f", optPhase[1], optPhase[2], optPhase[3], optPhase[4]), "")
 		-- Marginal gains are measured against the same whole-fight HP curve, not one target-HP snapshot.
-		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, not heal) / m0 - 1) * 100 end
+		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, useCurve) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
 			string.format("R%+.1f", gain(nowA[1], nowA[2] + 50, nowA[3])), string.format("B%+.1f", gain(nowA[1], nowA[2], nowA[3] + 50)))
 		-- feedback: the new multiplier changes the damage (healing), therefore the pool; calibrate c from the measured pool
@@ -1264,7 +1267,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			end)
 			if okp and cfit and pnew then
 				local pAdj = clamp(pool + (pnew - poolc), 0, 100)
-				local m1c = multA(optA3[1], optA3[2], optA3[3], L, heal and pAdj or curvePool, h, not heal)
+				local m1c = multA(optA3[1], optA3[2], optA3[3], L, heal and pAdj or curvePool, h, useCurve)
 				addT("OptPoolFb", F1(poolc), F1(pnew), "c=" .. F2(cfit))
 				addT("OptMultFb", "x" .. F2(m0), "x" .. F2(m1c), string.format("%+.1f", (m1c / m0 - 1) * 100) .. "%")
 			end
@@ -1598,82 +1601,3 @@ function Optim.OnSlash(text)
         end
 
         if AOUA and AOUA.OnSlash then
-                local handled, message = AOUA.OnSlash(table.concat(args, " ", 2))
-                if handled then
-                        if message then say(message) end
-                        return true
-                end
-        end
-
-        if cmd == "ping" then
-                say("DPScope ping OK")
-                return true
-        end
-
-	local function setk(k, v)
-		cfg[k] = v
-		Optim.Dirty[k] = true
-	end
-	local function nums(n)
-		local t = {}
-		for i = 1, n do
-			local v = tonumber(args[2 + i])
-			if not v then return nil end
-			t[i] = math.max(0, math.floor(v + 0.5))
-		end
-		return t
-	end
-
-	if cmd == "atk" then
-		local t = nums(7)
-		if not t then
-			say(Optim.Text("OptUsageAtk"))
-		else
-			setk("fM", t[1]) setk("fR", t[2]) setk("fU", t[3]) setk("L", t[4])
-			setk("eM", t[5]) setk("eR", t[6]) setk("eU", t[7])
-			say(Optim.Text("OptSavedAtk"))
-		end
-	elseif cmd == "def" then
-		local t = nums(6)
-		if not t then
-			say(Optim.Text("OptUsageDef"))
-		else
-			setk("fS", t[1]) setk("fW", t[2]) setk("fB", t[3])
-			setk("eS", t[4]) setk("eW", t[5]) setk("eB", t[6])
-			say(Optim.Text("OptSavedDef"))
-		end
-	elseif cmd == "fix" then
-		local t = nums(6)
-		if not t then
-			say(Optim.Text("OptUsageFix"))
-		else
-			setk("fM", t[1]) setk("fR", t[2]) setk("fU", t[3])
-			setk("fS", t[4]) setk("fW", t[5]) setk("fB", t[6])
-			say(Optim.Text("OptSavedFix"))
-		end
-	elseif cmd == "base" then
-		local t = nums(6)
-		if not t then
-			say(Optim.Text("OptUsageBase"))
-		else
-			setk("bM", t[1]) setk("bR", t[2]) setk("bU", t[3])
-			setk("bS", t[4]) setk("bW", t[5]) setk("bB", t[6])
-			say(Optim.Text("OptSavedBase"))
-		end
-	elseif cmd == "off" or cmd == "on" then
-		setk("on", (cmd == "on") and 1 or 0)
-		say("optimizer = " .. (cfg.on == 1 and "on" or "off"))
-	elseif cmd == "caut" then
-		local v = tonumber(args[3])
-		if v then
-			setk("caut", math.max(0, math.floor(v + 0.5)))
-			say("caut = " .. cfg.caut)
-		else
-			say("/aou caut N (0 = read from the game)")
-		end
-	elseif cmd == "eq" then
-		setk("eq", (args[3] == "on") and 1 or 0)
-		say("equipment redistribution = " .. (cfg.eq == 1 and "on" or "off"))
-	elseif cmd == "thp" then
-		local v = tonumber(args[3])
-		if v then
