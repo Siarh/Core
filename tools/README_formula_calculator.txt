@@ -141,3 +141,13 @@ Do not replace raw fields with calculated totals: formulas can then be revised
 and old battles recalculated. If only aggregated /aou rec records are available,
 they are insufficient to reconstruct all per-event health, timing, target,
 resistance and rune data.
+
+
+Saved-record analyzer consistency
+---------------------------------
+`aou_analyze.py` now uses the same Resolve coefficient as the event calculator by default: 0.0015.
+To compare against the literal coefficient from the alternate reading of the supplied equation, run:
+
+    python aou_analyze.py records.txt --resolve-coefficient 0.015
+
+The coefficient is printed in the report. This does not resolve the source-specification ambiguity: with a 0..100 pool, 0.0015 corresponds to +1.5% per 10 pool points at 1000 Resolve, while 0.015 corresponds to +15% per 10 points.
