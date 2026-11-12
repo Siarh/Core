@@ -9,7 +9,6 @@ AOUA.Version = "28"
 AOUA.HpCache = AOUA.HpCache or {}
 AOUA.HealthTransitions = AOUA.HealthTransitions or {}
 AOUA.Profile = AOUA.Profile or "pve"
-AOUA.Session = AOUA.Session or {}
 
 local PHASES = {
     { key = "100_75", label = "100-75%", min = 0.75 },
@@ -78,9 +77,6 @@ local function ensureSession()
     d.shieldPoolGain = d.shieldPoolGain or 0
     d.shieldPoolSamples = d.shieldPoolSamples or 0
     AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
-end
-if AOUA.Session.targetHealth.changedEvents == nil then
-    AOUA.Session.targetHealth.changedEvents = 0
 end
 ensureSession()
 
