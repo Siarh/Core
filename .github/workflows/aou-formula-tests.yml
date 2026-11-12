@@ -8,6 +8,7 @@ on:
       - "tools/aou_analyze.py"
       - "tools/test_aou_formula_calculator.py"
       - "tools/aou_profile_template.json"
+      - "Scripts/AoUMeterOptim.lua"
       - ".github/workflows/aou-formula-tests.yml"
   workflow_dispatch:
 
@@ -21,6 +22,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Check modified Lua syntax
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+          luac -p Scripts/AoUMeterOptim.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
