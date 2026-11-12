@@ -458,18 +458,20 @@ local function lnF(M, R, U, L, pool, h, mm)
 		+ math.log(math.max(u, 1e-12)) + math.log(1 + c)
 end
 
--- Whole-fight DD objective: give equal weight to the four target-HP quarters.
--- Ruthlessness contributes progressively as target HP falls; Mastery and Resolve
--- contribute throughout. Equal phase weighting prevents the final execute window
--- from dominating the recommendation merely because its hits are unusually large.
-local HP_CURVE = { 0.875, 0.625, 0.375, 0.125 }
+-- Whole-fight DD objective: trapezoidal average over four equal target-HP quarters.
+-- The exact 100%, 75%, 50%, 25% and 0% boundaries are sampled. Shared phase
+-- boundaries receive half weight from each adjacent quarter. Ruthlessness therefore
+-- grows progressively without letting the execute endpoint dominate the whole score.
+local HP_CURVE = { 1.00, 0.75, 0.50, 0.25, 0.00 }
+local HP_CURVE_WEIGHT = { 0.125, 0.25, 0.25, 0.25, 0.125 }
 local function lnCurveF(M, R, U, L, pool, mm)
 	local total = 0
 	for i = 1, #HP_CURVE do
-		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
-		total = total + lnF(M, R, U, L, phasePool, HP_CURVE[i], mm)
+		local phase = math.min(i, 4)
+		local phasePool = type(pool) == "table" and (pool[phase] or pool.fallback) or pool
+		total = total + HP_CURVE_WEIGHT[i] * lnF(M, R, U, L, phasePool, HP_CURVE[i], mm)
 	end
-	return total / #HP_CURVE
+	return total
 end
 
 local function multA(M, R, U, L, pool, h, curve)
