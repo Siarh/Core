@@ -254,7 +254,7 @@ end
 function RetrieveDDEvent(params)
 	if not params then return end
 	if params.isFall then return end
-	
+	if params.target then RegisterHealthWatch(params.target) end
 
 	local collectedDps
 	
@@ -272,7 +272,7 @@ end
 function RetrieveDDEventIN(params)
 	if not params then return end
 	--if params.isFall then return end
-	
+	if params.target then RegisterHealthWatch(params.target) end
 
 	local collectedDef
 
@@ -287,14 +287,14 @@ end
 --------------------------------------------------------------------------------
 function RetrieveHealEvent(params)
 	if not params then return end
-	
+	if params.unitId then RegisterHealthWatch(params.unitId) end
 
 	DPSMeterGUI.DPSMeter:CollectHealData(params)
 end 
 
 function RetrieveHealEventIN(params)
 	if not params then return end
-	
+	if params.unitId then RegisterHealthWatch(params.unitId) end
 
 	DPSMeterGUI.DPSMeter:CollectHealDataIN(params)
 end 
@@ -439,13 +439,29 @@ local paramsBlockHeal = {}
 local paramsBlockHealIN = {}
 local paramsBlockID = {}
 local eventRegistredDDAndHealUnits = {}
+local healthWatchRegistered = {}
+
+function RetrieveHealthChangedEvent(params)
+	if params and AOUA and type(AOUA.OnHealthChanged) == "function" then
+		pcall(AOUA.OnHealthChanged, params)
+	end
+end
+
+function RegisterHealthWatch(id)
+	if not id or healthWatchRegistered[id] then return end
+	local ok = pcall(common.RegisterEventHandler, RetrieveHealthChangedEvent,
+		"EVENT_OBJECT_HEALTH_CHANGED", { id = id })
+	if ok then healthWatchRegistered[id] = true end
+end
 
 function metricReset()
 	if #paramsBlockDD > 0 then
 		common.UnRegisterEvent("EVENT_HEALING_RECEIVED")
 		common.UnRegisterEvent("EVENT_UNIT_DAMAGE_RECEIVED")
 		common.UnRegisterEvent("EVENT_UNIT_FOLLOWERS_LIST_CHANGED")
+		common.UnRegisterEvent("EVENT_OBJECT_HEALTH_CHANGED")
 		eventRegistredDDAndHealUnits = {}
+		healthWatchRegistered = {}
 	end
 	paramsBlockDD = {}
 	paramsBlockHeal = {}
@@ -489,6 +505,7 @@ end
 function addToHandlerR(_unitId)
 	if not _unitId then return end
 	paramsBlockID[#paramsBlockID + 1] = {id = _unitId}
+	RegisterHealthWatch(_unitId)
 	paramsBlockDDIN[#paramsBlockDDIN+1] =  {target = _unitId}
 	paramsBlockHealIN[#paramsBlockHealIN+1] =  {unitId = _unitId}
 
