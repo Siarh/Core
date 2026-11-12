@@ -404,6 +404,10 @@ function Optim.OnHit(combatant, mode, params, rage)
 		if bin < 1 then bin = 1 end
 		if not o.hist then o.hist = {} end
 		o.hist[bin] = (o.hist[bin] or 0) + amount
+		-- Keep the actual sampled target HP inside each bin. Using the bin midpoint
+		-- turns a steady 100% target into 95% (the midpoint of the final 90-100% bin).
+		if not o.histHpSum then o.histHpSum = {} end
+		o.histHpSum[bin] = (o.histHpSum[bin] or 0) + amount * frac
 		if not o.histN then o.histN = {} end
 		if not o.histLog then o.histLog = {} end
 		o.histN[bin] = (o.histN[bin] or 0) + 1
@@ -1179,7 +1183,9 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		for k = 1, 10 do
 			local n = o.hist[k] or 0
 			if n > 0 then
-				local hk = (k - 0.5) / 10
+				local hpSum = o.histHpSum and o.histHpSum[k]
+				local hk = (hpSum and n > 0) and (hpSum / n) or ((k - 0.5) / 10)
+				hk = clamp(hk, (k - 1) / 10, k / 10)
 				local w = n / (1 + m0 * (1 - hk))
 				num = num + w * hk
 				den = den + w
