@@ -23,7 +23,7 @@
     <Item href="Scripts/AoUMeterInit.lua"/>
   </ScriptFileRefs>
   <author>Sephirostoy | Fixed for ao-Sunshine</author>
-  <revision>27.0</revision>
+  <revision>28.0</revision>
   <textsGroups>
     <Item>
       <groupName>rus</groupName>
