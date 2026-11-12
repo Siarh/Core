@@ -9,7 +9,7 @@
 
 Метка записи: <манекен>_<набор>_<номер>, например d70_B200_2. Записи с одинаковым <манекен>_<набор> усредняются.
 Для каждой группы печатаются: средний урон в секунду, разброс, средний пул, доля критов, характеристики и сравнение
-с моделью (формулы из вашей таблицы): Мастерство x(1+s/1000), Решимость x(1+s/1000*пул*0.015),
+с моделью. По умолчанию коэффициент Решимости 0.0015; вариант 0.015 проверяется через --resolve-coefficient 0.015.
 Беспощадность x(1+m*(1-HP цели)), Удача: крит x2 с шансом f(s)/1000.
 """
 import math, re, sys, statistics as st
@@ -49,10 +49,10 @@ def fcrit(s):
     r = 500 / s
     return min(850, 500 + (s - 500) * 0.7 * (r + 0.25 * r**5 - 0.5 * r**3))
 
-def model(d):
-    """Относительный множитель урона по формулам для записи d."""
+def model(d, resolve_coefficient=0.0015):
+    """Относительный множитель урона; коэффициент Решимости по умолчанию 0.0015."""
     pool = d.get("pool", 0); h = d.get("thp", 100) / 100 if d.get("thp", -1) >= 0 else 1.0
-    return ((1 + d["M"] / 1000) * (1 + d["R"] / 1000 * pool * 0.015) * (1 + m_ruth(d["U"] / 1000) * (1 - h))
+    return ((1 + d["M"] / 1000) * (1 + d["R"] / 1000 * pool * resolve_coefficient) * (1 + m_ruth(d["U"] / 1000) * (1 - h))
             * (1 + min(1, fcrit(d["L"]) / 1000)))
 
 def k_pool(p):
@@ -77,8 +77,20 @@ def calibrate_c(rate, measured, T):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     ref = None
+    resolve_coefficient = 0.0015
     if "--ref" in sys.argv:
-        ref = sys.argv[sys.argv.index("--ref") + 1]; args = [a for a in args if a != ref]
+        idx = sys.argv.index("--ref")
+        if idx + 1 >= len(sys.argv): raise SystemExit("--ref требует метку")
+        ref = sys.argv[idx + 1]
+        args = [a for a in args if a != ref]
+    if "--resolve-coefficient" in sys.argv:
+        idx = sys.argv.index("--resolve-coefficient")
+        if idx + 1 >= len(sys.argv): raise SystemExit("--resolve-coefficient требует число: 0.0015 или 0.015")
+        try: resolve_coefficient = float(sys.argv[idx + 1])
+        except ValueError: raise SystemExit("--resolve-coefficient требует число: 0.0015 или 0.015")
+        if not math.isfinite(resolve_coefficient) or resolve_coefficient < 0:
+            raise SystemExit("--resolve-coefficient должен быть конечным неотрицательным числом")
+        args = [a for a in args if a != "--resolve-coefficient" and a != sys.argv[idx + 1]]
     if not args:
         print(__doc__); return
     recs = read_records(args)
@@ -104,7 +116,8 @@ def main():
         pred = mod / ref_row[7] if ref_row else 0
         print(f"{key:14s}{len(ds):3d}{mean:12.0f}{sd:9.1f}{pool:6.1f}{thp:8.1f}{crit:7.1f}  "
               f"{d0['M']:.0f}/{d0['R']:.0f}/{d0['U']:.0f}/{d0['L']:.0f}".ljust(18) + f"{pred:8.3f}{meas:10.3f}")
-    print("\nСтолбцы «модель» и «измерено» даны относительно группы", ref_row[0] if ref_row else "-",
+    print(f"\nКоэффициент Решимости в модели: {resolve_coefficient:g}")
+    print("Столбцы «модель» и «измерено» даны относительно группы", ref_row[0] if ref_row else "-",
           "(у которой они равны 1.000). Расхождение больше разброса = модель неточна.")
     print("\nКалибровка роста пула Решимости (множитель c в формуле 416.7 * урон / здоровье / c * k):")
     for d in recs:
