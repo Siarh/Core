@@ -439,7 +439,8 @@ local function determinationReport()
             pct(d.above67, d.samples) .. "/" .. pct(d.above90, d.samples)
     end
     local byMode = AOUA.Session.determinationByMode or {}
-    return "Resolve pool (combined):\n" .. one("DD outgoing damage", byMode.damage) ..
+    return "Resolve pool:\n" .. one("All activities", AOUA.Session.determination) ..
+        "\n" .. one("DD outgoing damage", byMode.damage) ..
         "\n" .. one("HEAL outgoing healing", byMode.healing)
 end
 
