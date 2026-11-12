@@ -1599,5 +1599,218 @@ end
 --------------------------------------------------------------------------------
 
 function Optim.OnSlash(text)
-        text = tostring(text or "")
-        text = string.gsub(text, "^%s+", "")
+	local args = {}
+	local pos = 1
+	while true do
+		local s, e = string.find(text, "%S+", pos)
+		if not s then break end
+		args[#args + 1] = string.sub(text, s, e)
+		pos = e + 1
+	end
+	if args[1] ~= "/aou" and args[1] ~= "/dpscope" then return false end
+
+	local cfg = Optim.Cfg
+	local cmd = string.lower(args[2] or "help")
+
+	local function setk(k, v)
+		cfg[k] = v
+		Optim.Dirty[k] = true
+	end
+	local function nums(n)
+		local t = {}
+		for i = 1, n do
+			local v = tonumber(args[2 + i])
+			if not v then return nil end
+			t[i] = math.max(0, math.floor(v + 0.5))
+		end
+		return t
+	end
+
+	if cmd == "atk" then
+		local t = nums(7)
+		if not t then
+			say(Optim.Text("OptUsageAtk"))
+		else
+			setk("fM", t[1]) setk("fR", t[2]) setk("fU", t[3]) setk("L", t[4])
+			setk("eM", t[5]) setk("eR", t[6]) setk("eU", t[7])
+			say(Optim.Text("OptSavedAtk"))
+		end
+	elseif cmd == "def" then
+		local t = nums(6)
+		if not t then
+			say(Optim.Text("OptUsageDef"))
+		else
+			setk("fS", t[1]) setk("fW", t[2]) setk("fB", t[3])
+			setk("eS", t[4]) setk("eW", t[5]) setk("eB", t[6])
+			say(Optim.Text("OptSavedDef"))
+		end
+	elseif cmd == "fix" then
+		local t = nums(6)
+		if not t then
+			say(Optim.Text("OptUsageFix"))
+		else
+			setk("fM", t[1]) setk("fR", t[2]) setk("fU", t[3])
+			setk("fS", t[4]) setk("fW", t[5]) setk("fB", t[6])
+			say(Optim.Text("OptSavedFix"))
+		end
+	elseif cmd == "base" then
+		local t = nums(6)
+		if not t then
+			say(Optim.Text("OptUsageBase"))
+		else
+			setk("bM", t[1]) setk("bR", t[2]) setk("bU", t[3])
+			setk("bS", t[4]) setk("bW", t[5]) setk("bB", t[6])
+			say(Optim.Text("OptSavedBase"))
+		end
+	elseif cmd == "off" or cmd == "on" then
+		setk("on", (cmd == "on") and 1 or 0)
+		say("optimizer = " .. (cfg.on == 1 and "on" or "off"))
+	elseif cmd == "caut" then
+		local v = tonumber(args[3])
+		if v then
+			setk("caut", math.max(0, math.floor(v + 0.5)))
+			say("caut = " .. cfg.caut)
+		else
+			say("/aou caut N (0 = read from the game)")
+		end
+	elseif cmd == "eq" then
+		setk("eq", (args[3] == "on") and 1 or 0)
+		say("equipment redistribution = " .. (cfg.eq == 1 and "on" or "off"))
+	elseif cmd == "thp" then
+		local v = tonumber(args[3])
+		if v then
+			setk("thp", clamp(math.floor(v + 0.5), 0, 100))
+			say("thp = " .. cfg.thp)
+		else
+			say("/aou thp 0..100")
+		end
+	elseif cmd == "free" then
+		local v = tonumber(args[3])
+		if v then
+			setk("free", math.max(0, math.floor(v + 0.5)))
+			say("free = " .. cfg.free)
+		else
+			say("/aou free N")
+		end
+	elseif cmd == "bal" then
+		local v = tonumber(args[3])
+		if v then
+			setk("bal", clamp(v, 0, 3))
+			say("bal = " .. cfg.bal)
+		else
+			say("/aou bal 0..3")
+		end
+	elseif cmd == "auto" then
+		setk("auto", (args[3] == "off") and 0 or 1)
+		say("auto = " .. (cfg.auto == 1 and "on" or "off"))
+	elseif cmd == "hptest" then
+		local tg = Optim.GetTarget()
+		say("target id: " .. tostring(tg))
+		if tg then
+			local ok, r = pcall(function() return object.GetHealthInfo(tg) end)
+			summarize("GetHealthInfo(target)", ok, r)
+		end
+		say("hp reads: ok=" .. Optim.Hp.ok .. " fail=" .. Optim.Hp.fail .. " last=" .. Optim.Hp.last)
+	elseif cmd == "healtrace" then
+		local tr = Optim.HealTrace
+		say("heal events: " .. Optim.HealStat.n .. ", same health read as the previous event: " .. Optim.HealStat.same
+			.. " (" .. F1(Optim.HealStat.n > 0 and Optim.HealStat.same / Optim.HealStat.n * 100 or 0) .. "%)")
+		for i = 1, #tr do
+			local e = tr[i]
+			sayLong(i .. ": " .. (e.mine and "self" or "ally") .. " heal=" .. I(e.heal) .. " hp=" .. I(e.value) .. "/" .. I(e.limit)
+				.. (e.real and "" or " (percent only)") .. " pre=" .. F1(e.pre * 100) .. "%" .. (e.same and " same-read" or ""))
+		end
+	elseif cmd == "lastev" then
+		local mode = (args[3] == "dmg") and enumMode.Dps or enumMode.Hps
+		local ev = Optim.LastEv[mode]
+		if not ev then
+			say("no event captured yet (hit or heal something first)")
+		else
+			summarize(mode == enumMode.Dps and "last damage event" or "last heal event", true, ev)
+		end
+	elseif cmd == "mark" then
+		local label = "x"
+		if #args >= 3 then label = table.concat(args, "_", 3) end
+		local fields = Optim.MakeRecord(label)
+		if not fields then
+			say("mark: no fight data (hit something first)")
+		else
+			local ok, n, verified = Optim.SaveRecord(fields)
+			say("mark #" .. n .. (ok and (verified and " saved (verified): " or " saved, NOT verified (use /aou rec export): ") or " NOT saved: ") .. table.concat(fields, "|", 1, 9))
+		end
+	elseif cmd == "rec" then
+		local sub = args[3] or "list"
+		if sub == "clear" then
+			Optim.RecClear()
+			say("records cleared")
+		elseif sub == "export" then
+			Optim.RecExport(tonumber(args[4]) or 100)
+		else
+			Optim.RecList(tonumber(args[4]) or 10)
+		end
+	elseif cmd == "probe" then
+		Optim.Probe()
+	elseif cmd == "scan" then
+		Optim.Scan(args[3])
+	elseif cmd == "mode" then
+		if args[3] == "pvp" or args[3] == "pve" then
+			setk("mode", args[3])
+			say("mode = " .. cfg.mode)
+		else
+			say("/aou mode pve|pvp")
+		end
+	elseif cmd == "role" then
+		if args[3] == "dd" or args[3] == "heal" or args[3] == "auto" then
+			setk("role", args[3])
+			say("role = " .. cfg.role)
+		else
+			say("/aou role dd|heal|auto")
+		end
+	elseif cmd == "flag" then
+		setk("flag", (args[3] == "off") and 0 or 1)
+		say("redistribute = " .. (cfg.flag == 1 and "on" or "off"))
+	elseif cmd == "hp" then
+		local v = tonumber(args[3])
+		if v then
+			setk("hp", math.max(0, math.floor(v + 0.5)))
+			say("hp = " .. cfg.hp)
+		else
+			say("/aou hp N")
+		end
+	elseif cmd == "tw" then
+		local v = tonumber(args[3])
+		if v then
+			setk("tw", clamp(math.floor(v + 0.5), 1, 10))
+			say("tw = " .. cfg.tw)
+		else
+			say("/aou tw 1..10")
+		end
+	elseif cmd == "font" then
+		local v = tonumber(args[3])
+		if v and v >= 1 and v <= 3 then
+			setk("font", math.floor(v))
+			say("font = " .. cfg.font)
+		else
+			say("/aou font 1|2|3")
+		end
+	elseif cmd == "ver" then
+		say("DPScope build 28, recalcs " .. Optim.Perf.recalcs .. "/" .. Optim.Perf.calls .. ", font = " .. cfg.font .. ", localization = " .. tostring(localization))
+	elseif cmd == "reset" then
+		Optim.ResetCfg()
+		say(Optim.Text("OptReset"))
+	elseif cmd == "show" then
+		say("mode=" .. cfg.mode .. " role=" .. cfg.role .. " flag=" .. cfg.flag .. " tw=" .. cfg.tw .. " hp=" .. cfg.hp)
+		say("atk fM=" .. cfg.fM .. " fR=" .. cfg.fR .. " fU=" .. cfg.fU .. " L=" .. cfg.L .. " eM=" .. cfg.eM .. " eR=" .. cfg.eR .. " eU=" .. cfg.eU)
+		say("hp reads: ok=" .. Optim.Hp.ok .. " fail=" .. Optim.Hp.fail .. " last=" .. Optim.Hp.last)
+		say("def fS=" .. cfg.fS .. " fW=" .. cfg.fW .. " fB=" .. cfg.fB .. " eS=" .. cfg.eS .. " eW=" .. cfg.eW .. " eB=" .. cfg.eB)
+		say("base bM=" .. cfg.bM .. " bR=" .. cfg.bR .. " bU=" .. cfg.bU .. " bS=" .. cfg.bS .. " bW=" .. cfg.bW .. " bB=" .. cfg.bB .. " caut=" .. cfg.caut .. " eq=" .. cfg.eq .. " thp=" .. cfg.thp .. " free=" .. cfg.free .. " bal=" .. cfg.bal .. " auto=" .. cfg.auto)
+	else
+		say(Optim.Text("OptHelp1"))
+		say(Optim.Text("OptHelp2"))
+		say(Optim.Text("OptHelp3"))
+	end
+
+	Optim.Memo.key = nil
+	Optim.SaveCfg()
+	return true
+end
