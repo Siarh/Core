@@ -66,3 +66,9 @@ Offline formula engine hardening:
 - Tank incoming mitigation is grouped by physical, elemental, divine and nature school, retaining separate resistance, block, parry and rune totals.
 - Resolve pool can reset on explicit player_died / owner_died event markers.
 - Formula engine has 27 unit tests covering the supplied formulas, data-coverage guards, phase/stability output and allocation budgets. Python tests were run in the development environment; the engine has not yet been connected to live Lua event export or validated with a new in-game fight.
+
+
+Formula ordering refinement:
+- Outgoing event calculation now applies resistance, block/parry and measured rune absorption before Ruthlessness, then target Caution, matching the supplied hit sequence.
+- Added a regression test ensuring an absolute rune-absorbed amount is not amplified by Ruthlessness.
+- Formula engine test suite now contains 28 tests. GitHub Actions runs on pushes to build28-source; CI result is pending.
