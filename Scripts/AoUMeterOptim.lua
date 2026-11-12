@@ -1265,8 +1265,8 @@ function Optim.MakeRecord(label)
 	end
 	return {
 		lab, Optim.Cfg.mode, F1(sec), I(dmg), I(dmg / sec), I(hits), I(crits), F1(pool), F1(poolc), F1(thp),
-		I(heal), I(heal / sec), I(tv("M")), I(tv("R")), I(tv("U")), I(tv("L")), I(tv("S")), I(tv("W")), I(tv("B")),
-		I(bv("M")), I(bv("R")), I(bv("U")), I(bv("S")), I(bv("W")), I(bv("B")), I(hpMax), I(inc / sec),
+		I(heal), I(heal / sec), math.floor(tv("M")), math.floor(tv("R")), math.floor(tv("U")), math.floor(tv("L")), math.floor(tv("S")), math.floor(tv("W")), math.floor(tv("B")),
+		math.floor(bv("M")), math.floor(bv("R")), math.floor(bv("U")), math.floor(bv("S")), math.floor(bv("W")), math.floor(bv("B")), I(hpMax), I(inc / sec),
 		I(o and o.hpSamples or 0), I(o and o.poolSamples or 0),
 		I(outMit.resist or 0), I(outMit.absorb or 0), I(outMit.block or 0),
 		I(inMit.resist or 0), I(inMit.absorb or 0), I(inMit.block or 0),
