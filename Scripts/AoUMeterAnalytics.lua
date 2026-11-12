@@ -6,6 +6,7 @@
 
 AOUA = AOUA or {}
 AOUA.Version = "28"
+AOUA.HpCache = AOUA.HpCache or {}
 AOUA.Profile = AOUA.Profile or "pve"
 AOUA.Session = AOUA.Session or {}
 
@@ -114,6 +115,7 @@ local function recordHealthPhase(kind, params, amount)
         return
     end
 
+    AOUA.HpCache[id] = { value = value, limit = limit, real = real }
     local frac = value / limit
     if kind == "damage" and real then
         -- Health is normally sampled after the hit; reconstruct pre-hit HP.
@@ -179,10 +181,13 @@ function AOUA.OnHit(combatant, mode, params, determination)
             effective = math.max(0, amount - overheal)
             method = "reported"
         else
+            -- A post-heal HP read alone cannot reveal overheal. Estimate only
+            -- when a previous real HP snapshot for this recipient is available.
             local hp, maxHp, real = safeHealth(params.unitId)
-            if hp ~= nil and real then
-                local before = math.max(0, hp - amount)
-                effective = math.min(amount, math.max(0, maxHp - before))
+            local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
+            if hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
+                local missing = math.max(0, maxHp - previous.value)
+                effective = math.min(amount, missing)
                 overheal = math.max(0, amount - effective)
                 method = "hp-estimate"
             end
