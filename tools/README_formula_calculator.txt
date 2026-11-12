@@ -53,6 +53,7 @@ rune_absorb_fraction       measured rune absorption fraction 0..1
 resolve_pool               optional measured pool before this event
 resolve_pool_after         optional measured pool after this event
 resolve_divisor_multiplier optional explicit divisor in pool-gain formula
+player_died / owner_died     true on death; resets the simulated Resolve pool
 target_is_player           true only when target is a player
 in_combat                  true when the target is in combat (Fury condition)
 
