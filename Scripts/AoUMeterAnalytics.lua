@@ -114,6 +114,11 @@ local function recordHealthPhase(kind, params, amount)
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
         return
     end
+    -- A percentage-only post-heal sample cannot reconstruct pre-heal HP.
+    if (kind == "healing" or kind == "receivedHeal") and not real then
+        AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
+        return
+    end
 
     AOUA.HpCache[id] = { value = value, limit = limit, real = real }
     local frac = value / limit
