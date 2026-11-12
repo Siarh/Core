@@ -28,6 +28,7 @@ local function bucket()
     return {
         events = 0, amount = 0, crits = 0, glancing = 0,
         effective = 0, overheal = 0, reportedOverheal = 0,
+        healResisted = 0, runeResisted = 0, healAbsorbed = 0,
         hpMeasured = 0, hpEstimated = 0, hpUnknown = 0,
         determinationSum = 0, determinationSamples = 0,
         last = {}
@@ -249,10 +250,17 @@ function AOUA.OnHit(combatant, mode, params, determination)
         recordHealthPhase(kind, params, amount, "estimated")
     elseif kind == "healing" or kind == "receivedHeal" then
         local reported = tonumber(params.overload)
+        local resisted = math.max(0, N(params.resisted))
+        local runeResisted = math.max(0, N(params.runeResisted))
+        local absorbed = math.max(0, N(params.absorbed))
+        b.healResisted = b.healResisted + resisted
+        b.runeResisted = b.runeResisted + runeResisted
+        b.healAbsorbed = b.healAbsorbed + absorbed
+        local reportedLoss = resisted + runeResisted + absorbed
         local effective, overheal, method
         if reported ~= nil then
             overheal = math.max(0, math.min(amount, reported))
-            effective = math.max(0, amount - overheal)
+            effective = math.max(0, amount - overheal - reportedLoss)
             method = "reported"
         else
             -- A post-heal HP read alone cannot reveal overheal. Estimate only
@@ -341,6 +349,7 @@ local function healingReport()
         return label .. ": nominal=" .. fmt(x.amount) ..
             ", effective=" .. fmt(x.effective) ..
             ", overheal=" .. fmt(x.overheal) ..
+            ", wound/debuff loss=" .. fmt(x.healResisted + x.runeResisted + x.healAbsorbed) ..
             ", confidence reported/estimated/unknown=" ..
             fmt(x.hpMeasured) .. "/" .. fmt(x.hpEstimated) .. "/" .. fmt(x.hpUnknown)
     end
