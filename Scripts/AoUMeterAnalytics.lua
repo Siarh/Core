@@ -67,6 +67,17 @@ local function ensureSession()
         not AOUA.Session.targetHealth then
         AOUA.Session = freshSession()
     end
+    for _, name in ipairs({ "healing", "receivedHeal" }) do
+        local b = AOUA.Session[name]
+        b.healResisted = b.healResisted or 0
+        b.runeResisted = b.runeResisted or 0
+        b.healAbsorbed = b.healAbsorbed or 0
+    end
+    local d = AOUA.Session.defense
+    d.shieldPoolLoss = d.shieldPoolLoss or 0
+    d.shieldPoolGain = d.shieldPoolGain or 0
+    d.shieldPoolSamples = d.shieldPoolSamples or 0
+    AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
 end
 if AOUA.Session.targetHealth.changedEvents == nil then
     AOUA.Session.targetHealth.changedEvents = 0
