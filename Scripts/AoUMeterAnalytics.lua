@@ -184,8 +184,9 @@ function AOUA.OnHit(combatant, mode, params, determination)
 
     if kind == "damage" then
         addDetermination(determination or params.determination)
-        if determination ~= nil or params.determination ~= nil then
-            local dv = N(determination or params.determination)
+        local rawDetermination = determination or params.determination
+        local dv = tonumber(rawDetermination)
+        if dv ~= nil and dv > 0 then
             b.determinationSum = b.determinationSum + dv
             b.determinationSamples = b.determinationSamples + 1
         end
