@@ -1,148 +1,365 @@
 --------------------------------------------------------------------------------
 -- File: AoUMeterAnalytics.lua
--- Desc: DPScope build 28 combat analytics for Allods Sunshine 6.0
--- Features: Phase analysis, healing efficiency, stat optimization
+-- DPScope build 28 analytics for Allods Sunshine 6.0
+-- Event-driven measurements. Unknown / unavailable values are not fabricated.
 --------------------------------------------------------------------------------
 
-Global("AOUA", {})
+AOUA = AOUA or {}
 AOUA.Version = "28"
 AOUA.Profile = AOUA.Profile or "pve"
 AOUA.Session = AOUA.Session or {}
-AOUA.Phases = AOUA.Phases or {
-    ["damage_100_75"] = {},
-    ["damage_75_50"] = {},
-    ["damage_50_25"] = {},
-    ["damage_25_0"] = {},
-    ["healing_100_75"] = {},
-    ["healing_75_50"] = {},
-    ["healing_50_25"] = {},
-    ["healing_25_0"] = {}
-}
-AOUA.DeterminationStats = AOUA.DeterminationStats or {
-    poolValues = {},
-    eventsAbove50 = 0,
-    eventsAbove67 = 0,
-    eventsAbove90 = 0,
-    totalEvents = 0
+
+local PHASES = {
+    { key = "100_75", label = "100-75%", min = 0.75 },
+    { key = "75_50",  label = "75-50%",  min = 0.50 },
+    { key = "50_25",  label = "50-25%",  min = 0.25 },
+    { key = "25_0",   label = "25-0%",   min = 0.00 }
 }
 
-local function num(v)
-    if v == nil then return 0 end
-    local ok, n = pcall(function() return tonumber(tostring(v)) or 0 end)
-    if ok then return n end
-    return 0
+local function N(v)
+    local x = tonumber(v)
+    if x == nil then return 0 end
+    return x
 end
 
-local function newBucket()
-    return {events=0, amount=0, crits=0, glancing=0, misses=0, dodges=0,
-        resist=0, absorb=0, runeAbsorb=0, block=0, parry=0, barrier=0,
-        mount=0, multAbsorb=0, last={}}
+local function bucket()
+    return {
+        events = 0, amount = 0, crits = 0, glancing = 0,
+        effective = 0, overheal = 0, reportedOverheal = 0,
+        hpMeasured = 0, hpEstimated = 0, hpUnknown = 0,
+        determinationSum = 0, determinationSamples = 0,
+        last = {}
+    }
 end
 
-local function getBucket(name)
-    if not AOUA.Session[name] then AOUA.Session[name] = newBucket() end
-    return AOUA.Session[name]
+local function freshSession()
+    return {
+        damage = bucket(), incoming = bucket(),
+        healing = bucket(), receivedHeal = bucket(),
+        phases = {
+            damage_100_75 = bucket(), damage_75_50 = bucket(),
+            damage_50_25 = bucket(), damage_25_0 = bucket(),
+            healing_100_75 = bucket(), healing_75_50 = bucket(),
+            healing_50_25 = bucket(), healing_25_0 = bucket()
+        },
+        defense = {
+            events = 0, amount = 0, shieldBlock = 0, parry = 0,
+            resist = 0, barrier = 0, absorb = 0, runesAbsorb = 0,
+            toMount = 0, multipliersAbsorb = 0,
+            overallAbsorbed = 0, overallPrevented = 0,
+            totalAbsorbedSamples = 0, totalPreventedSamples = 0
+        },
+        determination = { sum = 0, min = nil, max = nil, samples = 0,
+            above50 = 0, above67 = 0, above90 = 0 },
+        targetHealth = { samples = 0, estimated = 0, unknown = 0 },
+        started = false
+    }
 end
 
-local function add(b, key, value)
-    b[key] = (b[key] or 0) + num(value)
+AOUA.Session = AOUA.Session or freshSession()
+local function ensureSession()
+    if not AOUA.Session.damage or not AOUA.Session.phases then
+        AOUA.Session = freshSession()
+    end
+end
+ensureSession()
+
+local function safeHealth(id)
+    if not id or not Optim or type(Optim.GetHealth) ~= "function" then return nil end
+    local ok, value, limit, real = pcall(Optim.GetHealth, id)
+    if not ok or value == nil or not limit or limit <= 0 then return nil end
+    return value, limit, real == true
+end
+
+local function phaseFor(frac)
+    if frac >= 0.75 then return "100_75" end
+    if frac >= 0.50 then return "75_50" end
+    if frac >= 0.25 then return "50_25" end
+    return "25_0"
+end
+
+local function addEvent(b, amount, params)
+    b.events = b.events + 1
+    b.amount = b.amount + amount
+    if params.isCritical then b.crits = b.crits + 1 end
+    if params.isGlancing then b.glancing = b.glancing + 1 end
+    b.last[#b.last + 1] = { amount = amount, crit = params.isCritical and 1 or 0 }
+    if #b.last > 20 then table.remove(b.last, 1) end
+end
+
+local function addDetermination(value)
+    value = tonumber(value)
+    if value == nil or value <= 0 then return end
+    local d = AOUA.Session.determination
+    d.samples = d.samples + 1
+    d.sum = d.sum + value
+    if d.min == nil or value < d.min then d.min = value end
+    if d.max == nil or value > d.max then d.max = value end
+    if value >= 50 then d.above50 = d.above50 + 1 end
+    if value >= 67 then d.above67 = d.above67 + 1 end
+    if value >= 90 then d.above90 = d.above90 + 1 end
+end
+
+local function recordHealthPhase(kind, params, amount)
+    local id
+    if kind == "damage" then id = params.target
+    elseif kind == "healing" or kind == "receivedHeal" then id = params.unitId end
+    if not id and kind == "damage" and Optim and Optim.GetTarget then
+        local ok, target = pcall(Optim.GetTarget)
+        if ok then id = target end
+    end
+    local value, limit, real = safeHealth(id)
+    if value == nil then
+        AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
+        return
+    end
+
+    local frac = value / limit
+    if kind == "damage" and real then
+        -- Health is normally sampled after the hit; reconstruct pre-hit HP.
+        frac = math.min(1, math.max(0, (value + amount) / limit))
+    elseif kind == "healing" or kind == "receivedHeal" then
+        if real then
+            frac = math.min(1, math.max(0, (value - amount) / limit))
+        else
+            AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
+        end
+    end
+    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+
+    AOUA.Session.targetHealth.samples = AOUA.Session.targetHealth.samples + 1
+    if real then
+        local key = kind .. "_" .. phaseFor(frac)
+        local b = AOUA.Session.phases[key]
+        if b then addEvent(b, amount, params); b.hpMeasured = b.hpMeasured + 1 end
+    else
+        local key = kind .. "_" .. phaseFor(frac)
+        local b = AOUA.Session.phases[key]
+        if b then addEvent(b, amount, params); b.hpEstimated = b.hpEstimated + 1 end
+    end
 end
 
 function AOUA.OnHit(combatant, mode, params, determination)
     if type(params) ~= "table" then return end
-    local name
+    ensureSession()
+
+    local kind
     if enumMode then
-        if mode == enumMode.Dps then name="damage"
-        elseif mode == enumMode.Def then name="incoming"
-        elseif mode == enumMode.Hps then name="healing"
-        elseif mode == enumMode.IHps then name="receivedHeal"
+        if mode == enumMode.Dps then kind = "damage"
+        elseif mode == enumMode.Def then kind = "incoming"
+        elseif mode == enumMode.Hps then kind = "healing"
+        elseif mode == enumMode.IHps then kind = "receivedHeal" end
+    end
+    if not kind then return end
+
+    local amount
+    if kind == "healing" or kind == "receivedHeal" then
+        amount = N(params.heal or params.amount)
+    else
+        amount = N(params.amount)
+    end
+    if amount <= 0 then return end
+
+    local b = AOUA.Session[kind]
+    addEvent(b, amount, params)
+
+    if kind == "damage" then
+        addDetermination(determination or params.determination)
+        if determination ~= nil or params.determination ~= nil then
+            local dv = N(determination or params.determination)
+            b.determinationSum = b.determinationSum + dv
+            b.determinationSamples = b.determinationSamples + 1
+        end
+        recordHealthPhase(kind, params, amount)
+    elseif kind == "healing" or kind == "receivedHeal" then
+        local reported = tonumber(params.overload)
+        local effective, overheal, method
+        if reported ~= nil then
+            overheal = math.max(0, math.min(amount, reported))
+            effective = math.max(0, amount - overheal)
+            method = "reported"
+        else
+            local hp, maxHp, real = safeHealth(params.unitId)
+            if hp ~= nil and real then
+                local before = math.max(0, hp - amount)
+                effective = math.min(amount, math.max(0, maxHp - before))
+                overheal = math.max(0, amount - effective)
+                method = "hp-estimate"
+            end
+        end
+        if effective ~= nil then
+            b.effective = b.effective + effective
+            b.overheal = b.overheal + overheal
+            if method == "reported" then b.hpMeasured = b.hpMeasured + 1
+            else b.hpEstimated = b.hpEstimated + 1 end
+        else
+            b.hpUnknown = b.hpUnknown + 1
+        end
+        if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
+        recordHealthPhase(kind, params, amount)
+    elseif kind == "incoming" then
+        local d = AOUA.Session.defense
+        d.events = d.events + 1
+        d.amount = d.amount + amount
+        d.shieldBlock = d.shieldBlock + N(params.shieldBlock)
+        d.parry = d.parry + N(params.parry)
+        d.resist = d.resist + N(params.resist)
+        d.barrier = d.barrier + N(params.barrier)
+        d.absorb = d.absorb + N(params.absorb)
+        d.runesAbsorb = d.runesAbsorb + N(params.runesAbsorb)
+        d.toMount = d.toMount + N(params.toMount)
+        d.multipliersAbsorb = d.multipliersAbsorb + N(params.multipliersAbsorb)
+        if params.overallAbsorbedDamage ~= nil then
+            d.overallAbsorbed = d.overallAbsorbed + N(params.overallAbsorbedDamage)
+            d.totalAbsorbedSamples = d.totalAbsorbedSamples + 1
+        end
+        if params.overallPreventedDamage ~= nil then
+            d.overallPrevented = d.overallPrevented + N(params.overallPreventedDamage)
+            d.totalPreventedSamples = d.totalPreventedSamples + 1
         end
     end
-    if not name then return end
-    local b=getBucket(name)
-    local amount=num(params.amount)
-    if name=="healing" or name=="receivedHeal" then amount=num(params.heal or params.amount) end
-    b.events=b.events+1
-    b.amount=b.amount+amount
-    if params.isCritical then add(b,"crits",1) end
-    if params.isGlancing then add(b,"glancing",1) end
-    if params.isMiss then add(b,"misses",1) end
-    if params.isDodge then add(b,"dodges",1) end
-    add(b,"resist",params.resist)
-    add(b,"absorb",params.absorb)
-    add(b,"runeAbsorb",params.runesAbsorb)
-    add(b,"block",params.shieldBlock)
-    add(b,"parry",params.parry)
-    add(b,"barrier",params.barrier)
-    add(b,"mount",params.toMount)
-    add(b,"multAbsorb",params.multipliersAbsorb)
-    local e={amount=amount,crit=params.isCritical and 1 or 0,glancing=params.isGlancing and 1 or 0}
-    b.last[#b.last+1]=e
-    if #b.last>30 then table.remove(b.last,1) end
 end
 
-local function fmt(v) return string.format("%.0f", num(v)) end
+local function fmt(v)
+    return string.format("%.0f", N(v))
+end
+local function pct(part, total)
+    if not total or total <= 0 then return "n/a" end
+    return string.format("%.1f%%", part * 100 / total)
+end
+local function basicReport(label, b)
+    return label .. ": events=" .. fmt(b.events) ..
+        ", amount=" .. fmt(b.amount) ..
+        ", crit=" .. pct(b.crits, b.events) ..
+        ", avg=" .. (b.events > 0 and fmt(b.amount / b.events) or "n/a")
+end
 
-local function report(name)
-    local b=getBucket(name)
-    local pct=0
-    if b.events>0 then pct=b.crits*100/b.events end
-    return name..": events="..fmt(b.events)..", amount="..fmt(b.amount)..
-        ", crit="..string.format("%.1f%%",pct)..", glancing="..fmt(b.glancing)
+local function phaseReport(kind)
+    local out = { "Target HP phases (" .. kind .. "):" }
+    local total, measured, estimated = 0, 0, 0
+    for _, p in ipairs(PHASES) do
+        local b = AOUA.Session.phases[kind .. "_" .. p.key]
+        total = total + b.amount
+        measured = measured + b.hpMeasured
+        estimated = estimated + b.hpEstimated
+        out[#out + 1] = p.label .. ": events=" .. fmt(b.events) ..
+            ", amount=" .. fmt(b.amount) .. ", crit=" .. pct(b.crits, b.events) ..
+            ", HP measured/estimated=" .. fmt(b.hpMeasured) .. "/" .. fmt(b.hpEstimated)
+    end
+    out[#out + 1] = "Phase total=" .. fmt(total) ..
+        ", HP samples measured/estimated=" .. fmt(measured) .. "/" .. fmt(estimated)
+    return table.concat(out, "\n")
+end
+
+local function healingReport()
+    local a, b = AOUA.Session.healing, AOUA.Session.receivedHeal
+    local function one(label, x)
+        return label .. ": nominal=" .. fmt(x.amount) ..
+            ", effective=" .. fmt(x.effective) ..
+            ", overheal=" .. fmt(x.overheal) ..
+            ", confidence reported/estimated/unknown=" ..
+            fmt(x.hpMeasured) .. "/" .. fmt(x.hpEstimated) .. "/" .. fmt(x.hpUnknown)
+    end
+    return "Healing:\n" .. one("outgoing", a) .. "\n" .. one("received", b)
+end
+
+local function defenseReport()
+    local d = AOUA.Session.defense
+    return "Defense: events=" .. fmt(d.events) .. ", incoming=" .. fmt(d.amount) ..
+        "\nComponents (not summed; may overlap): block=" .. fmt(d.shieldBlock) ..
+        ", parry=" .. fmt(d.parry) .. ", resist=" .. fmt(d.resist) ..
+        ", barrier=" .. fmt(d.barrier) .. ", absorb=" .. fmt(d.absorb) ..
+        ", runeAbsorb=" .. fmt(d.runesAbsorb) .. ", mount=" .. fmt(d.toMount) ..
+        ", multiplierAbsorb=" .. fmt(d.multipliersAbsorb) ..
+        "\nAPI totals: absorbed=" .. fmt(d.overallAbsorbed) ..
+        " (" .. fmt(d.totalAbsorbedSamples) .. " samples), prevented=" ..
+        fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)"
+end
+
+local function determinationReport()
+    local d = AOUA.Session.determination
+    if d.samples == 0 then return "Determination: no numeric pool samples received from combat events." end
+    return "Determination pool: n=" .. fmt(d.samples) ..
+        ", avg=" .. string.format("%.1f", d.sum / d.samples) ..
+        ", min/max=" .. fmt(d.min) .. "/" .. fmt(d.max) ..
+        ", >=50/67/90=" .. pct(d.above50, d.samples) .. "/" ..
+        pct(d.above67, d.samples) .. "/" .. pct(d.above90, d.samples)
 end
 
 local function getCommand(input)
-    local s=""
-    if type(input)=="string" then s=input
-    elseif type(input)=="table" then
-        local parts={}
-        for i,v in ipairs(input) do
-            if type(v)=="string" or type(v)=="number" then parts[#parts+1]=tostring(v) end
+    local s = ""
+    if type(input) == "string" then s = input
+    elseif type(input) == "table" then
+        local parts = {}
+        for i, v in ipairs(input) do
+            if type(v) == "string" or type(v) == "number" then parts[#parts + 1] = tostring(v) end
         end
-        s=table.concat(parts," ")
-    else s=tostring(input or "") end
-    s=string.lower(s)
-    s=string.gsub(s,"^%s+","")
-    s=string.gsub(s,"%s+$","")
-    s=string.gsub(s,"^/","")
-    s=string.gsub(s,"^aou%s*","")
-    s=string.gsub(s,"^dpscope%s*","")
+        s = table.concat(parts, " ")
+    else s = tostring(input or "") end
+    s = string.lower(s)
+    s = string.gsub(s, "^%s+", "")
+    s = string.gsub(s, "%s+$", "")
+    s = string.gsub(s, "^/", "")
+    s = string.gsub(s, "^aou%s*", "")
+    s = string.gsub(s, "^dpscope%s*", "")
     return s
 end
 
 function AOUA.OnSlash(input)
-    local command=getCommand(input)
-    local cmd,rest=string.match(command,"^(%S+)%s*(.-)$")
-    cmd=cmd or ""
-    if cmd=="diff" then
-        return true,"AOUA build 27\n"..report("damage").."\n"..report("incoming").."\n"..report("healing").."\n"..report("receivedHeal")
+    local command = getCommand(input)
+    local cmd, rest = string.match(command, "^(%S+)%s*(.-)$")
+    cmd = cmd or ""
+
+    if cmd == "diff" then
+        return true, "AOUA build 28\n" ..
+            basicReport("damage", AOUA.Session.damage) .. "\n" ..
+            basicReport("incoming", AOUA.Session.incoming) .. "\n" ..
+            basicReport("healing", AOUA.Session.healing) .. "\n" ..
+            basicReport("receivedHeal", AOUA.Session.receivedHeal) .. "\n" ..
+            determinationReport()
     end
-    if cmd=="log" then
-        local out={"AOUA recent events:"}
-        local names={"damage","incoming","healing","receivedHeal"}
-        for _,name in ipairs(names) do
-            local b=getBucket(name)
-            local first=math.max(1,#b.last-4)
-            for i=first,#b.last do
-                local e=b.last[i]
-                out[#out+1]=name.." amount="..fmt(e.amount).." crit="..fmt(e.crit)..
-                    " glancing="..fmt(e.glancing)
+    if cmd == "phase" then
+        return true, phaseReport("damage")
+    end
+    if cmd == "heal" then
+        return true, healingReport()
+    end
+    if cmd == "defstat" then
+        return true, defenseReport()
+    end
+    if cmd == "stats" then
+        return true, determinationReport() ..
+            "\nMastery/Ruthlessness: no isolated causal coefficient is inferred from these event fields."
+    end
+    if cmd == "log" then
+        local out = { "AOUA recent events:" }
+        local names = { "damage", "incoming", "healing", "receivedHeal" }
+        for _, name in ipairs(names) do
+            local b = AOUA.Session[name]
+            local first = math.max(1, #b.last - 4)
+            for i = first, #b.last do
+                local e = b.last[i]
+                out[#out + 1] = name .. " amount=" .. fmt(e.amount) ..
+                    " crit=" .. fmt(e.crit)
             end
         end
-        if #out==1 then out[#out+1]="No events collected yet." end
-        return true,table.concat(out,"\n")
+        if #out == 1 then out[#out + 1] = "No events collected yet." end
+        return true, table.concat(out, "\n")
     end
-    if cmd=="prof" then
-        local profile=string.match(rest,"^(%S+)")
-        if not profile or profile=="list" then
-            return true,"Profiles: pve, raid, pvp, heal, tank. Current: "..AOUA.Profile
+    if cmd == "prof" then
+        local profile = string.match(rest, "^(%S+)")
+        if not profile or profile == "list" then
+            return true, "Profiles: pve, raid, pvp, heal, tank. Current: " .. AOUA.Profile
         end
-        if profile=="pve" or profile=="raid" or profile=="pvp" or profile=="heal" or profile=="tank" then
-            AOUA.Profile=profile
-            return true,"AOUA profile: "..profile
+        if profile == "pve" or profile == "raid" or profile == "pvp" or profile == "heal" or profile == "tank" then
+            AOUA.Profile = profile
+            return true, "AOUA profile: " .. profile
         end
-        return true,"Unknown profile. Use /aou prof list"
+        return true, "Unknown profile. Use /aou prof list"
     end
-    if cmd=="reset" then AOUA.Session={} return true,"AOUA session statistics reset." end
+    if cmd == "reset" then
+        AOUA.Session = freshSession()
+        return true, "AOUA session statistics reset."
+    end
     return false
 end
