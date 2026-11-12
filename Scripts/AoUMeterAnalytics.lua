@@ -117,11 +117,17 @@ local function recordHealthPhase(kind, params, amount)
 
     AOUA.HpCache[id] = { value = value, limit = limit, real = real }
     local frac = value / limit
-    if kind == "damage" and real then
-        -- Health is normally sampled after the hit; reconstruct pre-hit HP.
-        frac = math.min(1, math.max(0, (value + amount) / limit))
+    if kind == "damage" then
+        if real then
+            -- Real HP is normally sampled after the hit; reconstruct pre-hit HP.
+            frac = math.min(1, math.max(0, (value + amount) / limit))
+        else
+            -- valuePercents is already a percentage. Never add raw damage to it.
+            AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
+        end
     elseif kind == "healing" or kind == "receivedHeal" then
         if real then
+            -- amount passed here is effective healing, not nominal healing.
             frac = math.min(1, math.max(0, (value - amount) / limit))
         else
             AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
@@ -202,11 +208,14 @@ function AOUA.OnHit(combatant, mode, params, determination)
             b.overheal = b.overheal + overheal
             if method == "reported" then b.hpMeasured = b.hpMeasured + 1
             else b.hpEstimated = b.hpEstimated + 1 end
+            -- Phase attribution must use the HP actually restored, never the nominal heal.
+            recordHealthPhase(kind, params, effective)
         else
             b.hpUnknown = b.hpUnknown + 1
+            -- Without effective healing, pre-heal target HP cannot be reconstructed safely.
+            AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
         end
         if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
-        recordHealthPhase(kind, params, amount)
     elseif kind == "incoming" then
         local d = AOUA.Session.defense
         d.events = d.events + 1
