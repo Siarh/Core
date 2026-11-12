@@ -101,7 +101,7 @@ local function addDetermination(value)
     if value >= 90 then d.above90 = d.above90 + 1 end
 end
 
-local function recordHealthPhase(kind, params, amount)
+local function recordHealthPhase(kind, params, amount, confidence)
     local id
     if kind == "damage" then id = params.target
     elseif kind == "healing" or kind == "receivedHeal" then id = params.unitId end
@@ -124,7 +124,7 @@ local function recordHealthPhase(kind, params, amount)
     local frac = value / limit
     if kind == "damage" then
         if real then
-            -- Real HP is normally sampled after the hit; reconstruct pre-hit HP.
+            -- HP is sampled after the hit; adding event damage estimates pre-hit HP.
             frac = math.min(1, math.max(0, (value + amount) / limit))
         else
             -- valuePercents is already a percentage. Never add raw damage to it.
@@ -132,7 +132,7 @@ local function recordHealthPhase(kind, params, amount)
         end
     elseif kind == "healing" or kind == "receivedHeal" then
         if real then
-            -- amount passed here is effective healing, not nominal healing.
+            -- amount is effective healing; reported overload gives stronger confidence.
             frac = math.min(1, math.max(0, (value - amount) / limit))
         else
             AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
@@ -141,14 +141,16 @@ local function recordHealthPhase(kind, params, amount)
     if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
 
     AOUA.Session.targetHealth.samples = AOUA.Session.targetHealth.samples + 1
-    if real then
-        local key = kind .. "_" .. phaseFor(frac)
-        local b = AOUA.Session.phases[key]
-        if b then addEvent(b, amount, params); b.hpMeasured = b.hpMeasured + 1 end
-    else
-        local key = kind .. "_" .. phaseFor(frac)
-        local b = AOUA.Session.phases[key]
-        if b then addEvent(b, amount, params); b.hpEstimated = b.hpEstimated + 1 end
+    local key = kind .. "_" .. phaseFor(frac)
+    local b = AOUA.Session.phases[key]
+    if b then
+        addEvent(b, amount, params)
+        if confidence == "reported" and real then
+            b.hpMeasured = b.hpMeasured + 1
+        else
+            b.hpEstimated = b.hpEstimated + 1
+            AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
+        end
     end
 end
 
@@ -188,7 +190,7 @@ function AOUA.OnHit(combatant, mode, params, determination)
             b.determinationSum = b.determinationSum + dv
             b.determinationSamples = b.determinationSamples + 1
         end
-        recordHealthPhase(kind, params, amount)
+        recordHealthPhase(kind, params, amount, "estimated")
     elseif kind == "healing" or kind == "receivedHeal" then
         local reported = tonumber(params.overload)
         local effective, overheal, method
@@ -214,7 +216,7 @@ function AOUA.OnHit(combatant, mode, params, determination)
             if method == "reported" then b.hpMeasured = b.hpMeasured + 1
             else b.hpEstimated = b.hpEstimated + 1 end
             -- Phase attribution must use the HP actually restored, never the nominal heal.
-            recordHealthPhase(kind, params, effective)
+            recordHealthPhase(kind, params, effective, method)
         else
             b.hpUnknown = b.hpUnknown + 1
             -- Without effective healing, pre-heal target HP cannot be reconstructed safely.
