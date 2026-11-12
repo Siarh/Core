@@ -1,0 +1,27 @@
+name: DPScope formula engine tests
+
+on:
+  push:
+    branches: [build28-source]
+    paths:
+      - "tools/aou_formula_calculator.py"
+      - "tools/test_aou_formula_calculator.py"
+      - "tools/aou_profile_template.json"
+      - ".github/workflows/aou-formula-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  formula-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run unit tests and sample profile
+        working-directory: tools
+        run: |
+          python -m unittest -v test_aou_formula_calculator.py
+          python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
