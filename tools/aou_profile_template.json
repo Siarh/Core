@@ -1,71 +1,127 @@
 {
   "settings": {
     "level": 100,
-    "max_hp": 10000000,
-    "initial_resolve": 0,
-    "resolve_gain_divisor": 2.4,
+    "max_hp": 5000000,
+    "base_stats": {
+      "fortitude": 100,
+      "endurance": 1000
+    },
     "resolve_coefficient": 0.0015,
     "might": 20,
     "power_scale": 10,
     "default_target_resistance": 10,
-    "might_affects_healing": false
+    "default_player_resistance": 10,
+    "might_affects_healing": true,
+    "allow_nominal_hps_optimization": false,
+    "healer_bloodthirst_weight": 0,
+    "mode": "pve"
   },
   "stats": {
-    "mastery": 337,
-    "resolve": 1043,
-    "ruthlessness": 338,
+    "mastery": 351,
+    "resolve": 650,
+    "ruthlessness": 720,
     "luck": 160,
     "might": 20,
-    "bloodthirst": 0,
-    "fury": 0,
+    "bloodthirst": 471,
+    "fury": 200,
+    "fortitude": 100,
+    "endurance": 1000,
     "caution": 100,
-    "will": 0
+    "will": 0,
+    "resistances": {
+      "armor": 10,
+      "elements": 10,
+      "divine": 10,
+      "nature": 10
+    }
   },
   "fixed_stats": {
-    "mastery": 337,
-    "resolve": 1043,
-    "ruthlessness": 338,
+    "mastery": 351,
+    "resolve": 650,
+    "ruthlessness": 720,
     "luck": 160,
     "might": 20,
-    "bloodthirst": 0,
-    "fury": 0,
+    "bloodthirst": 471,
+    "fury": 200,
+    "fortitude": 100,
+    "endurance": 1000,
     "caution": 100,
-    "will": 0
+    "will": 0,
+    "resistances": {
+      "armor": 10,
+      "elements": 10,
+      "divine": 10,
+      "nature": 10
+    }
   },
-  "allocation_budget": 0,
+  "allocation_budget": 20,
   "activities": {
-    "dummy_DPS": {
+    "dummy_DD": {
       "mode": "dps",
       "samples": [
         {
           "second": 0,
           "raw": 100000,
-          "target_hp": 0.50,
+          "target_hp": 0.9,
           "target_resistance": 10,
-          "block_fraction": 0,
-          "parry_fraction": 0,
-          "target_caution": 0
+          "critical": false
         },
         {
           "second": 1,
-          "raw": 100000,
-          "target_hp": 0.49,
-          "target_resistance": 10
+          "raw": 110000,
+          "target_hp": 0.6,
+          "target_resistance": 10,
+          "critical": true
+        },
+        {
+          "second": 2,
+          "raw": 95000,
+          "target_hp": 0.3,
+          "target_resistance": 10,
+          "critical": false
         }
       ]
     },
-    "group_HPS": {
+    "group_HEAL": {
       "mode": "hps",
       "samples": [
         {
           "second": 0,
-          "raw": 80000,
-          "target_hp": 0.35
+          "raw": 50000,
+          "target_hp": 0.6,
+          "target_max_hp": 100000,
+          "critical": false
         },
         {
           "second": 1,
-          "raw": 80000,
-          "target_hp": 0.30
+          "raw": 30000,
+          "target_hp": 0.95,
+          "target_max_hp": 100000,
+          "critical": true
+        }
+      ]
+    },
+    "raid_TANK": {
+      "mode": "tank",
+      "control_windows": [4, 7],
+      "samples": [
+        {
+          "second": 0,
+          "incoming_raw": 100000,
+          "damage_school": "physical",
+          "player_hp": 0.35,
+          "block_fraction": 0.05,
+          "rune_absorb_fraction": 0.1,
+          "outgoing_damage": 50000
+        },
+        {
+          "second": 1,
+          "incoming_raw": 80000,
+          "damage_school": "fire",
+          "player_hp": 0.7,
+          "parry_fraction": 0.1,
+          "rune_absorbed": 5000,
+          "outgoing_damage": 60000
         }
       ]
     }
