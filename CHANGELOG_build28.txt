@@ -36,3 +36,7 @@ Caveats:
 - Exact enemy HP and absorb values may be unavailable by design; percentage deltas are estimates for personal event attribution.
 - Innate-stat enum names are exposed by the API, but their equivalence to Mastery / Determination / Ruthlessness must be validated against the Sunshine 6.0 client before using them as optimizer coefficients.
 - No Lua runtime or in-game test has been run for this update.
+
+Healing accounting clarification:
+- Effective healing now subtracts the documented overload, wound resistance, rune wound resistance, and other absorbed-healing fields separately.
+- When overload is unavailable but HP snapshots permit an estimate, wound/debuff losses are not misreported as overheal.
