@@ -1011,7 +1011,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	-- Auto: everything comes from avatar.GetInnateStats (b = base, f = talents + fairy, e = effective - f - b)
 	local function pick(t, f, b, e)
 		if t then
-			local total = math.floor(t.total + 0.5)
+			local total = math.floor(t.total)
 			local f2 = math.min(math.floor(t.fixed + 0.5), total)
 			local b2 = math.min(math.floor(t.base + 0.5), total - f2)
 			return f2, b2, total - f2 - b2
@@ -1022,7 +1022,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local fR, bR, eR = pick(tot and tot.R, cfg.fR, cfg.bR, cfg.eR)
 	local fU, bU, eU = pick(tot and tot.U, cfg.fU, cfg.bU, cfg.eU)
 	local L = cfg.L
-	if tot and tot.L then L = math.floor(tot.L.total + 0.5) end
+	if tot and tot.L then L = math.floor(tot.L.total) end
 	local fS, bS, eS = pick(tot and tot.S, cfg.fS, cfg.bS, cfg.eS)
 	local fW, bW, eW = pick(tot and tot.W, cfg.fW, cfg.bW, cfg.eW)
 	local fB, bB, eB = pick(tot and tot.B, cfg.fB, cfg.bB, cfg.eB)
@@ -1049,7 +1049,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	end
 	-- own Caution: read from the game or typed
 	local cau = cfg.caut
-	if cau <= 0 and tot and tot.C then cau = math.floor(tot.C.total + 0.5) end
+	if cau <= 0 and tot and tot.C then cau = math.floor(tot.C.total) end
 	local cc = math.min(cau, 350) / 1000
 	local offOK = (nowA[1] + nowA[2] + nowA[3]) > 0
 	local defOK = (nowD[1] + nowD[2] + nowD[3]) > 0
