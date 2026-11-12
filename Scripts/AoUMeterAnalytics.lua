@@ -34,6 +34,11 @@ local function bucket()
     }
 end
 
+local function freshDeterminationStats()
+    return { sum = 0, min = nil, max = nil, samples = 0,
+        above50 = 0, above67 = 0, above90 = 0 }
+end
+
 local function freshSession()
     return {
         damage = bucket(), incoming = bucket(),
@@ -52,8 +57,11 @@ local function freshSession()
             totalAbsorbedSamples = 0, totalPreventedSamples = 0,
             shieldPoolLoss = 0, shieldPoolGain = 0, shieldPoolSamples = 0
         },
-        determination = { sum = 0, min = nil, max = nil, samples = 0,
-            above50 = 0, above67 = 0, above90 = 0 },
+        determination = freshDeterminationStats(),
+        determinationByMode = {
+            damage = freshDeterminationStats(),
+            healing = freshDeterminationStats()
+        },
         targetHealth = { samples = 0, estimated = 0, unknown = 0, changedEvents = 0 },
         started = false
     }
@@ -65,6 +73,12 @@ local function ensureSession()
         not AOUA.Session.defense or not AOUA.Session.determination or
         not AOUA.Session.targetHealth then
         AOUA.Session = freshSession()
+    end
+    AOUA.Session.determinationByMode = AOUA.Session.determinationByMode or {}
+    for _, name in ipairs({ "damage", "healing" }) do
+        if not AOUA.Session.determinationByMode[name] then
+            AOUA.Session.determinationByMode[name] = freshDeterminationStats()
+        end
     end
     for _, name in ipairs({ "healing", "receivedHeal" }) do
         local b = AOUA.Session[name]
@@ -103,17 +117,21 @@ local function addEvent(b, amount, params)
     if #b.last > 20 then table.remove(b.last, 1) end
 end
 
-local function addDetermination(value)
+local function addDetermination(value, activity)
     value = tonumber(value)
     if value == nil or value <= 0 then return end
-    local d = AOUA.Session.determination
-    d.samples = d.samples + 1
-    d.sum = d.sum + value
-    if d.min == nil or value < d.min then d.min = value end
-    if d.max == nil or value > d.max then d.max = value end
-    if value >= 50 then d.above50 = d.above50 + 1 end
-    if value >= 67 then d.above67 = d.above67 + 1 end
-    if value >= 90 then d.above90 = d.above90 + 1 end
+    local function addTo(d)
+        d.samples = d.samples + 1
+        d.sum = d.sum + value
+        if d.min == nil or value < d.min then d.min = value end
+        if d.max == nil or value > d.max then d.max = value end
+        if value >= 50 then d.above50 = d.above50 + 1 end
+        if value >= 67 then d.above67 = d.above67 + 1 end
+        if value >= 90 then d.above90 = d.above90 + 1 end
+    end
+    addTo(AOUA.Session.determination)
+    local byMode = AOUA.Session.determinationByMode
+    if activity and byMode and byMode[activity] then addTo(byMode[activity]) end
 end
 
 local function recordHealthPhase(kind, params, amount, confidence)
@@ -265,14 +283,18 @@ function AOUA.OnHit(combatant, mode, params, determination)
     local b = AOUA.Session[kind]
     addEvent(b, amount, params)
 
-    if kind == "damage" then
-        addDetermination(determination or params.determination)
-        local rawDetermination = determination or params.determination
+    local rawDetermination = determination or params.determination
+    if kind == "damage" or kind == "healing" then
+        -- DD builds Resolve from outgoing damage; healers build it from outgoing heals.
+        addDetermination(rawDetermination, kind)
         local dv = tonumber(rawDetermination)
         if dv ~= nil and dv > 0 then
             b.determinationSum = b.determinationSum + dv
             b.determinationSamples = b.determinationSamples + 1
         end
+    end
+
+    if kind == "damage" then
         recordHealthPhase(kind, params, amount, "estimated")
     elseif kind == "healing" or kind == "receivedHeal" then
         local reported = tonumber(params.overload)
@@ -406,13 +428,19 @@ local function defenseReport()
 end
 
 local function determinationReport()
-    local d = AOUA.Session.determination
-    if d.samples == 0 then return "Determination: no numeric pool samples received from combat events." end
-    return "Determination pool: n=" .. fmt(d.samples) ..
-        ", avg=" .. string.format("%.1f", d.sum / d.samples) ..
-        ", min/max=" .. fmt(d.min) .. "/" .. fmt(d.max) ..
-        ", >=50/67/90=" .. pct(d.above50, d.samples) .. "/" ..
-        pct(d.above67, d.samples) .. "/" .. pct(d.above90, d.samples)
+    local function one(label, d)
+        if not d or d.samples == 0 then
+            return label .. ": no numeric pool samples"
+        end
+        return label .. ": n=" .. fmt(d.samples) ..
+            ", avg=" .. string.format("%.1f", d.sum / d.samples) ..
+            ", min/max=" .. fmt(d.min) .. "/" .. fmt(d.max) ..
+            ", >=50/67/90=" .. pct(d.above50, d.samples) .. "/" ..
+            pct(d.above67, d.samples) .. "/" .. pct(d.above90, d.samples)
+    end
+    local byMode = AOUA.Session.determinationByMode or {}
+    return "Resolve pool (combined):\n" .. one("DD outgoing damage", byMode.damage) ..
+        "\n" .. one("HEAL outgoing healing", byMode.healing)
 end
 
 local function innateStatsReport()
