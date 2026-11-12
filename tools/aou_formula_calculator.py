@@ -513,8 +513,8 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
     }
     result: dict[str, Any] = {
         "mode": mode, "events": event_count, "seconds": duration,
-        "hp_phase_breakdown": phase_report,
-        "hp_phase_unknown_events": phase_unknown_events,
+        "hp_phase_breakdown": phase_report if mode in ("dps", "hps") else None,
+        "hp_phase_unknown_events": phase_unknown_events if mode in ("dps", "hps") else None,
         "half_battle_stability": stability,
         "incoming_by_school": tank_schools if mode == "tank" else None,
         "bloodthirst_return": bloodthirst,
@@ -567,6 +567,8 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
         if stats.get("will", 0) and not control:
             warnings.append("Воля рассчитана отдельно, но control_windows не заданы; её вклад не включён в оценку выживаемости.")
 
+    if phase_unknown_events > 0:
+        warnings.append(str(phase_unknown_events) + " событий без HP цели: для расчёта Беспощадности временно использовано нейтральное состояние 100% HP; фазовая разбивка неполная.")
     return result
 
 
@@ -604,6 +606,15 @@ def optimize(activity: dict[str, Any], base_stats: dict[str, Any], budget: int, 
             stats[resistance_key] = num(nested_res[resistance_key], 10.0)
     mode = str(activity.get("mode", "dps")).lower()
     candidates = _optimizable_stats(mode, cfg)
+    if mode in ("dps", "hps"):
+        missing_hp = sum(1 for event in activity.get("samples", []) if event.get("target_hp") is None)
+        if missing_hp > 0 and "ruthlessness" in candidates:
+            return {
+                "status": "insufficient_data",
+                "objective": "target_hp_required_for_ruthlessness",
+                "reason": str(missing_hp) + " событий не содержат HP цели; оптимизация Беспощадности и общего множителя не выполняется, чтобы не считать неизвестную цель полной.",
+                "added_points": {key: 0 for key in candidates},
+            }
     base_score, basis = _score_for_optimization(activity, stats, cfg)
     if base_score is None:
         return {
@@ -613,7 +624,7 @@ def optimize(activity: dict[str, Any], base_stats: dict[str, Any], budget: int, 
         }
     added = {key: 0 for key in candidates}
     if budget == 0:
-        final = simulate(activity, stats, cfg)
+        final = simulate(activity, stats, cfg, expected_crit=True)
         return {"status": "no_budget", "objective": basis, "added_points": added,
                 "base_score": base_score, "recommended_score": base_score, "simulation": final}
 
@@ -633,7 +644,7 @@ def optimize(activity: dict[str, Any], base_stats: dict[str, Any], budget: int, 
         stats[best_key] = num(stats.get(best_key)) + 1
         added[best_key] += 1
 
-    final = simulate(activity, stats, cfg)
+    final = simulate(activity, stats, cfg, expected_crit=True)
     final_score, final_basis = _objective(final, mode, cfg)
     delta = ((final_score / base_score) - 1.0) * 100.0 if final_score is not None and base_score > 0 else 0.0
     return {
