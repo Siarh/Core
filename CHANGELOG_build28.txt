@@ -65,4 +65,4 @@ Offline formula engine hardening:
 - Missing target HP is disclosed and DD/HPS allocation recommendations are refused when Ruthlessness cannot be modelled safely.
 - Tank incoming mitigation is grouped by physical, elemental, divine and nature school, retaining separate resistance, block, parry and rune totals.
 - Resolve pool can reset on explicit player_died / owner_died event markers.
-- Formula engine has 25 unit tests covering the supplied formulas, data-coverage guards, phase/stability output and allocation budgets. Python tests were run in the development environment; the engine has not yet been connected to live Lua event export or validated with a new in-game fight.
+- Formula engine has 27 unit tests covering the supplied formulas, data-coverage guards, phase/stability output and allocation budgets. Python tests were run in the development environment; the engine has not yet been connected to live Lua event export or validated with a new in-game fight.
