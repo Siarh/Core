@@ -88,7 +88,7 @@ Live diagnostics follow-up (based on the latest Sunshine 6.0 report):
 - Lua runtime validation is still pending in-game. The health-change callback produced only 3 events in the supplied report, so phase results must be rechecked after this change; the code does not claim exact phase reconstruction.
 
 Whole-fight DD recommendation update:
-- The in-game DD allocator now scores Mastery / Resolve / Ruthlessness by the equal-weight geometric mean across four target-HP quarters (87.5%, 62.5%, 37.5%, 12.5%).
+- The in-game DD allocator now scores Mastery / Resolve / Ruthlessness by a weighted log-average across the exact target-HP checkpoints 100%, 75%, 50%, 25% and 0%. The weights approximate an even average over the four equal HP quarters, with shared boundaries split between adjacent quarters.
 - This keeps Mastery and Resolve valuable from the opening hit while allowing Ruthlessness to contribute progressively as the target loses health; the low-HP execute phase is not allowed to dominate solely due to unusually large finishing hits.
 - The addon now samples the observed Resolve pool separately in each target-HP quarter and uses those four measured averages in the DD curve objective; phases without samples fall back to the whole-fight average.
 - This captures the observed Resolve build-up across a fight without inventing a future per-second Resolve trajectory. The target-HP buckets are based on the health value exposed at the combat event and remain subject to the existing HP attribution confidence.
