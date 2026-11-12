@@ -72,3 +72,9 @@ Formula ordering refinement:
 - Outgoing event calculation now applies resistance, block/parry and measured rune absorption before Ruthlessness, then target Caution, matching the supplied hit sequence.
 - Added a regression test ensuring an absolute rune-absorbed amount is not amplified by Ruthlessness.
 - Formula engine test suite now contains 28 tests. GitHub Actions completed successfully for the code and regression-test commits.
+
+
+Saved-record analyzer correction:
+- `tools/aou_analyze.py` now uses Resolve coefficient 0.0015 by default, matching the offline event calculator and the prose interpretation of +1.5% per 10 pool points.
+- Added `--resolve-coefficient 0.015` to explicitly compare the literal-equation interpretation; the chosen coefficient is printed in the report.
+- Added a regression test comparing both interpretations. GitHub Actions passed all 29 formula/analyzer tests.
