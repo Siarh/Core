@@ -78,3 +78,5 @@ Saved-record analyzer correction:
 - `tools/aou_analyze.py` now uses Resolve coefficient 0.0015 by default, matching the offline event calculator and the prose interpretation of +1.5% per 10 pool points.
 - Added `--resolve-coefficient 0.015` to explicitly compare the literal-equation interpretation; the chosen coefficient is printed in the report.
 - Added a regression test comparing both interpretations. GitHub Actions passed all 29 formula/analyzer tests.
+
+- Explicitly documented that the legacy in-game Lua optimizer still uses 0.015 while the offline calculator/analyzer default to 0.0015; no silent change was made pending a controlled Sunshine 6.0 coefficient test.
