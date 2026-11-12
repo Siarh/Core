@@ -525,10 +525,7 @@ function AOUA.OnSlash(input)
         end
         return true, "Unknown profile. Use /aou prof list"
     end
-    if cmd == "reset" then
-        AOUA.Session = freshSession()
-        AOUA.HealthTransitions = {}
-        return true, "AOUA session statistics reset."
-    end
+    -- "reset" belongs to the legacy optimizer settings command.
+    -- Never clear the analytics session from the shared slash dispatcher.
     return false
 end
