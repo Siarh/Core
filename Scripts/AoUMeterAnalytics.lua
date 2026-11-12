@@ -128,14 +128,13 @@ local function recordHealthPhase(kind, params, amount, confidence)
             frac = math.min(1, math.max(0, (value + amount) / limit))
         else
             -- valuePercents is already a percentage. Never add raw damage to it.
-            AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
         end
     elseif kind == "healing" or kind == "receivedHeal" then
         if real then
             -- amount is effective healing; reported overload gives stronger confidence.
             frac = math.min(1, math.max(0, (value - amount) / limit))
         else
-            AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
+            -- Percentage-only healing was rejected above.
         end
     end
     if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
