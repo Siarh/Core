@@ -91,6 +91,7 @@ local function freshSession()
 end
 
 AOUA.Session = AOUA.Session or freshSession()
+AOUA.PendingReceivedHeal = AOUA.PendingReceivedHeal or setmetatable({}, { __mode = "k" })
 local function ensureSession()
     if not AOUA.Session.damage or not AOUA.Session.phases or
         not AOUA.Session.defense or not AOUA.Session.determination or
@@ -146,6 +147,7 @@ function AOUA.OnFightStart()
     ensureSession()
     local previous = AOUA.Session.rawDiagnostics or {}
     AOUA.Session.journal = freshJournal()
+    AOUA.PendingReceivedHeal = setmetatable({}, { __mode = "k" })
     AOUA.Session.rawDiagnostics = {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
         healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0,
@@ -368,8 +370,10 @@ local function resourceKey(value)
     return nil
 end
 
-local function abilityLabel(params)
+local function abilityLabel(params, fallbackName)
     local name = eventText(params.ability)
+    if name and string.match(name, "^userdata:") then name = nil end
+    if not name or name == "" then name = eventText(fallbackName) end
     local id = resourceKey(params.spellId or params.abilityId or params.buffId or params.mapModifierId)
     if name and id then return name .. " [" .. id .. "]" end
     return name or (id and ("id:" .. id)) or "unknown"
@@ -378,15 +382,15 @@ end
 local function journalRow(map, key, limit)
     key = eventText(key) or "unknown"
     if #key > 72 then key = string.sub(key, 1, 72) end
-    if map[key] then return map[key] end
+    if map[key] then return map[key], key end
     if (map._count or 0) >= (limit or 48) then
-        if map["(other)"] then return map["(other)"] end
+        if map["(other)"] then return map["(other)"], "(other)" end
         key = "(other)"
     end
     local row = { events = 0, amount = 0 }
     map[key] = row
     map._count = (map._count or 0) + 1
-    return row
+    return row, key
 end
 
 local function tagInfo(tag)
@@ -409,14 +413,15 @@ local function addTagRows(map, tags, amount)
     end
 end
 
-local function recordDamageJournal(activity, params, amount)
+local function recordDamageJournal(activity, params, amount, resolvedAbilityName)
     local j = AOUA.Session.journal
     local sourceType = eventText(params.damageSource) or "unknown"
-    local ability = sourceType .. " / " .. abilityLabel(params)
+    local ability = sourceType .. " / " .. abilityLabel(params, resolvedAbilityName)
     local typeMap, abilityMap = j[activity .. "ByType"], j[activity .. "ByAbility"]
     local elementMap = j[activity .. "ByElement"]
     if elementMap then
         local element = eventText(params.sysSubElement or params.subElement or params.element) or "unknown"
+        element = string.gsub(element, "^ENUM_SubElement_", "")
         local row = journalRow(elementMap, element, 48)
         row.events, row.amount = row.events + 1, row.amount + amount
     end
@@ -461,24 +466,37 @@ local function recordDamageJournal(activity, params, amount)
     end
 end
 
-local function recordHealingJournal(kind, params, amount, effective, overheal, known)
+local function healingJournalDelta(params, amount, effective, overheal, known)
+    return {
+        amount = amount, effective = effective or 0, overheal = overheal or 0,
+        wound = N(params.resisted), runeWound = N(params.runeResisted),
+        absorbed = N(params.absorbed),
+        lifeSteal = params.isLifeSteal and 1 or 0,
+        crits = params.isCritical and 1 or 0,
+        known = known and 1 or 0, unknown = known and 0 or 1
+    }
+end
+
+local function recordHealingJournal(kind, params, amount, effective, overheal, known, resolvedAbilityName)
     local map = (kind == "receivedHeal") and AOUA.Session.journal.receivedHealByAbility
         or AOUA.Session.journal.outgoingHealByAbility
-    local row = journalRow(map, abilityLabel(params), 64)
+    local row, key = journalRow(map, abilityLabel(params, resolvedAbilityName), 64)
+    local delta = healingJournalDelta(params, amount, effective, overheal, known)
     row.events, row.amount = row.events + 1, row.amount + amount
-    row.effective = (row.effective or 0) + (effective or 0)
-    row.overheal = (row.overheal or 0) + (overheal or 0)
-    row.wound = (row.wound or 0) + N(params.resisted)
-    row.runeWound = (row.runeWound or 0) + N(params.runeResisted)
-    row.absorbed = (row.absorbed or 0) + N(params.absorbed)
-    row.lifeSteal = (row.lifeSteal or 0) + (params.isLifeSteal and 1 or 0)
-    row.crits = (row.crits or 0) + (params.isCritical and 1 or 0)
+    row.effective = (row.effective or 0) + delta.effective
+    row.overheal = (row.overheal or 0) + delta.overheal
+    row.wound = (row.wound or 0) + delta.wound
+    row.runeWound = (row.runeWound or 0) + delta.runeWound
+    row.absorbed = (row.absorbed or 0) + delta.absorbed
+    row.lifeSteal = (row.lifeSteal or 0) + delta.lifeSteal
+    row.crits = (row.crits or 0) + delta.crits
     local lethality = tonumber(params.lethality)
     if lethality ~= nil then
         row.lethalitySum = (row.lethalitySum or 0) + lethality
         row.lethalitySamples = (row.lethalitySamples or 0) + 1
     end
     if known then row.known = (row.known or 0) + 1 else row.unknown = (row.unknown or 0) + 1 end
+    return map, key, delta
 end
 
 local function isLocalObject(id)
@@ -487,7 +505,7 @@ local function isLocalObject(id)
     return ok and id == playerId
 end
 
-local function recordHealing(kind, params, amount)
+local function recordHealing(kind, params, amount, resolvedAbilityName)
     local b = AOUA.Session[kind]
     if amount > 0 then addEvent(b, amount, params) end
     local reported = tonumber(params.overload)
@@ -526,10 +544,36 @@ local function recordHealing(kind, params, amount)
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
     end
     if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
-    recordHealingJournal(kind, params, amount, effective, overheal, effective ~= nil)
+    return recordHealingJournal(kind, params, amount, effective, overheal, effective ~= nil, resolvedAbilityName)
 end
 
-function AOUA.OnHit(combatant, mode, params, determination)
+local function movePendingHealAbility(pending, resolvedName)
+    if not pending or not resolvedName or resolvedName == "" or resolvedName == "?" or resolvedName == "unknown" then
+        return
+    end
+    local map, oldKey = pending.map, pending.key
+    local newKey = resolvedName
+    if not map or oldKey == newKey then return end
+    local oldRow = map[oldKey]
+    if not oldRow or N(oldRow.events) <= 0 then return end
+    local newRow = journalRow(map, newKey, 64)
+    local delta = pending.delta or {}
+    oldRow.events = oldRow.events - 1
+    newRow.events = newRow.events + 1
+    for _, field in ipairs({
+        "amount", "effective", "overheal", "wound", "runeWound",
+        "absorbed", "lifeSteal", "crits", "known", "unknown"
+    }) do
+        local value = N(delta[field])
+        oldRow[field] = N(oldRow[field]) - value
+        newRow[field] = N(newRow[field]) + value
+    end
+    if oldRow.lethalitySum ~= nil then oldRow.lethalitySum = N(oldRow.lethalitySum) - N(pending.lethalitySum) end
+    if oldRow.lethalitySamples ~= nil then oldRow.lethalitySamples = N(oldRow.lethalitySamples) - N(pending.lethalitySamples) end
+    if oldRow.events <= 0 then map[oldKey] = nil end
+end
+
+function AOUA.OnHit(combatant, mode, params, determination, spellInfo)
     if type(params) ~= "table" then return end
     ensureSession()
     local kind
@@ -540,8 +584,17 @@ function AOUA.OnHit(combatant, mode, params, determination)
         elseif mode == enumMode.IHps then kind = "receivedHeal" end
     end
     if not kind then return end
-    -- Raw target-filtered API events collect personal incoming damage/healing.
-    if kind == "incoming" or kind == "receivedHeal" then return end
+    -- Incoming damage and received healing are counted by raw personal API handlers.
+    -- The legacy meter callback supplies a resolved spell name for healing; use it
+    -- only to relabel the already-recorded raw event, never to count it a second time.
+    if kind == "incoming" then return end
+    if kind == "receivedHeal" then
+        local pending = AOUA.PendingReceivedHeal and AOUA.PendingReceivedHeal[params]
+        local resolvedName = spellInfo and eventText(spellInfo.Name) or nil
+        if pending then movePendingHealAbility(pending, resolvedName) end
+        if AOUA.PendingReceivedHeal then AOUA.PendingReceivedHeal[params] = nil end
+        return
+    end
 
     if not combatant or not combatant.ID or not avatar or not avatar.GetId then return end
     local okId, playerId = pcall(avatar.GetId)
@@ -550,7 +603,7 @@ function AOUA.OnHit(combatant, mode, params, determination)
     local amount = (kind == "healing") and N(params.heal or params.amount) or N(params.amount)
     if amount <= 0 then return end
     local b = AOUA.Session[kind]
-    addEvent(b, amount, params)
+    if kind == "damage" then addEvent(b, amount, params) end
 
     local rawDetermination = determination or params.determination
     if kind == "damage" or kind == "healing" then
@@ -563,9 +616,9 @@ function AOUA.OnHit(combatant, mode, params, determination)
     end
     if kind == "damage" then
         recordHealthPhase(kind, params, amount, "estimated")
-        recordDamageJournal("outgoing", params, amount)
+        recordDamageJournal("outgoing", params, amount, spellInfo and spellInfo.Name)
     elseif kind == "healing" then
-        recordHealing("healing", params, amount)
+        recordHealing("healing", params, amount, spellInfo and spellInfo.Name)
     end
 end
 
@@ -660,7 +713,15 @@ function AOUA.OnReceivedHeal(params)
         return
     end
     diag.healAccepted = diag.healAccepted + 1
-    recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)))
+    local map, key, delta = recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)))
+    if map and key and delta then
+        local lethality = tonumber(params.lethality)
+        AOUA.PendingReceivedHeal[params] = {
+            map = map, key = key, delta = delta,
+            lethalitySum = lethality or 0,
+            lethalitySamples = lethality ~= nil and 1 or 0
+        }
+    end
 end
 
 local function fmt(v)
