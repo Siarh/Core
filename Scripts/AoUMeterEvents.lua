@@ -227,6 +227,7 @@ onMyEvent["EVENT_SECOND_TIMER"] = function(params)
 	if DPSMeterGUI.DPSMeter.bCollectData then
 		if DPSMeterGUI.DPSMeter:ShouldCollectData() then
 			DPSMeterGUI.DPSMeter:UpdateFightsTime()
+			if AOUA and type(AOUA.OnFightSecond) == "function" then pcall(AOUA.OnFightSecond) end
 		elseif DPSMeterGUI.DPSMeter:UpdateOffBattleTime() > Settings.MaxOffBattleTime then
 			DPSMeterGUI.DPSMeter:Stop()
 		end
