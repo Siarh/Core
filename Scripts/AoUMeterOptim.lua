@@ -1,6 +1,6 @@
 --------------------------------------------------------------------------------
 -- File: AoUMeterOptim.lua
--- Desc: Optimal stat distribution from combat data (Allods Online 7.0 formulas)
+-- Desc: Optimal stat distribution from combat data (Allods Sunshine 6.0 user-supplied formula set)
 --       Mastery / Resolve / Ruthlessness / Luck, Fortitude / Will / Bloodthirst
 --       Build28: whole-fight HP curve + stability penalty + phase-normalized combat model.
 --------------------------------------------------------------------------------
