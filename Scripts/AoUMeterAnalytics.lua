@@ -144,10 +144,15 @@ ensureSession()
 -- Detailed API journal is fight-scoped; keep the last one until the next fight.
 function AOUA.OnFightStart()
     ensureSession()
+    local previous = AOUA.Session.rawDiagnostics or {}
     AOUA.Session.journal = freshJournal()
     AOUA.Session.rawDiagnostics = {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0,
+        -- Registration counts survive the combat-session reset.
+        damageFilters = tonumber(previous.damageFilters) or 0,
+        healFilters = tonumber(previous.healFilters) or 0,
+        healthFilters = tonumber(previous.healthFilters) or 0
     }
 end
 
