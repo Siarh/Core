@@ -1241,7 +1241,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 
 	-- cache: recompute only when the inputs change noticeably
 	local function lg(x) return math.floor(math.log(x + 1) * 8) end
-	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
+	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
 	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
 	-- at most once per 4 calls unless the stats themselves changed
