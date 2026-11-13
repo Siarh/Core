@@ -157,7 +157,7 @@ Optim.RU = {
 	OptReset = "Настройки сброшены",
 	OptHelp1 = "Характеристики и свободные очки аддон читает из игры сам. /aou thp N - ср. HP цели, если не определилось; /aou hp N - здоровье",
 	OptHelp2 = "Ручной ввод, если авто не сработало: /aou fix, free, base, atk, def (см. README)",
-	OptHelp3 = "/aou caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
+	OptHelp3 = "/aou ai on|off|status|advice|export, caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
 }
 
 -- UTF-8 (Cyrillic) -> Windows-1251 bytes
@@ -358,6 +358,7 @@ function Optim.OnHit(combatant, mode, params, rage)
 	end
 
 	o.amount = (o.amount or 0) + amount
+	o.eventSamples = (o.eventSamples or 0) + 1
 	local tid
 	if mode == enumMode.Dps then tid = params.target else tid = params.unitId end
 	local v, lim, real
@@ -1241,7 +1242,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 
 	-- cache: recompute only when the inputs change noticeably
 	local function lg(x) return math.floor(math.log(x + 1) * 8) end
-	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
+	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef, (DPScopeAI and DPScopeAI.IsEnabled and DPScopeAI.IsEnabled()) and 1 or 0, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
 	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
 	-- at most once per 4 calls unless the stats themselves changed
@@ -1250,7 +1251,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local allyHp = (allySeg.amount or 0) > 0 and (allySeg.hpAmount or 0) / allySeg.amount or 0
 	local selfPool = (selfSeg.poolWeight or 0) > 0 and (selfSeg.poolAmount or 0) / selfSeg.poolWeight or 0
 	local allyPool = (allySeg.poolWeight or 0) > 0 and (allySeg.poolAmount or 0) / allySeg.poolWeight or 0
-	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), math.floor(selfHp * 20), math.floor(allyHp * 20), math.floor(selfPool / 3), math.floor(allyPool / 3), math.floor(Optim.TargetCaution * 100), math.floor(targetCautConf), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
+	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), math.floor(selfHp * 20), math.floor(allyHp * 20), math.floor(selfPool / 3), math.floor(allyPool / 3), math.floor(Optim.TargetCaution * 100), math.floor(targetCautConf), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10), math.floor((o.eventSamples or o.hpSamples or 0) / 10), math.floor((o.hpSamples or 0) / 10), math.floor((o.poolSamples or 0) / 10) }, "|")
 	local memo = Optim.Memo
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
@@ -1400,6 +1401,29 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		else
 			addT("OptHpNeed")
 		end
+	end
+
+	if DPScopeAI and type(DPScopeAI.BuildLines) == "function" then
+		local samples = o.phase or {}
+		local lowHpEvents = (samples[3] and N(samples[3].n) or 0) + (samples[4] and N(samples[4].n) or 0)
+		local measuredHealSamples = N((o.self and o.self.preSamples) or 0) + N((o.ally and o.ally.preSamples) or 0)
+		local healingEvents = N((o.self and o.self.events) or 0) + N((o.ally and o.ally.events) or 0)
+		local aiRows = DPScopeAI.BuildLines({
+			mode = heal and "hps" or "dps",
+			eventCount = o.eventSamples or o.hpSamples or 0,
+			hpSamples = o.hpSamples or 0,
+			poolSamples = o.poolSamples or 0,
+			lowHpEvents = lowHpEvents,
+			currentStats = nowA,
+			recommendedStats = optA3,
+			selfAmount = o.sw or 0,
+			allyAmount = o.aw or 0,
+			measuredHealSamples = measuredHealSamples,
+			estimatedHealSamples = math.max(0, healingEvents - measuredHealSamples),
+			incomingPerSecond = inc,
+			hasDefense = haveDef,
+		})
+		for i = 1, #aiRows do tail[#tail + 1] = aiRows[i] end
 	end
 
 	Optim.Memo.key = statKey
@@ -1664,6 +1688,9 @@ function Optim.OnSlash(text)
 
 	local cfg = Optim.Cfg
 	local cmd = string.lower(args[2] or "help")
+	if cmd == "ai" and DPScopeAI and type(DPScopeAI.OnSlash) == "function" then
+		return DPScopeAI.OnSlash(args)
+	end
 
 	local function setk(k, v)
 		cfg[k] = v
