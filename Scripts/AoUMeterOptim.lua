@@ -394,12 +394,13 @@ function Optim.OnHit(combatant, mode, params, rage)
 			local recipientKey = (tid == me) and "self" or "ally"
 			local segment = o[recipientKey]
 			if not segment then
-				segment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0, events = 0 }
+				segment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0, events = 0, preSamples = 0, estimatedSamples = 0 }
 				o[recipientKey] = segment
 			end
 			segment.amount = segment.amount + amount
 			segment.hpAmount = segment.hpAmount + amount * frac
 			segment.events = segment.events + 1
+			if real then segment.preSamples = segment.preSamples + 1 else segment.estimatedSamples = segment.estimatedSamples + 1 end
 			if rage then
 				segment.poolAmount = segment.poolAmount + amount * rage
 				segment.poolWeight = segment.poolWeight + amount
@@ -1334,21 +1335,22 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, useCurve) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
 			string.format("R%+.1f", gain(nowA[1], nowA[2] + 50, nowA[3])), string.format("B%+.1f", gain(nowA[1], nowA[2], nowA[3] + 50)))
-		if heal then
+		if heal and cfg.flag == 1 then
 			local segmentFixed = {
 				fM + ((cfg.eq == 1) and 0 or eM),
 				fR + ((cfg.eq == 1) and 0 or eR),
 				fU + ((cfg.eq == 1) and 0 or eU),
 				L
 			}
-			local segmentBudget = (cfg.eq == 1) and (Ea + baseAt) or baseAt
+			local segmentBudget = (cfg.eq == 1) and (Ea + (defOK and baseAt or F)) or (defOK and baseAt or F)
 			for _, item in ipairs({ { "self", "OptHealSelf" }, { "ally", "OptHealAlly" } }) do
 				local seg = o[item[1]]
 				if seg and seg.amount > 0 then
 					local segHp = clamp(seg.hpAmount / seg.amount, 0, 1)
 					local segPool = seg.poolWeight > 0 and (seg.poolAmount / seg.poolWeight) or pool
 					local sm, sr, su = optA(segmentFixed, segmentBudget, segPool, segHp, false)
-					local current = string.format("HP %s%% / пул %s", F1(segHp * 100), F1(segPool))
+					local hpMark = (seg.preSamples or 0) > 0 and "" or "~"
+					local current = string.format("HP %s%s%% / пул %s / n=%s", hpMark, F1(segHp * 100), F1(segPool), I(seg.events))
 					local recM, recR, recU = segmentFixed[1] + sm, segmentFixed[2] + sr, segmentFixed[3] + su
 					local recommended = string.format("M%s R%s Б%s", I(recM), I(recR), I(recU))
 					local delta = string.format("%s/%s/%s", S(recM - nowA[1]), S(recR - nowA[2]), S(recU - nowA[3]))
