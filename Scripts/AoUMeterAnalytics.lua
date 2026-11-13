@@ -463,7 +463,7 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
     local element = eventText(params.sysSubElement or params.subElement or params.element) or ""
     element = string.gsub(element, "^ENUM_SubElement_", "")
     local values = {
-        tostring(AOUA.Session.fightId or 0), AOUA.Profile or "pve",
+        tostring(AOUA.Session.fightId or 0), AOUA.Profile or (Optim and Optim.Cfg and Optim.Cfg.mode) or "pve",
         tostring(AOUA.Session.elapsedSeconds or 0), kind,
         sampleNumber(amount), sampleNumber((hpBefore ~= nil) and hpBefore * 100 or nil),
         hpQuality or "unknown", sampleNumber(targetMaxHp),
@@ -706,7 +706,7 @@ local function recordHealing(kind, params, amount, resolvedAbilityName)
         b.hpMeasured = b.hpMeasured + 1
         b.overhealUnknown = b.overhealUnknown + 1
         local hpBefore, hpQuality, targetMaxHp = recordHealthPhase(kind, params, reportedHeal, "reported")
-        appendEventSample(kind, params, reportedHeal, hpBefore, hpQuality, targetMaxHp, nil, resolvedAbilityName)
+        appendEventSample(kind, params, reportedHeal, hpBefore, hpQuality, targetMaxHp, determination, resolvedAbilityName)
     end
 
     local resisted, runeResisted, absorbed, overload = math.max(0, N(params.resisted)),
@@ -798,7 +798,7 @@ function AOUA.OnHit(combatant, mode, params, determination, spellInfo)
         appendEventSample(kind, params, amount, hpBefore, hpQuality, targetMaxHp, rawDetermination, spellInfo and spellInfo.Name)
         recordDamageJournal("outgoing", params, amount, spellInfo and spellInfo.Name)
     elseif kind == "healing" then
-        recordHealing("healing", params, amount, spellInfo and spellInfo.Name)
+        recordHealing("healing", params, amount, spellInfo and spellInfo.Name, rawDetermination)
     end
 end
 
