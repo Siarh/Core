@@ -40,6 +40,10 @@ local rows = DPScopeAI.BuildLines({
 })
 expect(#rows, 4, "AI panel row count")
 expect(rows[1][1], "OptAITitle", "AI title row")
+expect(rows[1][2], "LOCAL", "AI row must use ASCII-safe payload")
+expect(rows[2][3], "HP 92%", "AI HP payload")
+expect(rows[2][4], "Resolve 83%", "AI Resolve payload")
+expect(rows[3][2], "Use /aou ai advice", "AI insight must not inject runtime UTF-8")
 assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
     "HPS AI summary should identify ally-focused healing")
 assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
