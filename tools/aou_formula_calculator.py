@@ -794,7 +794,7 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     fixed = dict(profile.get("fixed_stats", stats))
     budget = int(num(profile.get("allocation_budget", 0)))
     report: dict[str, Any] = {
-        "formula_model": "user-supplied Allods 7.0/Sunshine formula set",
+        "formula_model": "user-supplied Allods Sunshine 6.0 formula set",
         "assumptions": {
             "resolve_coefficient": num(cfg.get("resolve_coefficient", 0.015)),
             "might_affects_healing": bool(cfg.get("might_affects_healing", True)),
