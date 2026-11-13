@@ -21,7 +21,13 @@ from typing import Any
 import aou_formula_calculator as calc
 
 
-REQUIRED_STATS = ("M", "R", "U", "L")
+STAT_COLUMNS = {
+    "M": "mastery",
+    "R": "resolve",
+    "U": "ruthlessness",
+    "L": "luck",
+}
+REQUIRED_STATS = tuple(STAT_COLUMNS)
 PRE_HP_QUALITIES = {"measured_pre", "estimated_pre"}
 
 
@@ -47,14 +53,15 @@ def stat_signature(rows: list[dict[str, str]]) -> dict[str, float]:
                 values[key].append(value)
     result: dict[str, float] = {}
     for key, group in values.items():
+        label = STAT_COLUMNS[key]
         if not group:
-            raise ValueError(f"В журнале нет снимка характеристики {key}.")
+            raise ValueError(f"В журнале нет снимка характеристики {key} ({label}).")
         if max(group) - min(group) > 0.5:
             raise ValueError(
-                f"Характеристика {key} менялась между боями ({min(group):.1f}–{max(group):.1f}). "
+                f"Характеристика {key} ({label}) менялась между боями ({min(group):.1f}–{max(group):.1f}). "
                 "Собери CSV для одного набора экипировки/распределения."
             )
-        result[key.lower()] = group[0]
+        result[label] = group[0]
     return result
 
 
