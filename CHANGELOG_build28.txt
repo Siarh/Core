@@ -102,7 +102,7 @@ Combat API event journal extension
 - Captures sourceTags and targetTags through CombatTagId:GetInfo() as effects present at hit time; tags are correlation context, not exact causal attribution of absorbed damage.
 - Adds received-healing breakdown by ability: nominal/effective/overheal, wound and rune-wound loss, other absorption, life-steal, criticals and lethality samples.
 - Incoming damage and received healing are captured from target-filtered raw API events independently of the DEF/IHPS display toggles. Existing legacy display tables remain gated by their original settings.
-- Retains delivered zero-amount damage events and counts those with reported mitigation/prevention components.
+- Separates zero-amount events into dodges, misses, mitigation, other cases, and full absorbs inferred only when the documented avoidance/mitigation factors did not trigger.
 - Adds /aou events (also /dpscope events) for a compact combat-event journal report.
 - Journal maps are bounded to 48-64 keys per category to limit memory growth.
 - API fields and semantics cross-checked against the addon API documentation; verification inside Allods Sunshine 6.0 remains necessary.
