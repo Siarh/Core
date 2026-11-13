@@ -12,6 +12,7 @@ on:
       - "Scripts/AoUMeterAnalytics.lua"
       - "Scripts/AoUMeterEvents.lua"
       - "Scripts/AoUMeterInit.lua"
+      - "Scripts/AoUMeterData.lua"
       - ".github/workflows/aou-formula-tests.yml"
   workflow_dispatch:
 
@@ -33,6 +34,7 @@ jobs:
           luac -p Scripts/AoUMeterAnalytics.lua
           luac -p Scripts/AoUMeterEvents.lua
           luac -p Scripts/AoUMeterInit.lua
+          luac -p Scripts/AoUMeterData.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
