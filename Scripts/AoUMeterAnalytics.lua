@@ -39,6 +39,21 @@ local function freshDeterminationStats()
         above50 = 0, above67 = 0, above90 = 0 }
 end
 
+local function freshJournal()
+    return {
+        incomingByType = {}, incomingByAbility = {}, incomingByAttacker = {},
+        incomingTargetEffects = {}, incomingSourceEffects = {}, incomingByElement = {},
+        outgoingByType = {}, outgoingByAbility = {}, outgoingByElement = {},
+        outgoingTargetEffects = {}, outgoingSourceEffects = {},
+        receivedHealByAbility = {}, outgoingHealByAbility = {},
+        incomingStats = {
+            events = 0, amount = 0, zeroAmountEvents = 0,
+            fullyAbsorbedEvents = 0, fullyPreventedEvents = 0,
+            dodgedEvents = 0, missedEvents = 0, otherZeroAmountEvents = 0
+        }
+    }
+end
+
 local function freshSession()
     return {
         damage = bucket(), incoming = bucket(),
@@ -60,13 +75,7 @@ local function freshSession()
             fullyPreventedEvents = 0, dodgedEvents = 0, missedEvents = 0,
             otherZeroAmountEvents = 0
         },
-        journal = {
-            incomingByType = {}, incomingByAbility = {}, incomingByAttacker = {},
-            incomingTargetEffects = {}, incomingSourceEffects = {}, incomingByElement = {},
-            outgoingByType = {}, outgoingByAbility = {}, outgoingByElement = {},
-            outgoingTargetEffects = {}, outgoingSourceEffects = {},
-            receivedHealByAbility = {}, outgoingHealByAbility = {}
-        },
+        journal = freshJournal(),
         determination = freshDeterminationStats(),
         determinationByMode = {
             damage = freshDeterminationStats(),
@@ -106,7 +115,7 @@ local function ensureSession()
     d.dodgedEvents = d.dodgedEvents or 0
     d.missedEvents = d.missedEvents or 0
     d.otherZeroAmountEvents = d.otherZeroAmountEvents or 0
-    AOUA.Session.journal = AOUA.Session.journal or {}
+    AOUA.Session.journal = AOUA.Session.journal or freshJournal()
     local j = AOUA.Session.journal
     for _, key in ipairs({
         "incomingByType", "incomingByAbility", "incomingByAttacker",
@@ -115,9 +124,20 @@ local function ensureSession()
         "outgoingTargetEffects", "outgoingSourceEffects",
         "receivedHealByAbility", "outgoingHealByAbility"
     }) do j[key] = j[key] or {} end
+    j.incomingStats = j.incomingStats or {
+        events = 0, amount = 0, zeroAmountEvents = 0,
+        fullyAbsorbedEvents = 0, fullyPreventedEvents = 0,
+        dodgedEvents = 0, missedEvents = 0, otherZeroAmountEvents = 0
+    }
     AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
 end
 ensureSession()
+
+-- Detailed API journal is fight-scoped; keep the last one until the next fight.
+function AOUA.OnFightStart()
+    ensureSession()
+    AOUA.Session.journal = freshJournal()
+end
 
 local function safeHealth(id)
     if not id or not Optim or type(Optim.GetHealth) ~= "function" then return nil end
@@ -521,6 +541,9 @@ function AOUA.OnIncomingDamage(params)
     ensureSession()
     local amount = math.max(0, N(params.amount))
     addEvent(AOUA.Session.incoming, amount, params)
+    local fightStats = AOUA.Session.journal.incomingStats
+    fightStats.events = fightStats.events + 1
+    fightStats.amount = fightStats.amount + amount
     local d = AOUA.Session.defense
     d.events, d.amount = d.events + 1, d.amount + amount
     d.shieldBlock = d.shieldBlock + N(params.shieldBlock)
@@ -541,10 +564,13 @@ function AOUA.OnIncomingDamage(params)
     end
     if amount <= 0 then
         d.zeroAmountEvents = d.zeroAmountEvents + 1
+        fightStats.zeroAmountEvents = fightStats.zeroAmountEvents + 1
         if params.isDodge then
             d.dodgedEvents = d.dodgedEvents + 1
+            fightStats.dodgedEvents = fightStats.dodgedEvents + 1
         elseif params.isMiss then
             d.missedEvents = d.missedEvents + 1
+            fightStats.missedEvents = fightStats.missedEvents + 1
         else
             local prevented = math.max(0, N(params.overallAbsorbedDamage))
                 + math.max(0, N(params.overallPreventedDamage))
@@ -557,11 +583,14 @@ function AOUA.OnIncomingDamage(params)
                 + math.max(0, N(params.runesAbsorb))
             if prevented > 0 then
                 d.fullyPreventedEvents = d.fullyPreventedEvents + 1
+                fightStats.fullyPreventedEvents = fightStats.fullyPreventedEvents + 1
             elseif tonumber(params.multipliersAbsorb) == nil or N(params.multipliersAbsorb) == 0 then
                 -- API documentation: no damage and no avoidance/mitigation modifier => full absorb.
                 d.fullyAbsorbedEvents = d.fullyAbsorbedEvents + 1
+                fightStats.fullyAbsorbedEvents = fightStats.fullyAbsorbedEvents + 1
             else
                 d.otherZeroAmountEvents = d.otherZeroAmountEvents + 1
+                fightStats.otherZeroAmountEvents = fightStats.otherZeroAmountEvents + 1
             end
         end
     end
@@ -658,9 +687,10 @@ local function topJournalRows(title, map, field, formatter, limit)
 end
 
 local function journalReport()
-    local j, d = AOUA.Session.journal, AOUA.Session.defense
+    local j = AOUA.Session.journal
+    local d = j.incomingStats
     local out = {
-        "Combat API event journal (local player):",
+        "Combat API event journal (current/last combat, local player):",
         "Incoming: events=" .. fmt(d.events) .. ", damage=" .. fmt(d.amount) ..
             ", zero amount=" .. fmt(d.zeroAmountEvents) ..
             ", full absorb (inferred)=" .. fmt(d.fullyAbsorbedEvents) ..
