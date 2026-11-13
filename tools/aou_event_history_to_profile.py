@@ -65,6 +65,79 @@ def stat_signature(rows: list[dict[str, str]]) -> dict[str, float]:
     return result
 
 
+def optional_stat_signature(rows: list[dict[str, str]], key: str, label: str) -> float:
+    values = [value for row in rows if (value := number(row.get(key))) is not None]
+    if not values:
+        return 0.0
+    if max(values) - min(values) > 0.5:
+        raise ValueError(
+            f"Характеристика {key} ({label}) менялась между боями. "
+            "Раздели экспорт по наборам экипировки."
+        )
+    return values[0]
+
+
+def resistance_family(element: str) -> str | None:
+    value = (element or "").lower().replace("enum_subelement_", "").replace("enum_subelement", "")
+    return calc.SCHOOLS.get(value)
+
+
+def tank_event_to_sample(
+    row: dict[str, str],
+    stats: dict[str, float],
+) -> tuple[dict[str, Any] | None, str | None, str | None, float | None]:
+    """Reconstruct only events with a separately reported resistance component.
+
+    Other direct reduction components are not added together: events with any
+    positive block/parry/barrier/absorb/mount field are excluded because these
+    may overlap and would make the incoming base ambiguous.
+    """
+    if (row.get("kind") or "").strip().lower() != "incoming":
+        return None, None, None, None
+    amount = number(row.get("observed_amount"))
+    hp = number(row.get("target_hp_before"))
+    quality = (row.get("hp_quality") or "").strip()
+    resist = number(row.get("resist"))
+    rune = number(row.get("runes_absorb")) or 0.0
+    school = resistance_family(row.get("element") or "")
+    if amount is None or amount <= 0:
+        return None, "incoming_amount_missing_or_fully_prevented", None, None
+    if hp is None or quality not in PRE_HP_QUALITIES:
+        return None, "incoming_hp_unknown", None, None
+    if resist is None:
+        return None, "resistance_component_unknown", None, None
+    if not school:
+        return None, "damage_school_unknown", None, None
+
+    other_components = ("block", "parry", "barrier", "absorb", "mount")
+    positive = [key for key in other_components if (number(row.get(key)) or 0.0) > 0.0]
+    if positive:
+        return None, "overlapping_defense_components:" + ",".join(positive), None, None
+
+    hp_fraction = max(0.0, min(1.0, hp / 100.0))
+    caution = calc.caution_multiplier(stats.get("caution", 0.0), hp_fraction)
+    # amount is observed after Caution. Undo it before reversing the separately
+    # measured rune and resistance reductions, so the simulator can reapply Caution.
+    after_caution = amount / max(1e-12, caution)
+    after_resist = after_caution + rune
+    raw_before_resist = after_resist + resist
+    if after_resist <= 0 or raw_before_resist <= 0:
+        return None, "incoming_reconstruction_failed", None, None
+    inferred_rating = raw_before_resist * 10.0 / after_resist
+    if not math.isfinite(inferred_rating) or inferred_rating <= 0:
+        return None, "incoming_resistance_invalid", None, None
+
+    sample = {
+        "second": int(number(row.get("second")) or 0),
+        "incoming_raw": raw_before_resist,
+        "player_hp": hp_fraction,
+        "damage_school": (row.get("element") or "").replace("ENUM_SubElement_", ""),
+        "rune_absorbed": rune,
+        "ability": row.get("ability") or "unknown",
+    }
+    return sample, None, school, inferred_rating
+
+
 def event_to_sample(
     row: dict[str, str],
     stats: dict[str, float],
@@ -143,29 +216,60 @@ def build_profile(
     allocation_budget: int,
     resolve_coefficient: float,
 ) -> dict[str, Any]:
-    combat_rows = [
+    outgoing_rows = [
         row for row in rows
         if (row.get("kind") or "").strip().lower() in {"damage", "healing"}
     ]
-    if not combat_rows:
-        raise ValueError("В CSV нет исходящих событий damage/healing.")
+    incoming_rows = [
+        row for row in rows
+        if (row.get("kind") or "").strip().lower() == "incoming"
+    ]
+    combat_rows = outgoing_rows + incoming_rows
+    if not outgoing_rows and not incoming_rows:
+        raise ValueError("В CSV нет событий damage/healing/incoming.")
 
     stats = stat_signature(combat_rows)
+    defense_stats = {
+        "fortitude": optional_stat_signature(combat_rows, "S", "Стойкость"),
+        "will": optional_stat_signature(combat_rows, "W", "Воля"),
+        "bloodthirst": optional_stat_signature(combat_rows, "B", "Кровожадность"),
+        "caution": optional_stat_signature(combat_rows, "C", "Осторожность"),
+        "endurance": 0.0,  # class base coefficient is not present in the event callback
+    }
+    max_hp = optional_stat_signature(combat_rows, "HPmax", "максимальное здоровье")
+    if max_hp > 0:
+        defense_stats["max_hp"] = max_hp
+    stats.update(defense_stats)
+
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     skipped: Counter[str] = Counter()
+    tank_rows_by_fight: dict[str, list[tuple[dict[str, Any], str, float]]] = defaultdict(list)
+    resistance_samples: dict[str, list[tuple[float, float]]] = defaultdict(list)
 
     for row in combat_rows:
         kind = (row.get("kind") or "").strip().lower()
+        fight_id = (row.get("fight_id") or "unknown").strip()
+        profile_name = (row.get("profile") or "unknown").strip()
+        if kind == "incoming":
+            sample, reason, school, rating = tank_event_to_sample(row, stats)
+            if reason:
+                skipped[reason] += 1
+                continue
+            assert sample is not None and school is not None and rating is not None
+            tank_rows_by_fight[fight_id].append((sample, profile_name, rating))
+            # Weight the inferred school rating by pre-resistance damage, not by event count.
+            resistance_samples[school].append((rating, sample["incoming_raw"]))
+            continue
+
         mode = "dps" if kind == "damage" else "hps"
         sample, reason = event_to_sample(row, stats, resolve_coefficient, mode)
         if reason:
             skipped[reason] += 1
             continue
-        fight_id = (row.get("fight_id") or "unknown").strip()
-        profile_name = (row.get("profile") or "unknown").strip()
         groups[(fight_id, mode)].append({
             "sample": sample,
             "profile": profile_name,
+            "observed_amount": number(row.get("observed_amount")) or 0.0,
         })
 
     activities: dict[str, Any] = {}
@@ -184,6 +288,35 @@ def build_profile(
         activities[name] = {"mode": mode, "weight": 1.0, "samples": samples}
         included += len(samples)
 
+    resistance_ratings: dict[str, float] = {}
+    for school, samples in resistance_samples.items():
+        total_weight = sum(weight for _, weight in samples)
+        if total_weight > 0:
+            resistance_ratings[school] = sum(rating * weight for rating, weight in samples) / total_weight
+    stats["resistances"] = resistance_ratings
+    stats.update(resistance_ratings)
+
+    outgoing_per_second: dict[tuple[str, int], float] = defaultdict(float)
+    for (fight_id, mode), entries in groups.items():
+        if mode == "dps":
+            for entry in entries:
+                sec = int(entry["sample"]["second"])
+                outgoing_per_second[(fight_id, sec)] += entry["observed_amount"]
+
+    for fight_id, entries in tank_rows_by_fight.items():
+        if not entries:
+            continue
+        counts: Counter[int] = Counter(sample["second"] for sample, _, _ in entries)
+        tank_samples = []
+        for sample, _, _ in entries:
+            sec = int(sample["second"])
+            # Divide the real outgoing damage of that second across incoming events
+            # to avoid multiplying one second of Bloodthirst return by event count.
+            sample["outgoing_damage"] = outgoing_per_second.get((fight_id, sec), 0.0) / max(1, counts[sec])
+            tank_samples.append(sample)
+        activities[f"tank_fight_{fight_id}"] = {"mode": "tank", "weight": 1.0, "samples": tank_samples}
+        included += len(tank_samples)
+
     if not activities:
         raise ValueError(
             "После фильтрации не осталось пригодных событий. "
@@ -193,6 +326,10 @@ def build_profile(
     profile_names = sorted({(row.get("profile") or "unknown").strip() for row in combat_rows})
     warnings = [
         "События нормализованы из итоговой величины callback, а не из сырой базовой силы умения.",
+        "Защита: в tank-профиль включаются события с HP до удара, отдельным полем resist и без положительных других прямых компонентов, чтобы не суммировать перекрывающиеся поглощения.",
+        "Резист по группе выведен из observed damage + отдельно сообщённый resist + rune absorb; он остаётся оценкой API-компонентов, а не отдельным снимком рейтинга сопротивления.",
+        "Стойкость, Воля, Кровожадность и Осторожность берутся из снимка S/W/B/C. Базовый классный коэффициент Выносливости не присутствует в callback; используется измеренное HP и относительное влияние Стойкости.",
+        "Для tank-профиля кровожадность использует реальный исходящий урон за ту же секунду, распределённый между входящими событиями этой секунды."
         "Неизвестные сопротивления цели, блок/парирование и осторожность цели остаются частью веса конкретного события.",
         "Наблюдаемый пул Решимости зафиксирован отдельно на каждом событии; его обратная динамика при изменении статов не пересчитывается.",
         "Для лечения исходная величина callback рассматривается как номинальная базовая величина; если исходное лечение уже было ограничено недостающим HP, рекомендация будет консервативной.",
@@ -203,6 +340,8 @@ def build_profile(
     return {
         "settings": {
             "level": 1,
+            "max_hp": max_hp,
+            "base_stats": dict(stats),
             "might": 20,
             "power_scale": 10,
             "resolve_coefficient": resolve_coefficient,
@@ -222,6 +361,9 @@ def build_profile(
             "skipped_events": dict(skipped),
             "profiles": profile_names,
             "activities": len(activities),
+            "outgoing_events": len(outgoing_rows),
+            "incoming_events": len(incoming_rows),
+            "resistance_families": sorted(resistance_ratings),
         },
     }
 
