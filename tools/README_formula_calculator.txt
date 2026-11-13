@@ -154,4 +154,4 @@ The coefficient is printed in the report. This does not resolve the source-speci
 
 Important integration note
 --------------------------
-The in-game Lua optimizer (`Scripts/AoUMeterOptim.lua`) still uses the literal 0.015 coefficient in its current branch revision. The offline calculator and saved-record analyzer default to 0.0015. This discrepancy is intentionally not hidden: the supplied equation and the stated +1.5% per 10 pool points imply different coefficients. Do not treat the Lua optimizer and offline engine as numerically equivalent for Resolve until a controlled Sunshine 6.0 test settles the coefficient. Both interpretations remain testable offline.
+The in-game Lua optimizer and offline calculator use the literal 0.015 coefficient by default. The alternative 0.0015 can be configured explicitly. This discrepancy is intentionally not hidden: the supplied equation and the stated +1.5% per 10 pool points imply different coefficients. Do not treat the Lua optimizer and offline engine as numerically equivalent for Resolve until a controlled Sunshine 6.0 test settles the coefficient. Both interpretations remain testable offline.
