@@ -110,13 +110,35 @@ class AIAssistantTests(unittest.TestCase):
     @patch("aou_ai_assistant.urllib.request.urlopen")
     def test_check_accepts_latest_alias(self, urlopen):
         urlopen.return_value = FakeResponse({"models": [{"name": "qwen3.5:latest"}]})
-        models = ai.check_ollama("http://localhost:11434", "qwen3.5")
-        self.assertIn("qwen3.5:latest", models)
+        selected = ai.check_ollama("http://localhost:11434", "qwen3.5")
+        self.assertEqual(selected, "qwen3.5:latest")
+
+    @patch("aou_ai_assistant.urllib.request.urlopen")
+    def test_generic_qwen_selects_9b_when_multiple_variants_are_installed(self, urlopen):
+        urlopen.return_value = FakeResponse({
+            "models": [{"name": "qwen3.5:27b"}, {"name": "qwen3.5:9b"}]
+        })
+        selected = ai.check_ollama("http://localhost:11434", "qwen3.5")
+        self.assertEqual(selected, "qwen3.5:9b")
+
+    @patch("aou_ai_assistant.urllib.request.urlopen")
+    def test_generic_qwen_falls_back_to_only_installed_variant(self, urlopen):
+        urlopen.return_value = FakeResponse({"models": [{"name": "qwen3.5:27b"}]})
+        selected = ai.check_ollama("http://localhost:11434", "qwen3.5")
+        self.assertEqual(selected, "qwen3.5:27b")
+
+    @patch("aou_ai_assistant.urllib.request.urlopen")
+    def test_explicit_qwen_variant_is_respected(self, urlopen):
+        urlopen.return_value = FakeResponse({
+            "models": [{"name": "qwen3.5:9b"}, {"name": "qwen3.5:27b"}]
+        })
+        selected = ai.check_ollama("http://localhost:11434", "qwen3.5:27b")
+        self.assertEqual(selected, "qwen3.5:27b")
 
     @patch("aou_ai_assistant.urllib.request.urlopen")
     def test_check_rejects_missing_model_with_help(self, urlopen):
         urlopen.return_value = FakeResponse({"models": [{"name": "llama3.2:latest"}]})
-        with self.assertRaisesRegex(RuntimeError, "ollama pull qwen3.5"):
+        with self.assertRaisesRegex(RuntimeError, "Укажи точное имя"):
             ai.check_ollama("http://localhost:11434", "qwen3.5")
 
 
