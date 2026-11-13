@@ -6,7 +6,7 @@
       "fortitude": 100,
       "endurance": 1000
     },
-    "resolve_coefficient": 0.0015,
+    "resolve_coefficient": 0.015,
     "might": 20,
     "power_scale": 10,
     "default_target_resistance": 10,
