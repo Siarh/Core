@@ -1,1 +1,1 @@
-﻿/aou caut N (Осторожность, 0 = из игры), resolvecoef 0.015|0.0015, eventlog, eventexport N, mark название (записать тест), rec list, eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset
+﻿/aou ai on|off|status|advice|export, caut N (Осторожность, 0 = из игры), resolvecoef 0.015|0.0015, eventlog, eventexport N, mark название (записать тест), rec list, eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset
