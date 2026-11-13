@@ -269,9 +269,8 @@ DPScope\\tools\\README_ollama_ai.txt. Эта локальная инструкц
   python tools/aou_ai_assistant.py --check
   python tools/aou_ai_assistant.py --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
 
-По умолчанию семейство qwen3.5 автоматически разрешается в установленный тег: сначала qwen3.5:9b,
-а если его нет — другой доступный вариант. Для явного выбора используй --model qwen3.5:27b
-или переменную OLLAMA_MODEL. Адрес по умолчанию — http://localhost:11434;
+По умолчанию помощник запускает qwen3.5:27b. Для явного выбора менее требовательной версии
+используй --model qwen3.5:9b или переменную OLLAMA_MODEL. Адрес по умолчанию — http://localhost:11434;
 его можно переопределить через --ollama-url или OLLAMA_HOST. API-ключ не нужен.
 Подробная инструкция находится в tools/README_ollama_ai.txt внутри архива.
 
