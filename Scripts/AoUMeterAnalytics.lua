@@ -542,7 +542,7 @@ function AOUA.EventExport(count)
             rows[#rows + 1] = AOUA.Session.eventSamples[i]
         end
     end
-    count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 300)))
+    count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 100)))
     local first = math.max(1, #rows - count + 1)
     if #rows == 0 then
         if type(message) == "function" then message("event export: no stored events") end
