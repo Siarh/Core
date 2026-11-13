@@ -1,0 +1,72 @@
+DPScope — локальный AI-помощник через Ollama
+=============================================
+
+Внешний AI-помощник работает с локальным Qwen 3.5 через Ollama. OpenAI API,
+облачный LLM и API-ключ не нужны. Python обращается к серверу на этом же ПК:
+http://localhost:11434/api/chat
+
+1. Подготовка Ollama
+--------------------
+Открой PowerShell и проверь установленные модели:
+
+  ollama list
+
+Если Qwen 3.5 ещё не загружена:
+
+  ollama pull qwen3.5
+
+Если ты используешь конкретный размер модели, например qwen3.5:9b, укажи его
+вместо qwen3.5 во всех командах ниже. Приложение Ollama должно быть запущено.
+
+2. Проверка локального соединения
+---------------------------------
+Открой PowerShell в папке Mods\Addons\DPScope\tools и выполни:
+
+  python aou_ai_assistant.py --check
+
+Для конкретной версии модели:
+
+  python aou_ai_assistant.py --check --model qwen3.5:9b
+
+Проверка обращается к локальному Ollama API и сверяет модель с результатом
+ollama list. При ошибке проверь, что Ollama запущена, и что имя модели указано
+точно. Адрес можно переопределить параметром --ollama-url или переменной
+окружения OLLAMA_HOST.
+
+3. Получение боевого разбора
+----------------------------
+Сначала экспортируй события DPScope из игры:
+
+  /aou eventlog
+  /aou eventexport 1000
+
+Скопируй строки AOUCSV из чата в текстовый файл, открой AoU_ChatLog_To_CSV.html,
+собери CSV и сохрани его как AoU_combat_log.csv. Затем в PowerShell из папки
+tools выполни:
+
+  python aou_event_history_to_profile.py AoU_combat_log.csv --out aou_event_profile.json --budget 20
+  python aou_formula_calculator.py aou_event_profile.json --out aou_report.json
+  python aou_ai_assistant.py --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
+
+Для модели qwen3.5:9b:
+
+  python aou_ai_assistant.py --model qwen3.5:9b --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
+
+Результат будет сохранён в aou_ai_advice.md. Тайм-аут локальной генерации по
+умолчанию 300 секунд; его можно изменить через --timeout 600.
+
+4. Приватность и границы работы
+-------------------------------
+- Внешний помощник отправляет запрос только на локальный адрес Ollama.
+- OPENAI_API_KEY и любые облачные API-ключи не используются.
+- В модель передаётся компактная сводка профиля и расчёта, без сырых строк
+  событий, названий способностей и идентификаторов целей/игроков.
+- Начальная загрузка модели через ollama pull может использовать интернет.
+  После загрузки запросы этого помощника идут в локальный Ollama.
+- --dry-run создаёт компактный JSON для проверки без обращения к модели.
+- Lua-аддон Allods не вызывает Python и не обращается к Ollama напрямую:
+  внешний анализ запускается вручную из PowerShell. Команды /aou ai on/off
+  включают и выключают встроенного детерминированного советника в игре, но
+  не управляют отдельным процессом Ollama/Python.
+- Помощник анализирует рассчитанные данные и качество выборки; его вывод не
+  является доказательством формул или игровым тестом в клиенте Allods.
