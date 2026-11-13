@@ -269,10 +269,26 @@ function RetrieveDDEvent(params)
 	end
 end
 
+local function CanCollectRawAnalytics()
+	local meter = DPSMeterGUI and DPSMeterGUI.DPSMeter
+	if not meter then return false end
+	if not meter.bCollectData and type(meter.ShouldCollectData) == "function" then
+		local ok, shouldCollect = pcall(meter.ShouldCollectData, meter)
+		if ok and shouldCollect == true and type(meter.Start) == "function" then
+			pcall(meter.Start, meter)
+		end
+	end
+	return meter.bCollectData == true
+end
+
 function RetrieveDDEventIN(params)
 	if not params then return end
 	--if params.isFall then return end
 	if params.target then RegisterHealthWatch(params.target) end
+
+	if CanCollectRawAnalytics() and AOUA and type(AOUA.OnIncomingDamage) == "function" then
+		pcall(AOUA.OnIncomingDamage, params)
+	end
 
 	local collectedDef
 
@@ -295,6 +311,10 @@ end
 function RetrieveHealEventIN(params)
 	if not params then return end
 	if params.unitId then RegisterHealthWatch(params.unitId) end
+
+	if CanCollectRawAnalytics() and AOUA and type(AOUA.OnReceivedHeal) == "function" then
+		pcall(AOUA.OnReceivedHeal, params)
+	end
 
 	DPSMeterGUI.DPSMeter:CollectHealDataIN(params)
 end 
