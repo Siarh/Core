@@ -55,7 +55,15 @@ local function freshSession()
             toMount = 0, multipliersAbsorb = 0,
             overallAbsorbed = 0, overallPrevented = 0,
             totalAbsorbedSamples = 0, totalPreventedSamples = 0,
-            shieldPoolLoss = 0, shieldPoolGain = 0, shieldPoolSamples = 0
+            shieldPoolLoss = 0, shieldPoolGain = 0, shieldPoolSamples = 0,
+            zeroAmountEvents = 0, fullyPreventedEvents = 0
+        },
+        journal = {
+            incomingByType = {}, incomingByAbility = {}, incomingByAttacker = {},
+            incomingTargetEffects = {}, incomingSourceEffects = {},
+            outgoingByType = {}, outgoingByAbility = {},
+            outgoingTargetEffects = {}, outgoingSourceEffects = {},
+            receivedHealByAbility = {}, outgoingHealByAbility = {}
         },
         determination = freshDeterminationStats(),
         determinationByMode = {
@@ -90,6 +98,17 @@ local function ensureSession()
     d.shieldPoolLoss = d.shieldPoolLoss or 0
     d.shieldPoolGain = d.shieldPoolGain or 0
     d.shieldPoolSamples = d.shieldPoolSamples or 0
+    d.zeroAmountEvents = d.zeroAmountEvents or 0
+    d.fullyPreventedEvents = d.fullyPreventedEvents or 0
+    AOUA.Session.journal = AOUA.Session.journal or {}
+    local j = AOUA.Session.journal
+    for _, key in ipairs({
+        "incomingByType", "incomingByAbility", "incomingByAttacker",
+        "incomingTargetEffects", "incomingSourceEffects",
+        "outgoingByType", "outgoingByAbility",
+        "outgoingTargetEffects", "outgoingSourceEffects",
+        "receivedHealByAbility", "outgoingHealByAbility"
+    }) do j[key] = j[key] or {} end
     AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
 end
 ensureSession()
@@ -269,10 +288,177 @@ function AOUA.OnHealthChanged(params)
     end
 end
 
+
+local function eventText(value)
+    if value == nil then return nil end
+    if common and type(common.IsWString) == "function" and userMods and type(userMods.FromWString) == "function" then
+        local ok, wide = pcall(common.IsWString, value)
+        if ok and wide then
+            local okText, plain = pcall(userMods.FromWString, value)
+            if okText and plain ~= nil then value = plain end
+        end
+    end
+    local text = string.gsub(tostring(value), "[%c|]", " ")
+    return text ~= "" and text or nil
+end
+
+local function resourceKey(value)
+    if value == nil then return nil end
+    if type(value) == "string" or type(value) == "number" then return tostring(value) end
+    local ok, id = pcall(function() return value:GetInstanceId() end)
+    return (ok and id ~= nil) and tostring(id) or nil
+end
+
+local function abilityLabel(params)
+    local name = eventText(params.ability)
+    local id = resourceKey(params.spellId or params.abilityId or params.buffId)
+    if name and id then return name .. " [" .. id .. "]" end
+    return name or (id and ("id:" .. id)) or "unknown"
+end
+
+local function journalRow(map, key, limit)
+    key = eventText(key) or "unknown"
+    if #key > 72 then key = string.sub(key, 1, 72) end
+    if map[key] then return map[key] end
+    if (map._count or 0) >= (limit or 48) then
+        if map["(other)"] then return map["(other)"] end
+        key = "(other)"
+    end
+    local row = { events = 0, amount = 0 }
+    map[key] = row
+    map._count = (map._count or 0) + 1
+    return row
+end
+
+local function tagInfo(tag)
+    local ok, info = pcall(function() return tag:GetInfo() end)
+    if not ok or type(info) ~= "table" then return nil, nil end
+    return eventText(info.shortName) or eventText(info.name), info.isHelpful
+end
+
+local function addTagRows(map, tags, amount)
+    if type(tags) ~= "table" then return end
+    for _, tag in pairs(tags) do
+        local name, helpful = tagInfo(tag)
+        if name then
+            local row = journalRow(map, name, 48)
+            row.events = row.events + 1
+            row.amount = row.amount + amount
+            if helpful == true then row.helpful = (row.helpful or 0) + 1 end
+            if helpful == false then row.harmful = (row.harmful or 0) + 1 end
+        end
+    end
+end
+
+local function recordDamageJournal(activity, params, amount)
+    local j = AOUA.Session.journal
+    local sourceType = eventText(params.damageSource) or "unknown"
+    local ability = sourceType .. " / " .. abilityLabel(params)
+    local typeMap, abilityMap = j[activity .. "ByType"], j[activity .. "ByAbility"]
+    if typeMap then
+        local row = journalRow(typeMap, sourceType, 48)
+        row.events, row.amount = row.events + 1, row.amount + amount
+        row.absorbed = (row.absorbed or 0) + N(params.overallAbsorbedDamage)
+        row.prevented = (row.prevented or 0) + N(params.overallPreventedDamage)
+        row.runesAbsorb = (row.runesAbsorb or 0) + N(params.runesAbsorb)
+        row.block = (row.block or 0) + N(params.shieldBlock)
+        row.parry = (row.parry or 0) + N(params.parry)
+        row.resist = (row.resist or 0) + N(params.resist)
+    end
+    if abilityMap then
+        local row = journalRow(abilityMap, ability, 64)
+        row.events, row.amount = row.events + 1, row.amount + amount
+        row.crits = (row.crits or 0) + (params.isCritical and 1 or 0)
+        row.absorbed = (row.absorbed or 0) + N(params.overallAbsorbedDamage)
+        row.prevented = (row.prevented or 0) + N(params.overallPreventedDamage)
+        row.runesAbsorb = (row.runesAbsorb or 0) + N(params.runesAbsorb)
+        row.block = (row.block or 0) + N(params.shieldBlock)
+        row.parry = (row.parry or 0) + N(params.parry)
+        row.resist = (row.resist or 0) + N(params.resist)
+    end
+    if activity == "incoming" then
+        local attacker = eventText(params.sourceName) or resourceKey(params.source) or "unknown"
+        local row = journalRow(j.incomingByAttacker, attacker, 48)
+        row.events, row.amount = row.events + 1, row.amount + amount
+        addTagRows(j.incomingTargetEffects, params.targetTags, amount)
+        addTagRows(j.incomingSourceEffects, params.sourceTags, amount)
+    else
+        addTagRows(j.outgoingTargetEffects, params.targetTags, amount)
+        addTagRows(j.outgoingSourceEffects, params.sourceTags, amount)
+    end
+end
+
+local function recordHealingJournal(kind, params, amount, effective, overheal, known)
+    local map = (kind == "receivedHeal") and AOUA.Session.journal.receivedHealByAbility
+        or AOUA.Session.journal.outgoingHealByAbility
+    local row = journalRow(map, abilityLabel(params), 64)
+    row.events, row.amount = row.events + 1, row.amount + amount
+    row.effective = (row.effective or 0) + (effective or 0)
+    row.overheal = (row.overheal or 0) + (overheal or 0)
+    row.wound = (row.wound or 0) + N(params.resisted)
+    row.runeWound = (row.runeWound or 0) + N(params.runeResisted)
+    row.absorbed = (row.absorbed or 0) + N(params.absorbed)
+    row.lifeSteal = (row.lifeSteal or 0) + (params.isLifeSteal and 1 or 0)
+    row.crits = (row.crits or 0) + (params.isCritical and 1 or 0)
+    local lethality = tonumber(params.lethality)
+    if lethality ~= nil then
+        row.lethalitySum = (row.lethalitySum or 0) + lethality
+        row.lethalitySamples = (row.lethalitySamples or 0) + 1
+    end
+    if known then row.known = (row.known or 0) + 1 else row.unknown = (row.unknown or 0) + 1 end
+end
+
+local function isLocalObject(id)
+    if not id or not avatar or type(avatar.GetId) ~= "function" then return false end
+    local ok, playerId = pcall(avatar.GetId)
+    return ok and id == playerId
+end
+
+local function recordHealing(kind, params, amount)
+    local b = AOUA.Session[kind]
+    if amount > 0 then addEvent(b, amount, params) end
+    local reported = tonumber(params.overload)
+    local resisted, runeResisted, absorbed = math.max(0, N(params.resisted)),
+        math.max(0, N(params.runeResisted)), math.max(0, N(params.absorbed))
+    b.healResisted = b.healResisted + resisted
+    b.runeResisted = b.runeResisted + runeResisted
+    b.healAbsorbed = b.healAbsorbed + absorbed
+    local reportedLoss = resisted + runeResisted + absorbed
+    local effective, overheal, method
+    if reported ~= nil then
+        overheal = math.max(0, math.min(amount, reported))
+        effective = math.max(0, amount - overheal - reportedLoss)
+        method = "reported"
+    elseif amount > 0 then
+        local hp, maxHp, real = safeHealth(params.unitId)
+        local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
+        local transition = params.unitId and AOUA.HealthTransitions[params.unitId] or nil
+        local gained
+        if transition and transition.direction == 1 and transition.delta and transition.delta > 0 then
+            gained = transition.delta
+        elseif hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
+            gained = math.max(0, hp - previous.value)
+        end
+        if gained ~= nil then
+            local afterLoss = math.max(0, amount - reportedLoss)
+            effective, overheal, method = math.min(afterLoss, gained), math.max(0, afterLoss - gained), "hp-estimate"
+        end
+    end
+    if effective ~= nil then
+        b.effective, b.overheal = b.effective + effective, b.overheal + overheal
+        if method == "reported" then b.hpMeasured = b.hpMeasured + 1 else b.hpEstimated = b.hpEstimated + 1 end
+        if effective > 0 then recordHealthPhase(kind, params, effective, method) end
+    elseif amount > 0 then
+        b.hpUnknown = b.hpUnknown + 1
+        AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
+    end
+    if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
+    recordHealingJournal(kind, params, amount, effective, overheal, effective ~= nil)
+end
+
 function AOUA.OnHit(combatant, mode, params, determination)
     if type(params) ~= "table" then return end
     ensureSession()
-
     local kind
     if enumMode then
         if mode == enumMode.Dps then kind = "damage"
@@ -281,26 +467,20 @@ function AOUA.OnHit(combatant, mode, params, determination)
         elseif mode == enumMode.IHps then kind = "receivedHeal" end
     end
     if not kind then return end
+    -- Raw target-filtered API events collect personal incoming damage/healing.
+    if kind == "incoming" or kind == "receivedHeal" then return end
 
-    -- The data pipeline supplies the resolved combatant; keep analytics personal.
     if not combatant or not combatant.ID or not avatar or not avatar.GetId then return end
     local okId, playerId = pcall(avatar.GetId)
     if not okId or combatant.ID ~= playerId then return end
 
-    local amount
-    if kind == "healing" or kind == "receivedHeal" then
-        amount = N(params.heal or params.amount)
-    else
-        amount = N(params.amount)
-    end
+    local amount = (kind == "healing") and N(params.heal or params.amount) or N(params.amount)
     if amount <= 0 then return end
-
     local b = AOUA.Session[kind]
     addEvent(b, amount, params)
 
     local rawDetermination = determination or params.determination
     if kind == "damage" or kind == "healing" then
-        -- DD builds Resolve from outgoing damage; healers build it from outgoing heals.
         addDetermination(rawDetermination, kind)
         local dv = tonumber(rawDetermination)
         if dv ~= nil and dv > 0 then
@@ -308,77 +488,52 @@ function AOUA.OnHit(combatant, mode, params, determination)
             b.determinationSamples = b.determinationSamples + 1
         end
     end
-
     if kind == "damage" then
         recordHealthPhase(kind, params, amount, "estimated")
-    elseif kind == "healing" or kind == "receivedHeal" then
-        local reported = tonumber(params.overload)
-        local resisted = math.max(0, N(params.resisted))
-        local runeResisted = math.max(0, N(params.runeResisted))
-        local absorbed = math.max(0, N(params.absorbed))
-        b.healResisted = b.healResisted + resisted
-        b.runeResisted = b.runeResisted + runeResisted
-        b.healAbsorbed = b.healAbsorbed + absorbed
-        local reportedLoss = resisted + runeResisted + absorbed
-        local effective, overheal, method
-        if reported ~= nil then
-            overheal = math.max(0, math.min(amount, reported))
-            effective = math.max(0, amount - overheal - reportedLoss)
-            method = "reported"
-        else
-            -- A post-heal HP read alone cannot reveal overheal. Estimate only
-            -- when a previous real HP snapshot for this recipient is available.
-            local hp, maxHp, real = safeHealth(params.unitId)
-            local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
-            local transition = params.unitId and AOUA.HealthTransitions[params.unitId] or nil
-            local gained
-            if transition and transition.direction == 1 and transition.delta and transition.delta > 0 then
-                -- Exact healthDelta may arrive before the healing callback.
-                gained = transition.delta
-            elseif hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
-                gained = math.max(0, hp - previous.value)
-            end
-            if gained ~= nil then
-                local afterLoss = math.max(0, amount - reportedLoss)
-                effective = math.min(afterLoss, gained)
-                overheal = math.max(0, afterLoss - effective)
-                method = "hp-estimate"
-            end
-        end
-        if effective ~= nil then
-            b.effective = b.effective + effective
-            b.overheal = b.overheal + overheal
-            if method == "reported" then b.hpMeasured = b.hpMeasured + 1
-            else b.hpEstimated = b.hpEstimated + 1 end
-            -- Phase attribution must use the HP actually restored, never the nominal heal.
-            recordHealthPhase(kind, params, effective, method)
-        else
-            b.hpUnknown = b.hpUnknown + 1
-            -- Without effective healing, pre-heal target HP cannot be reconstructed safely.
-            AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
-        end
-        if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
-    elseif kind == "incoming" then
-        local d = AOUA.Session.defense
-        d.events = d.events + 1
-        d.amount = d.amount + amount
-        d.shieldBlock = d.shieldBlock + N(params.shieldBlock)
-        d.parry = d.parry + N(params.parry)
-        d.resist = d.resist + N(params.resist)
-        d.barrier = d.barrier + N(params.barrier)
-        d.absorb = d.absorb + N(params.absorb)
-        d.runesAbsorb = d.runesAbsorb + N(params.runesAbsorb)
-        d.toMount = d.toMount + N(params.toMount)
-        d.multipliersAbsorb = d.multipliersAbsorb + N(params.multipliersAbsorb)
-        if params.overallAbsorbedDamage ~= nil then
-            d.overallAbsorbed = d.overallAbsorbed + N(params.overallAbsorbedDamage)
-            d.totalAbsorbedSamples = d.totalAbsorbedSamples + 1
-        end
-        if params.overallPreventedDamage ~= nil then
-            d.overallPrevented = d.overallPrevented + N(params.overallPreventedDamage)
-            d.totalPreventedSamples = d.totalPreventedSamples + 1
-        end
+        recordDamageJournal("outgoing", params, amount)
+    elseif kind == "healing" then
+        recordHealing("healing", params, amount)
     end
+end
+
+
+function AOUA.OnIncomingDamage(params)
+    if type(params) ~= "table" or not isLocalObject(params.target) then return end
+    ensureSession()
+    local amount = math.max(0, N(params.amount))
+    addEvent(AOUA.Session.incoming, amount, params)
+    local d = AOUA.Session.defense
+    d.events, d.amount = d.events + 1, d.amount + amount
+    d.shieldBlock = d.shieldBlock + N(params.shieldBlock)
+    d.parry = d.parry + N(params.parry)
+    d.resist = d.resist + N(params.resist)
+    d.barrier = d.barrier + N(params.barrier)
+    d.absorb = d.absorb + N(params.absorb)
+    d.runesAbsorb = d.runesAbsorb + N(params.runesAbsorb)
+    d.toMount = d.toMount + N(params.toMount)
+    d.multipliersAbsorb = d.multipliersAbsorb + N(params.multipliersAbsorb)
+    if params.overallAbsorbedDamage ~= nil then
+        d.overallAbsorbed = d.overallAbsorbed + N(params.overallAbsorbedDamage)
+        d.totalAbsorbedSamples = d.totalAbsorbedSamples + 1
+    end
+    if params.overallPreventedDamage ~= nil then
+        d.overallPrevented = d.overallPrevented + N(params.overallPreventedDamage)
+        d.totalPreventedSamples = d.totalPreventedSamples + 1
+    end
+    if amount <= 0 then
+        d.zeroAmountEvents = d.zeroAmountEvents + 1
+        local prevented = N(params.overallAbsorbedDamage) + N(params.overallPreventedDamage)
+            + N(params.shieldBlock) + N(params.parry) + N(params.resist)
+            + N(params.barrier) + N(params.absorb) + N(params.runesAbsorb)
+        if prevented > 0 then d.fullyPreventedEvents = d.fullyPreventedEvents + 1 end
+    end
+    recordDamageJournal("incoming", params, amount)
+end
+
+function AOUA.OnReceivedHeal(params)
+    if type(params) ~= "table" or not isLocalObject(params.unitId) then return end
+    ensureSession()
+    recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)))
 end
 
 local function fmt(v)
@@ -438,8 +593,69 @@ local function defenseReport()
         "\nAPI totals: absorbed=" .. fmt(d.overallAbsorbed) ..
         " (" .. fmt(d.totalAbsorbedSamples) .. " samples), prevented=" ..
         fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)" ..
+        "\nZero-amount events=" .. fmt(d.zeroAmountEvents) ..
+        ", fully prevented/absorbed=" .. fmt(d.fullyPreventedEvents) ..
         "\nShield pool change (not necessarily damage absorbed): loss=" .. fmt(d.shieldPoolLoss) ..
         ", gain=" .. fmt(d.shieldPoolGain) .. ", samples=" .. fmt(d.shieldPoolSamples)
+end
+
+
+local function topJournalRows(title, map, field, formatter, limit)
+    local rows = {}
+    for key, value in pairs(map or {}) do
+        if type(value) == "table" then rows[#rows + 1] = { key = key, row = value } end
+    end
+    table.sort(rows, function(x, y) return N(x.row[field]) > N(y.row[field]) end)
+    local out = { title .. ":" }
+    if #rows == 0 then out[#out + 1] = "  no samples"
+    else
+        for i = 1, math.min(limit or 4, #rows) do
+            out[#out + 1] = "  " .. formatter(rows[i].key, rows[i].row)
+        end
+    end
+    return table.concat(out, "\n")
+end
+
+local function journalReport()
+    local j, d = AOUA.Session.journal, AOUA.Session.defense
+    local out = {
+        "Combat API event journal (local player):",
+        "Incoming: events=" .. fmt(d.events) .. ", damage=" .. fmt(d.amount) ..
+            ", zero amount=" .. fmt(d.zeroAmountEvents) ..
+            ", fully prevented/absorbed=" .. fmt(d.fullyPreventedEvents)
+    }
+    out[#out + 1] = topJournalRows("Incoming damage by source type", j.incomingByType, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
+            " API absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented) ..
+            " runes=" .. fmt(x.runesAbsorb)
+    end, 5)
+    out[#out + 1] = topJournalRows("Incoming abilities", j.incomingByAbility, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " amount=" .. fmt(x.amount) ..
+            " block/parry/resist=" .. fmt(x.block) .. "/" .. fmt(x.parry) .. "/" .. fmt(x.resist) ..
+            " rune=" .. fmt(x.runesAbsorb)
+    end, 5)
+    out[#out + 1] = topJournalRows("Incoming attackers", j.incomingByAttacker, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount)
+    end, 4)
+    out[#out + 1] = topJournalRows("Effects on you during incoming hits (correlation only)", j.incomingTargetEffects, "amount", function(k, x)
+        return k .. " hits=" .. fmt(x.events) .. " amount-during-effect=" .. fmt(x.amount) ..
+            " helpful/harmful=" .. fmt(x.helpful) .. "/" .. fmt(x.harmful)
+    end, 5)
+    out[#out + 1] = topJournalRows("Attacker effects during incoming hits (correlation only)", j.incomingSourceEffects, "amount", function(k, x)
+        return k .. " hits=" .. fmt(x.events) .. " damage-during-effect=" .. fmt(x.amount)
+    end, 4)
+    out[#out + 1] = topJournalRows("Outgoing abilities", j.outgoingByAbility, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
+            " crits=" .. fmt(x.crits) .. " target absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented)
+    end, 4)
+    out[#out + 1] = topJournalRows("Received healing by ability", j.receivedHealByAbility, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
+            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
+            " wound/rune/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
+            " lifeSteal=" .. fmt(x.lifeSteal) .. " unknown=" .. fmt(x.unknown)
+    end, 5)
+    out[#out + 1] = "Effect tags are hit-time snapshots; exact absorbed damage is not attributed to individual tags."
+    return table.concat(out, "\n")
 end
 
 local function determinationReport()
@@ -533,6 +749,9 @@ function AOUA.OnSlash(input)
     end
     if cmd == "defstat" then
         return true, defenseReport()
+    end
+    if cmd == "events" or cmd == "journal" then
+        return true, journalReport()
     end
     if cmd == "stats" then
         return true, determinationReport() ..
