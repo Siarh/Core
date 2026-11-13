@@ -161,3 +161,11 @@ DPScope build28 — локальный AI через Ollama / Qwen 3.5
 - Добавлена инструкция tools/README_ollama_ai.txt и включена в архив.
 - Ограничение не изменилось: игровой Lua-аддон не вызывает локальный HTTP/Python напрямую. Внешний разбор запускается вручную; /aou ai on/off управляет только встроенным советником.
 - Первичная загрузка модели Ollama требует интернета; запросы после загрузки направляются на localhost.
+
+
+Qwen model-tag selection fix:
+- The generic default name qwen3.5 now resolves to an installed concrete Ollama tag.
+- If qwen3.5:9b is installed, it is selected by default as the lower-resource option; if absent, the available qwen3.5 variant is selected.
+- An explicit --model qwen3.5:27b continues to select the larger model.
+- Model availability is checked before both --check and generation, and the resolved model name is printed.
+- Added tests for automatic 9B selection, fallback to an installed 27B-only model, and explicit 27B selection.
