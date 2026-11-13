@@ -8,8 +8,8 @@ import aou_analyze
 class FormulaTests(unittest.TestCase):
     def test_saved_record_analyzer_resolve_default_matches_formula_engine(self):
         record = {"M": 0, "R": 1000, "U": 0, "L": 0, "pool": 10, "thp": 100}
-        self.assertAlmostEqual(aou_analyze.model(record), 1.015)
-        self.assertAlmostEqual(aou_analyze.model(record, 0.015), 1.15)
+        self.assertAlmostEqual(aou_analyze.model(record), 1.15)
+        self.assertAlmostEqual(aou_analyze.model(record, 0.0015), 1.015)
 
     def test_mastery_positive_and_negative(self):
         self.assertAlmostEqual(calc.mastery_multiplier(1000), 2.0)
@@ -18,6 +18,11 @@ class FormulaTests(unittest.TestCase):
     def test_resolve_coefficient_ambiguity_is_explicit(self):
         self.assertAlmostEqual(calc.resolve_multiplier(1000, 10, 0.0015), 1.015)
         self.assertAlmostEqual(calc.resolve_multiplier(1000, 10, 0.015), 1.15)
+
+    def test_default_resolve_coefficient_matches_literal_user_formula(self):
+        event = {"raw": 1000}
+        out = calc.calculate_event(event, "dps", {"resolve": 1000}, {"level": 1}, 10)
+        self.assertAlmostEqual(out["resolve_multiplier"], 1.15)
 
     def test_resolve_k_boundaries(self):
         self.assertEqual([calc.resolve_k(x) for x in (0, 50, 60, 70, 80)], [0.35, 0.30, 0.18, 0.15, 0.10])
@@ -186,6 +191,38 @@ class FormulaTests(unittest.TestCase):
         ]}
         result = calc.simulate(activity, {"resolve": 1000}, {"level": 1, "max_hp": 100000, "initial_resolve": 80})
         self.assertEqual(result["resolve_final"], 0)
+
+    def test_multi_activity_optimizer_normalizes_each_activity(self):
+        first = {"mode": "dps", "samples": [{"second": 0, "raw": 1000, "target_hp": 0.8}]}
+        second = {"mode": "dps", "samples": [{"second": 0, "raw": 500, "target_hp": 0.2}]}
+        result = calc.optimize_multi_activity(
+            [("single", first, 1), ("raid", second, 2)],
+            {"mastery": 100, "resolve": 100, "ruthlessness": 100, "luck": 0},
+            4,
+            {"level": 1, "max_hp": 100000, "resolve_coefficient": 0.015},
+        )
+        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(sum(result["added_points"].values()), 4)
+        self.assertEqual([x["name"] for x in result["included_activities"]], ["single", "raid"])
+
+    def test_profile_reports_separate_self_and_ally_hps(self):
+        profile = {
+            "settings": {"level": 1, "max_hp": 100000, "resolve_coefficient": 0.015},
+            "stats": {"mastery": 100, "resolve": 100, "ruthlessness": 100, "luck": 0},
+            "fixed_stats": {"mastery": 100, "resolve": 100, "ruthlessness": 100, "luck": 0},
+            "allocation_budget": 2,
+            "activities": {"raid_heal": {"mode": "hps", "samples": [
+                {"second": 0, "raw": 1000, "target_hp": 0.5, "target_max_hp": 10000, "recipient": "self"},
+                {"second": 1, "raw": 1000, "target_hp": 0.2, "target_max_hp": 10000, "recipient": "ally"},
+            ]}},
+        }
+        report = calc.calculate_profile(profile)
+        segments = report["activities"]["raid_heal"]["recipient_segments"]
+        self.assertIn("self", segments)
+        self.assertIn("ally", segments)
+        self.assertEqual(segments["self"]["simulation"]["events"], 1)
+        self.assertEqual(segments["ally"]["simulation"]["events"], 1)
+        self.assertIn("hps", report["cross_activity_recommendations"])
 
 
 if __name__ == "__main__":
