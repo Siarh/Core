@@ -580,9 +580,9 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
 
 def _optimizable_stats(mode: str, cfg: dict[str, Any]) -> list[str]:
     if mode == "dps":
-        keys = ["mastery", "resolve", "ruthlessness", "luck"]
+        keys = ["mastery", "resolve", "ruthlessness"]
     elif mode == "hps":
-        keys = ["mastery", "resolve", "ruthlessness", "luck"]
+        keys = ["mastery", "resolve", "ruthlessness"]
         # Bloodthirst is a separate self-sustain benefit, not effective group HPS.
         if num(cfg.get("healer_bloodthirst_weight", 0.0)) > 0:
             keys.append("bloodthirst")
@@ -807,6 +807,7 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "character": {
             "level_multiplier": level_multiplier(cfg.get("level", 1)),
             "crit_chance_percent": crit_chance(stats.get("luck", 0)) * 100.0,
+            "luck_policy": "fixed input stat; affects expected critical damage but is not part of the in-game M/R/U point allocation",
             "ruthlessness_m": ruthlessness_m(stats.get("ruthlessness", 0)),
             "bloodthirst_fraction": bloodthirst_fraction(stats.get("bloodthirst", 0)),
             "will": will_result(stats.get("will", 0)),
