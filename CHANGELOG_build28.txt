@@ -175,3 +175,10 @@ Qwen 3.5 model default preference:
 - Changed the desktop AI assistant default from the generic family selector to qwen3.5:27b, matching the requested local setup.
 - qwen3.5:9b remains available explicitly via --model qwen3.5:9b or OLLAMA_MODEL.
 - Added a regression test asserting the default model constant.
+
+
+Build28 maintenance fixes
+--------------------------
+- Fixed the Russian/English OptSchA/OptSchE/OptSchN/OptSchL resource files: they were stored as UTF-16 data while the addon localization resources are UTF-8. This caused the mojibake visible in the bottom school-statistics block.
+- Added a regression test that rejects UTF-16 BOM/NUL bytes in the Russian school-label resources.
+- /aou eventfile is documented as the single AOUCSV export workflow for screenshot/OCR capture; it does not claim unsupported direct disk writes by the game client.
