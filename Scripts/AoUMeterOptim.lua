@@ -1245,7 +1245,12 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
 	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
 	-- at most once per 4 calls unless the stats themselves changed
-	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), math.floor(Optim.TargetCaution * 100), math.floor(targetCautConf), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
+	local selfSeg, allySeg = o.self or {}, o.ally or {}
+	local selfHp = (selfSeg.amount or 0) > 0 and (selfSeg.hpAmount or 0) / selfSeg.amount or 0
+	local allyHp = (allySeg.amount or 0) > 0 and (allySeg.hpAmount or 0) / allySeg.amount or 0
+	local selfPool = (selfSeg.poolWeight or 0) > 0 and (selfSeg.poolAmount or 0) / selfSeg.poolWeight or 0
+	local allyPool = (allySeg.poolWeight or 0) > 0 and (allySeg.poolAmount or 0) / allySeg.poolWeight or 0
+	local dynKey = table.concat({ math.floor(pool / 3), math.floor(curvePool[1] / 3), math.floor(curvePool[2] / 3), math.floor(curvePool[3] / 3), math.floor(curvePool[4] / 3), math.floor(h * 20), math.floor(selfHp * 20), math.floor(allyHp * 20), math.floor(selfPool / 3), math.floor(allyPool / 3), math.floor(Optim.TargetCaution * 100), math.floor(targetCautConf), lg(out), lg(inc), lg(hpMax), math.floor(phi * 10) }, "|")
 	local memo = Optim.Memo
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
