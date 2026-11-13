@@ -282,7 +282,7 @@ class FormulaTests(unittest.TestCase):
         profile = event_import.build_profile([outgoing, incoming], 8, 0.015)
         tank = profile["activities"]["tank_fight_9"]
         self.assertEqual(tank["mode"], "tank")
-        self.assertAlmostEqual(profile["stats"]["resistances"]["elements"], (900 + 100 + 200) * 10 / (900 + 100))
+        self.assertAlmostEqual(profile["stats"]["resistances"]["elements"], (900 / 0.8 + 100 + 200) * 10 / (900 / 0.8 + 100))
         self.assertEqual(tank["samples"][0]["rune_absorbed"], 100)
         self.assertEqual(tank["samples"][0]["outgoing_damage"], 10000)
         report = calc.calculate_profile(profile)
