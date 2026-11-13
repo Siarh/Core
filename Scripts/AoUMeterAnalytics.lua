@@ -852,7 +852,7 @@ local function journalReport()
             " crits=" .. fmt(x.crits) .. " target absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented)
     end, 4)
     out[#out + 1] = topJournalRows("Received healing by ability", j.receivedHealByAbility, "amount", function(k, x)
-        return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
+        return k .. " n=" .. fmt(x.events) .. " heal-field/applied/overheal=" ..
             fmt(x.amount) .. "/" .. fmt(x.effective) .. "/n/a" ..
             " overload/wound/rune/absorbed=" .. fmt(x.overload) .. "/" ..
             fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
@@ -861,7 +861,7 @@ local function journalReport()
             " (n=" .. fmt(x.lethalitySamples) .. ") unknown=" .. fmt(x.unknown)
     end, 5)
     out[#out + 1] = topJournalRows("Outgoing healing by ability", j.outgoingHealByAbility, "amount", function(k, x)
-        return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
+        return k .. " n=" .. fmt(x.events) .. " heal-field/applied/overheal=" ..
             fmt(x.amount) .. "/" .. fmt(x.effective) .. "/n/a" ..
             " overload/wounds/runes/absorbed=" .. fmt(x.overload) .. "/" ..
             fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed)
