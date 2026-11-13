@@ -169,3 +169,9 @@ Qwen model-tag selection fix:
 - An explicit --model qwen3.5:27b continues to select the larger model.
 - Model availability is checked before both --check and generation, and the resolved model name is printed.
 - Added tests for automatic 9B selection, fallback to an installed 27B-only model, and explicit 27B selection.
+
+
+Qwen 3.5 model default preference:
+- Changed the desktop AI assistant default from the generic family selector to qwen3.5:27b, matching the requested local setup.
+- qwen3.5:9b remains available explicitly via --model qwen3.5:9b or OLLAMA_MODEL.
+- Added a regression test asserting the default model constant.
