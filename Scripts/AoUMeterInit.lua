@@ -23,7 +23,8 @@ onMyEvent["EVENT_UNKNOWN_SLASH_COMMAND"] = function(params)
                         return
                 end
                 if handled then
-                        message(response)
+                        if type(sayLong) == "function" then sayLong(response)
+                        else message(response) end
                         return
                 end
         end
