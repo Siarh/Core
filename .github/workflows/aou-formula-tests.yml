@@ -38,7 +38,8 @@ jobs:
           luac -p Scripts/AoUMeterData.lua
           luac -p tools/test_aou_analytics_journal.lua
       - name: Run analytics journal regression tests
-        run: lua tools/test_aou_analytics_journal.lua
+        working-directory: tools
+        run: lua test_aou_analytics_journal.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
