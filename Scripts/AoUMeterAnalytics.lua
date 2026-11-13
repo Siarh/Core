@@ -1183,7 +1183,7 @@ function AOUA.OnSlash(input)
         local count = tonumber(string.match(rest, "^(%d+)"))
         local ok = AOUA.EventExport(count)
         if cmd == "eventfile" then
-            return true, ok and "DPScope event-file export is ready: capture all AOUCSV lines/screenshots, OCR them into one UTF-8 text file, then run the local OCR importer." or "No event rows to export."
+            return true, ok and "DPScope event-file export is ready: capture all AOUCSV lines/screenshots, OCR them into one UTF-8 text file, then import the text in AoU_ChatLog_To_CSV.html." or "No event rows to export."
         end
         return true, ok and "Event export sent as AOUCSV chunks; copy all AOUCSV lines and convert with AoU_ChatLog_To_CSV.html." or "No event rows to export."
     end
