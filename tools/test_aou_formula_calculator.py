@@ -275,7 +275,7 @@ class FormulaTests(unittest.TestCase):
         incoming = dict(common, kind="incoming", observed_amount="900", resist="200",
                         runes_absorb="100", element="ENUM_SubElement_FIRE",
                         ability="Incoming strike", critical="")
-        outgoing = dict(common, kind="damage", observed_amount="10000",
+        outgoing = dict(common, kind="damage", observed_amount="100",
                         target_hp_before="75", hp_quality="estimated_pre", target_max_hp="100000",
                         resolve_pool="50", runes_absorb="0", element="PHYSICAL",
                         critical="0", ability="Outgoing strike")
@@ -284,7 +284,7 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(tank["mode"], "tank")
         self.assertAlmostEqual(profile["stats"]["resistances"]["elements"], (900 / 0.8 + 100 + 200) * 10 / (900 / 0.8 + 100))
         self.assertEqual(tank["samples"][0]["rune_absorbed"], 100)
-        self.assertEqual(tank["samples"][0]["outgoing_damage"], 10000)
+        self.assertEqual(tank["samples"][0]["outgoing_damage"], 100)
         report = calc.calculate_profile(profile)
         self.assertIn("tank", report["cross_activity_recommendations"])
         self.assertIn("elements", report["cross_activity_recommendations"]["tank"]["added_points"])
