@@ -9,6 +9,9 @@ on:
       - "tools/test_aou_formula_calculator.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
+      - "Scripts/AoUMeterAnalytics.lua"
+      - "Scripts/AoUMeterEvents.lua"
+      - "Scripts/AoUMeterInit.lua"
       - ".github/workflows/aou-formula-tests.yml"
   workflow_dispatch:
 
@@ -27,6 +30,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.4
           luac -p Scripts/AoUMeterOptim.lua
+          luac -p Scripts/AoUMeterAnalytics.lua
+          luac -p Scripts/AoUMeterEvents.lua
+          luac -p Scripts/AoUMeterInit.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
