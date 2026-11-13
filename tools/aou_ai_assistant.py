@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Optional OpenAI-powered DPScope combat review.
+"""Local Ollama-powered DPScope combat review.
 
 This desktop companion is intentionally separate from the in-game Lua addon:
 Allods' addon runtime has no confirmed outbound HTTP client. It sends only a
@@ -155,77 +155,147 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
     return payload
 
 
-def call_openai(payload: dict[str, Any], api_key: str, model: str, timeout: int = 90) -> str:
-    request_body = {
-        "model": model,
-        "instructions": SYSTEM_INSTRUCTIONS,
-        "input": "Проанализируй этот компактный отчёт DPScope. Не добавляй сведения вне данных.\n\n"
-                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-        "max_output_tokens": 1800,
-        "store": False,
-    }
-    data = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+def normalize_ollama_url(value: str) -> str:
+    """Normalize OLLAMA_HOST values such as localhost:11434 or /api URLs."""
+    base = (value or "http://localhost:11434").strip().rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        base = "http://" + base
+    if base.endswith("/api"):
+        base = base[:-4]
+    return base
+
+
+def _ollama_json(url: str, body: dict[str, Any] | None = None, timeout: int = 30) -> dict[str, Any]:
+    data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
+    headers = {"Accept": "application/json"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
     request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
-        data=data,
-        headers={
-            "Authorization": "Bearer " + api_key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
+        url, data=data, headers=headers, method="POST" if data is not None else "GET"
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            response_data = json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:2000]
-        raise RuntimeError(f"OpenAI API вернул HTTP {exc.code}: {detail}") from None
+        if exc.code == 404:
+            raise RuntimeError(
+                "Ollama вернул HTTP 404: модель или endpoint не найдены. "
+                "Проверь имя модели через ollama list и при необходимости выполни "
+                f"ollama pull. {detail}"
+            ) from None
+        raise RuntimeError(f"Ollama вернул HTTP {exc.code}: {detail}") from None
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"Не удалось подключиться к OpenAI API: {exc.reason}") from None
+        raise RuntimeError(
+            f"Не удалось подключиться к Ollama по адресу {url}. Убедись, что Ollama "
+            f"запущена и локальный сервер доступен. Подробности: {exc.reason}"
+        ) from None
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"Ollama вернула некорректный JSON: {exc}") from None
 
-    chunks = []
-    for item in response_data.get("output", []) or []:
-        if item.get("type") != "message":
-            continue
-        for part in item.get("content", []) or []:
-            if part.get("type") == "output_text" and part.get("text"):
-                chunks.append(part["text"])
-    result = "\n".join(chunks).strip()
+
+def list_ollama_models(base_url: str, timeout: int = 10) -> list[str]:
+    data = _ollama_json(normalize_ollama_url(base_url) + "/api/tags", timeout=timeout)
+    return [
+        str(item.get("name") or item.get("model"))
+        for item in data.get("models", [])
+        if item.get("name") or item.get("model")
+    ]
+
+
+def _model_name_matches(installed: str, requested: str) -> bool:
+    def normalize(name: str) -> str:
+        return name[:-7] if name.endswith(":latest") else name
+    return normalize(installed.strip()) == normalize(requested.strip())
+
+
+def check_ollama(base_url: str, model: str, timeout: int = 10) -> list[str]:
+    models = list_ollama_models(base_url, timeout)
+    if not any(_model_name_matches(item, model) for item in models):
+        installed = ", ".join(models) if models else "(список пуст)"
+        raise RuntimeError(
+            f"Модель {model} не найдена в локальном Ollama. Установленные модели: {installed}. "
+            f"Выполни ollama pull {model} или укажи установленную модель через --model."
+        )
+    return models
+
+
+def call_ollama(
+    payload: dict[str, Any], model: str,
+    base_url: str = "http://localhost:11434", timeout: int = 300
+) -> str:
+    """Send the compact report to the local Ollama /api/chat endpoint."""
+    request_body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+            {
+                "role": "user",
+                "content": "Проанализируй этот компактный отчёт DPScope. Не добавляй сведения вне данных.\n\n"
+                           + json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            },
+        ],
+        "stream": False,
+    }
+    response_data = _ollama_json(
+        normalize_ollama_url(base_url) + "/api/chat", request_body, timeout=timeout
+    )
+    result = ((response_data.get("message") or {}).get("content") or "").strip()
     if not result:
-        raise RuntimeError("API вернул ответ без output_text.")
+        raise RuntimeError("Ollama вернула пустой message.content. Проверь модель и повтори запрос.")
     return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Получить AI-разбор DPScope через OpenAI Responses API."
+        description="Локальный AI-разбор DPScope через Ollama (без OpenAI API и API-ключа)."
     )
     parser.add_argument("--profile", type=Path, default=Path("aou_event_profile.json"))
     parser.add_argument("--report", type=Path, default=Path("aou_report.json"))
     parser.add_argument("--out", type=Path, default=Path("aou_ai_advice.md"))
-    parser.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.5"))
-    parser.add_argument("--dry-run", action="store_true", help="сохранить компактный JSON без отправки в API")
+    parser.add_argument(
+        "--model", default=os.environ.get("OLLAMA_MODEL", "qwen3.5"),
+        help="имя локальной модели Ollama; по умолчанию qwen3.5"
+    )
+    parser.add_argument(
+        "--ollama-url", default=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+        help="локальный адрес Ollama; по умолчанию http://localhost:11434"
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=300,
+        help="тайм-аут генерации в секундах (по умолчанию 300)"
+    )
+    parser.add_argument("--check", action="store_true", help="проверить Ollama и наличие выбранной модели")
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="сохранить компактный JSON без обращения к Ollama"
+    )
     args = parser.parse_args()
 
     try:
+        if args.check:
+            models = check_ollama(args.ollama_url, args.model)
+            print("Ollama доступна. Установленные модели: " + ", ".join(models))
+            print(f"Выбранная модель найдена: {args.model}")
+            return 0
+
         profile = json.loads(args.profile.read_text(encoding="utf-8"))
         report = json.loads(args.report.read_text(encoding="utf-8"))
         payload = build_ai_payload(profile, report)
         if args.dry_run:
-            args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            args.out.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
             print(f"Сводка без отправки сохранена: {args.out}")
             return 0
 
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError(
-                "Не задан OPENAI_API_KEY. Добавь API-ключ в переменные окружения Windows; "
-                "не вставляй его в Lua-файлы, команды чата или репозиторий."
-            )
-        print("Отправляю в OpenAI только компактную сводку профиля и расчёта (без сырых строк событий и ID).")
-        answer = call_openai(payload, api_key, args.model)
+        print(
+            f"Отправляю компактную сводку локально в Ollama ({args.model}); "
+            "внешний API и ключ не используются."
+        )
+        answer = call_ollama(payload, args.model, args.ollama_url, args.timeout)
         args.out.write_text(answer + "\n", encoding="utf-8")
-        print(f"AI-разбор сохранён: {args.out} (model={args.model})")
+        print(f"Локальный AI-разбор сохранён: {args.out} (model={args.model})")
         return 0
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         print(f"Ошибка AI-помощника: {exc}", file=sys.stderr)
