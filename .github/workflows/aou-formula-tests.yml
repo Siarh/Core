@@ -9,8 +9,12 @@ on:
       - "tools/aou_event_history_to_profile.py"
       - "tools/test_aou_formula_calculator.py"
       - "tools/test_aou_analytics_journal.lua"
+      - "tools/test_aou_ai.lua"
+      - "tools/aou_ai_assistant.py"
+      - "tools/test_aou_ai_assistant.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
+      - "Scripts/AoUMeterAI.lua"
       - "Scripts/AoUMeterAnalytics.lua"
       - "Scripts/AoUMeterEvents.lua"
       - "Scripts/AoUMeterInit.lua"
@@ -43,6 +47,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.4
           luac -p Scripts/AoUMeterOptim.lua
+          luac -p Scripts/AoUMeterAI.lua
           luac -p Scripts/AoUMeterAnalytics.lua
           luac -p Scripts/AoUMeterEvents.lua
           luac -p Scripts/AoUMeterInit.lua
@@ -50,11 +55,13 @@ jobs:
           luac -p tools/test_aou_analytics_journal.lua
       - name: Run analytics journal regression tests
         working-directory: tools
-        run: lua test_aou_analytics_journal.lua
+        run: |
+          lua test_aou_analytics_journal.lua
+          lua test_aou_ai.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
-          python -m unittest -v test_aou_formula_calculator.py
+          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py
           python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
 
 
@@ -73,7 +80,7 @@ jobs:
           cp -a "AddonDesc.(UIAddon).xdb" AoUMeterSettings.txt AoU_ChatLog_To_CSV.html \
             README_Optimizer.txt CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
           cp -a tools/aou_formula_calculator.py tools/aou_event_history_to_profile.py \
-            tools/aou_profile_template.json tools/README_formula_calculator.txt package/DPScope/tools/
+            tools/aou_profile_template.json tools/aou_ai_assistant.py tools/README_formula_calculator.txt package/DPScope/tools/
           cd package
           zip -qr ../DPScope-build28.zip DPScope
           cd ..
