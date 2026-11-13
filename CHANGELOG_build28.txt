@@ -148,3 +148,16 @@ AI advisor and optional desktop LLM integration
 - The Allods client has no confirmed outbound HTTP API, so the game does not call the remote LLM directly. The in-game toggle controls the local advisor; it does not stop a separately launched desktop Python process.
 - Added Lua and Python regression tests for the AI toggle, sample-quality scoring, recipient-specific HPS observations and privacy-conscious payload compaction.
 
+
+
+DPScope build28 — локальный AI через Ollama / Qwen 3.5
+-----------------------------------------------------
+- Внешний desktop-помощник tools/aou_ai_assistant.py переведён на локальный Ollama API /api/chat.
+- Модель по умолчанию: qwen3.5; конкретную установленную версию можно выбрать через --model или OLLAMA_MODEL.
+- Добавлена проверка сервера и наличия модели через --check; тайм-аут генерации настраивается через --timeout.
+- OpenAI API, OPENAI_API_KEY и другие облачные ключи для этого помощника больше не требуются.
+- В модель отправляется прежняя компактная сводка без сырых строк боя, названий способностей и ID игроков/целей.
+- Добавлены Python-тесты локального запроса, проверки модели, адреса Ollama и отсутствия Authorization API key.
+- Добавлена инструкция tools/README_ollama_ai.txt и включена в архив.
+- Ограничение не изменилось: игровой Lua-аддон не вызывает локальный HTTP/Python напрямую. Внешний разбор запускается вручную; /aou ai on/off управляет только встроенным советником.
+- Первичная загрузка модели Ollama требует интернета; запросы после загрузки направляются на localhost.
