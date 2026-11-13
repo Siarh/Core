@@ -120,3 +120,21 @@ Latest combat-log regression fixes:
 - Treats the EVENT_HEALING_RECEIVED heal value as the reported applied amount. Overload, resisted, runeResisted and absorbed are retained as separate raw modifier counters and are not subtracted from heal; overheal remains explicitly unknown unless a separate API field is confirmed.
 - School labels omit the internal ENUM_SubElement_ prefix.
 - Adds Lua regression tests for single-count healing, received-heal relabelling, non-additive modifier fields and damage-school labelling. CI runs these alongside syntax and formula tests.
+
+
+DPScope build28 — activity optimizer and event-history integration
+--------------------------------------------------------------------
+The following entries supersede earlier prototype notes where they conflict.
+
+- The in-game Resolve default is now 0.015 to match the literal formula provided by the user. Use /aou resolvecoef 0.0015 to compare the 10x-lower interpretation from the explanatory sentence. Both interpretations are explicit; the server coefficient still needs in-game calibration.
+- HPS in-game recommendations now split self-healing and ally-healing, using separately weighted target HP and observed Resolve pool. These are per-recipient mean profiles; the full HPS optimizer also uses the target-HP curve.
+- Raw combat events are now retained separately from legacy /aou rec test records. The bounded history keeps up to 1000 persisted rows; the active-fight buffer holds up to 2000. No existing saved test records are cleared.
+- /aou eventlog reports the event-history state. /aou eventexport [N] exports the most recent rows through AOUCSV chat chunks; AoU_ChatLog_To_CSV.html reconstructs a local CSV file. The addon does not claim arbitrary direct disk writes from the game Lua API.
+- Export rows include outgoing damage/healing, local incoming damage and received healing, event time/fight id, ability/school, available HP confidence, Resolve pool, M/R/U/L/S/W/B/C snapshots, player max HP, and separate defensive fields such as resistance, runes, block, parry, barrier and API totals.
+- tools/aou_event_history_to_profile.py converts CSV to per-fight DPS/HPS/TANK profiles. The offline calculator produces per-activity recommendations and a cross-activity result normalized to each activity's own baseline. HPS profiles split self and ally healing when recipient and target max HP are known.
+- Tank import conservatively reconstructs only events with usable pre-hit HP, separately reported resistance and no positive overlapping block/parry/barrier/absorb/mount components. Rune absorption is replayed separately. Inferred resistance ratings are estimates derived from observed component amounts, not direct API stat snapshots.
+- The tank model uses captured Fortitude/Will/Bloodthirst/Caution snapshots and measured max HP. Unknown class-specific Endurance base coefficients are not fabricated.
+- Resolve pool values from the log are held fixed during imported counterfactual builds because raw pre-stat hit base values are not exposed by the callback; the simulator does not invent a different Resolve trajectory for a hypothetical build.
+- The importer removes known Mastery/Resolve/Ruthlessness/critical multipliers from observed output amounts. Unknown target-side reductions remain part of the sample weight; HPS events that may already be capped are flagged and produce conservative recommendations.
+- Added regression coverage for the CSV importer, self/ally HPS, tank resistance/rune handling, Resolve coefficient selection, bounded event persistence and AOUCSV export.
+- GitHub Actions checks Lua syntax, journal tests, Python formula tests, importer tests, then packages a testable DPScope-build28 ZIP artifact. This CI does not substitute for live client validation.
