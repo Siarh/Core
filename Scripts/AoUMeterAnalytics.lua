@@ -568,8 +568,14 @@ local function movePendingHealAbility(pending, resolvedName)
         oldRow[field] = N(oldRow[field]) - value
         newRow[field] = N(newRow[field]) + value
     end
-    if oldRow.lethalitySum ~= nil then oldRow.lethalitySum = N(oldRow.lethalitySum) - N(pending.lethalitySum) end
-    if oldRow.lethalitySamples ~= nil then oldRow.lethalitySamples = N(oldRow.lethalitySamples) - N(pending.lethalitySamples) end
+    if oldRow.lethalitySum ~= nil then
+        oldRow.lethalitySum = N(oldRow.lethalitySum) - N(pending.lethalitySum)
+        newRow.lethalitySum = N(newRow.lethalitySum) + N(pending.lethalitySum)
+    end
+    if oldRow.lethalitySamples ~= nil then
+        oldRow.lethalitySamples = N(oldRow.lethalitySamples) - N(pending.lethalitySamples)
+        newRow.lethalitySamples = N(newRow.lethalitySamples) + N(pending.lethalitySamples)
+    end
     if oldRow.events <= 0 then map[oldKey] = nil end
 end
 
