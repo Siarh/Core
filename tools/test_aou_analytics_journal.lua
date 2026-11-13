@@ -100,4 +100,65 @@ local astral = AOUA.Session.journal.incomingByElement.ASTRAL
 assert(astral, "ASTRAL damage school row missing")
 expect(astral.amount, 42, "ASTRAL damage amount")
 
+-- Damage multipliers can increase damage. overallPreventedDamage is a signed
+-- net value (multipliersAbsorb + runesAbsorb), so a negative value is valid and
+-- must not be clamped or presented as negative absorption.
+AOUA.OnIncomingDamage({
+    target = 1001,
+    amount = 100,
+    damageSource = "DamageSource_SPELL",
+    ability = "Test amplified incoming hit",
+    overallAbsorbedDamage = 0,
+    overallPreventedDamage = -123,
+    multipliersAbsorb = -150,
+    runesAbsorb = 27
+})
+expect(AOUA.Session.defense.overallPrevented, -123, "signed net prevented total")
+local amplified = AOUA.Session.journal.incomingByAbility["DamageSource_SPELL / Test amplified incoming hit"]
+assert(amplified, "amplified incoming ability row missing")
+expect(amplified.prevented, -123, "signed net prevented ability value")
+expect(amplified.multiplierAbsorb, -150, "negative multiplier component")
+expect(amplified.runesAbsorb, 27, "positive rune component")
+local _, defenseText = AOUA.OnSlash("defstat")
+assert(string.find(defenseText, "net prevented=-123", 1, true), "defense report should label signed net prevention")
+
+-- Outgoing damage uses the same signed target-side modifier semantics.
+AOUA.OnHit(
+    { ID = 1001 },
+    enumMode.Dps,
+    {
+        amount = 100,
+        damageSource = "DamageSource_SPELL",
+        ability = "Test amplified outgoing hit",
+        overallAbsorbedDamage = 0,
+        overallPreventedDamage = -123,
+        multipliersAbsorb = -150,
+        runesAbsorb = 27
+    },
+    nil,
+    { Name = "Test amplified outgoing hit" }
+)
+local outgoingDamage = AOUA.Session.journal.outgoingByAbility["DamageSource_SPELL / Test amplified outgoing hit"]
+assert(outgoingDamage, "amplified outgoing ability row missing")
+expect(outgoingDamage.prevented, -123, "signed outgoing target net prevention")
+local _, eventsText = AOUA.OnSlash("events")
+assert(string.find(eventsText, "target absorbed/net prevented=0/-123", 1, true),
+    "event report should label target-side signed net prevention")
+assert(string.find(eventsText, "Negative net prevented values indicate damage amplification", 1, true),
+    "event report should explain negative net prevention")
+
+-- The detailed journal is per-fight; registration counts survive the reset.
+AOUA.OnEventRegistrationStats(3, 3, 3)
+local beforeResetEvents = AOUA.Session.journal.incomingStats.events
+assert(beforeResetEvents > 0, "expected incoming journal data before fight reset")
+AOUA.OnFightStart()
+expect(AOUA.Session.journal.incomingStats.events, 0, "incoming journal reset at fight start")
+expect(next(AOUA.Session.journal.incomingByAbility), nil, "incoming abilities cleared at fight start")
+expect(next(AOUA.Session.journal.outgoingByAbility), nil, "outgoing abilities cleared at fight start")
+expect(AOUA.Session.rawDiagnostics.incomingCallbacks, 0, "incoming callback counter reset")
+expect(AOUA.Session.rawDiagnostics.healCallbacks, 0, "healing callback counter reset")
+expect(AOUA.Session.rawDiagnostics.damageFilters, 3, "damage target filter count retained")
+expect(AOUA.Session.rawDiagnostics.healFilters, 3, "healing target filter count retained")
+expect(AOUA.Session.rawDiagnostics.healthFilters, 3, "health watch count retained")
+
 print("DPScope analytics journal regression tests passed.")
