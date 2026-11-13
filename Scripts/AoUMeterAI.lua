@@ -202,13 +202,19 @@ function DPScopeAI.BuildLines(context)
     if not DPScopeAI.IsEnabled() then return {} end
     local result = DPScopeAI.Analyze(context)
     DPScopeAI.LastSummary = result.summary
+    -- Keep the in-window AI payload strictly ASCII. The Allods client renders
+    -- localized resource strings safely, while arbitrary runtime UTF-8 text
+    -- cannot be passed through the optimizer value cells without mojibake.
+    local level = (result.confidence == "высокая" and "HIGH")
+        or (result.confidence == "средняя" and "MEDIUM")
+        or "LOW"
     local hpText = string.format("HP %.0f%%", result.hpCoverage * 100)
-    local poolText = string.format("Решимость %.0f%%", result.poolCoverage * 100)
+    local poolText = string.format("Resolve %.0f%%", result.poolCoverage * 100)
     return {
-        { "OptAITitle", "локальный советник", result.confidence, tostring(result.confidenceScore) .. "/100" },
+        { "OptAITitle", "LOCAL", level, tostring(result.confidenceScore) .. "/100" },
         { "OptAIQuality", tostring(result.eventCount), hpText, poolText },
-        { "OptAIInsight", shortText(result.insight, 76), "", "" },
-        { "OptAIFocus", shortText(result.nextStep, 76), "", "" }
+        { "OptAIInsight", "Use /aou ai advice", "", "" },
+        { "OptAIFocus", "Use /aou ai advice", "", "" }
     }
 end
 
