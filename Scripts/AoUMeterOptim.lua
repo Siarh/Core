@@ -1409,7 +1409,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local measuredHealSamples = N((o.self and o.self.preSamples) or 0) + N((o.ally and o.ally.preSamples) or 0)
 		local healingEvents = N((o.self and o.self.events) or 0) + N((o.ally and o.ally.events) or 0)
 		local aiRows = DPScopeAI.BuildLines({
-			mode = heal and "hps" or "dps",
+			mode = (activeMode == enumMode.Def) and "tank" or (heal and "hps" or "dps"),
 			eventCount = o.eventSamples or o.hpSamples or 0,
 			hpSamples = o.hpSamples or 0,
 			poolSamples = o.poolSamples or 0,
@@ -1421,7 +1421,6 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			measuredHealSamples = measuredHealSamples,
 			estimatedHealSamples = math.max(0, healingEvents - measuredHealSamples),
 			incomingPerSecond = inc,
-			hasDefense = haveDef,
 		})
 		for i = 1, #aiRows do tail[#tail + 1] = aiRows[i] end
 	end
