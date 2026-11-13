@@ -15,8 +15,10 @@ http://localhost:11434/api/chat
 
   ollama pull qwen3.5
 
-Если ты используешь конкретный размер модели, например qwen3.5:9b, укажи его
-вместо qwen3.5 во всех командах ниже. Приложение Ollama должно быть запущено.
+Если в Ollama установлено несколько тегов семейства qwen3.5, помощник при
+обычном запуске автоматически выбирает qwen3.5:9b. Если 9b нет, он выберет
+единственный/первый доступный вариант семейства. В твоём случае это qwen3.5:9b.
+Приложение Ollama должно быть запущено.
 
 2. Проверка локального соединения
 ---------------------------------
@@ -24,9 +26,9 @@ http://localhost:11434/api/chat
 
   python aou_ai_assistant.py --check
 
-Для конкретной версии модели:
+Проверка с явным выбором большей модели:
 
-  python aou_ai_assistant.py --check --model qwen3.5:9b
+  python aou_ai_assistant.py --check --model qwen3.5:27b
 
 Проверка обращается к локальному Ollama API и сверяет модель с результатом
 ollama list. При ошибке проверь, что Ollama запущена, и что имя модели указано
@@ -48,9 +50,10 @@ tools выполни:
   python aou_formula_calculator.py aou_event_profile.json --out aou_report.json
   python aou_ai_assistant.py --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
 
-Для модели qwen3.5:9b:
+По умолчанию помощник автоматически выберет qwen3.5:9b, если эта модель установлена.
+Чтобы запустить более крупную qwen3.5:27b:
 
-  python aou_ai_assistant.py --model qwen3.5:9b --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
+  python aou_ai_assistant.py --model qwen3.5:27b --profile aou_event_profile.json --report aou_report.json --out aou_ai_advice.md
 
 Результат будет сохранён в aou_ai_advice.md. Тайм-аут локальной генерации по
 умолчанию 300 секунд; его можно изменить через --timeout 600.
