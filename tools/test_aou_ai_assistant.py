@@ -24,6 +24,16 @@ class AIAssistantTests(unittest.TestCase):
     def test_default_model_is_qwen_27b(self):
         self.assertEqual(ai.DEFAULT_MODEL, "qwen3.5:27b")
 
+    def test_russian_school_locale_files_are_utf8(self):
+        for name in ("OptSchA.txt", "OptSchE.txt", "OptSchN.txt", "OptSchL.txt"):
+            path = __import__("pathlib").Path("../Locales/rus") / name
+            raw = path.read_bytes()
+            self.assertFalse(raw.startswith(b"\\xff\\xfe") or raw.startswith(b"\\xfe\\xff"), name)
+            self.assertNotIn(b"\\x00", raw, name)
+            text = raw.decode("utf-8")
+            self.assertTrue(text.strip(), name)
+
+
 
     def test_compact_payload_omits_raw_event_details(self):
         profile = {
