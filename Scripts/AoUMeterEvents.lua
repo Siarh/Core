@@ -269,13 +269,24 @@ function RetrieveDDEvent(params)
 	end
 end
 
-local function CanCollectRawAnalytics()
+local function CanCollectRawAnalytics(params, personalField, startOnPersonalEvent)
 	local meter = DPSMeterGUI and DPSMeterGUI.DPSMeter
 	if not meter then return false end
-	if not meter.bCollectData and type(meter.ShouldCollectData) == "function" then
-		local ok, shouldCollect = pcall(meter.ShouldCollectData, meter)
-		if ok and shouldCollect == true and type(meter.Start) == "function" then
-			pcall(meter.Start, meter)
+	if not meter.bCollectData then
+		local shouldCollect = false
+		if type(meter.ShouldCollectData) == "function" then
+			local ok, should = pcall(meter.ShouldCollectData, meter)
+			shouldCollect = ok and should == true
+		end
+		local personal = false
+		if startOnPersonalEvent and params and personalField and avatar and avatar.GetId then
+			local ok, id = pcall(avatar.GetId)
+			personal = ok and params[personalField] == id
+		end
+		-- A raw hit on the local avatar is itself proof of combat. Starting here
+		-- prevents the first incoming strike from being dropped before bCollectData.
+		if shouldCollect or (personal and startOnPersonalEvent) or (params and params.lethal) then
+			if type(meter.Start) == "function" then pcall(meter.Start, meter) end
 		end
 	end
 	return meter.bCollectData == true
@@ -286,7 +297,7 @@ function RetrieveDDEventIN(params)
 	--if params.isFall then return end
 	if params.target then RegisterHealthWatch(params.target) end
 
-	if CanCollectRawAnalytics() and AOUA and type(AOUA.OnIncomingDamage) == "function" then
+	if CanCollectRawAnalytics(params, "target", true) and AOUA and type(AOUA.OnIncomingDamage) == "function" then
 		pcall(AOUA.OnIncomingDamage, params)
 	end
 
@@ -312,7 +323,7 @@ function RetrieveHealEventIN(params)
 	if not params then return end
 	if params.unitId then RegisterHealthWatch(params.unitId) end
 
-	if CanCollectRawAnalytics() and AOUA and type(AOUA.OnReceivedHeal) == "function" then
+	if CanCollectRawAnalytics(params, "unitId", false) and AOUA and type(AOUA.OnReceivedHeal) == "function" then
 		pcall(AOUA.OnReceivedHeal, params)
 	end
 
