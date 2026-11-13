@@ -87,7 +87,8 @@ local function freshSession()
             healing = freshDeterminationStats()
         },
         targetHealth = { samples = 0, estimated = 0, unknown = 0, changedEvents = 0 },
-        started = false
+        eventSamples = {}, eventSamplesDropped = 0, elapsedSeconds = 0, fightId = 0,
+        statSnapshot = nil, started = false
     }
 end
 
@@ -142,6 +143,9 @@ local function ensureSession()
         dodgedEvents = 0, missedEvents = 0, otherZeroAmountEvents = 0
     }
     AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
+    AOUA.Session.eventSamples = AOUA.Session.eventSamples or {}
+    AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped or 0
+    AOUA.Session.elapsedSeconds = AOUA.Session.elapsedSeconds or 0
 end
 ensureSession()
 
@@ -150,15 +154,33 @@ function AOUA.OnFightStart()
     ensureSession()
     local previous = AOUA.Session.rawDiagnostics or {}
     AOUA.Session.journal = freshJournal()
+    AOUA.Session.eventSamples = {}
+    AOUA.Session.eventSamplesDropped = 0
+    AOUA.Session.elapsedSeconds = 0
+    AOUA.Session.statSnapshot = nil
+    AOUA.Session.started = true
+    local sequence = 0
+    pcall(function()
+        local section = userMods.GetGlobalConfigSection(common.GetAddonName())
+        sequence = tonumber(section and section.aou_evt_fight_id) or 0
+    end)
+    AOUA.Session.fightId = sequence + 1
     AOUA.PendingReceivedHeal = setmetatable({}, { __mode = "k" })
     AOUA.Session.rawDiagnostics = {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
         healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0,
-        -- Registration counts survive the combat-session reset.
+        -- These are per-target filter counts, not handler totals.
         damageFilters = tonumber(previous.damageFilters) or 0,
         healFilters = tonumber(previous.healFilters) or 0,
         healthFilters = tonumber(previous.healthFilters) or 0
     }
+end
+
+function AOUA.OnFightSecond()
+    ensureSession()
+    if AOUA.Session.started then
+        AOUA.Session.elapsedSeconds = AOUA.Session.elapsedSeconds + 1
+    end
 end
 
 local function safeHealth(id)
@@ -233,7 +255,7 @@ local function recordHealthPhase(kind, params, amount, confidence)
     end
     if value == nil and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
-        return
+        return nil, "unknown", nil
     end
     if (kind == "healing" or kind == "receivedHeal") and not real and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
@@ -278,6 +300,7 @@ local function recordHealthPhase(kind, params, amount, confidence)
             AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
         end
     end
+    return frac, confidence, (real and limit or nil)
 end
 
 -- Health-change events provide the before/after delta directly. They are
@@ -380,6 +403,150 @@ local function abilityLabel(params, fallbackName)
     local id = resourceKey(params.spellId or params.abilityId or params.buffId or params.mapModifierId)
     if name and id then return name .. " [" .. id .. "]" end
     return name or (id and ("id:" .. id)) or "unknown"
+end
+
+local EVENT_HISTORY_LIMIT = 1000
+local EVENT_BUFFER_LIMIT = 2000
+local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C"
+
+local function sampleNumber(value)
+    local n = tonumber(value)
+    if n == nil then return "" end
+    return string.format("%.4f", n)
+end
+
+local function captureStatSnapshot()
+    if AOUA.Session.statSnapshot then return AOUA.Session.statSnapshot end
+    local snapshot = {}
+    if Optim and type(Optim.ReadStats) == "function" then
+        local ok, values = pcall(Optim.ReadStats)
+        if ok and type(values) == "table" then
+            for _, key in ipairs({ "M", "R", "U", "L", "S", "W", "B", "C" }) do
+                local row = values[key]
+                snapshot[key] = row and tonumber(row.total) or nil
+            end
+        end
+    end
+    AOUA.Session.statSnapshot = snapshot
+    return snapshot
+end
+
+local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targetMaxHp, determination, resolvedAbilityName)
+    if not AOUA.Session.started then return end
+    local samples = AOUA.Session.eventSamples
+    if #samples >= EVENT_BUFFER_LIMIT then
+        table.remove(samples, 1)
+        AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped + 1
+    end
+    local targetId = (kind == "damage" or kind == "incoming") and params.target or params.unitId
+    local recipient = ""
+    if kind == "healing" or kind == "receivedHeal" then
+        recipient = isLocalObject(targetId) and "self" or "ally"
+    end
+    local stats = captureStatSnapshot()
+    local ability = eventText(resolvedAbilityName) or abilityLabel(params, nil) or "unknown"
+    local element = eventText(params.sysSubElement or params.subElement or params.element) or ""
+    element = string.gsub(element, "^ENUM_SubElement_", "")
+    local values = {
+        tostring(AOUA.Session.fightId or 0), AOUA.Profile or "pve",
+        tostring(AOUA.Session.elapsedSeconds or 0), kind,
+        sampleNumber(amount), sampleNumber((hpBefore ~= nil) and hpBefore * 100 or nil),
+        hpQuality or "unknown", sampleNumber(targetMaxHp),
+        params.isCritical and "1" or "0", element,
+        eventText(params.damageSource) or "", sampleNumber(params.resist),
+        sampleNumber(params.absorb), sampleNumber(params.runesAbsorb),
+        sampleNumber(params.shieldBlock), sampleNumber(params.parry),
+        sampleNumber(params.barrier), sampleNumber(params.toMount),
+        sampleNumber(params.multipliersAbsorb), sampleNumber(params.overallAbsorbedDamage),
+        sampleNumber(params.overallPreventedDamage), sampleNumber(determination or params.determination),
+        recipient, ability,
+        sampleNumber(stats.M), sampleNumber(stats.R), sampleNumber(stats.U), sampleNumber(stats.L),
+        sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C)
+    }
+    samples[#samples + 1] = table.concat(values, "|")
+end
+
+local function loadPersistedEventSamples()
+    local rows = {}
+    pcall(function()
+        local section = userMods.GetGlobalConfigSection(common.GetAddonName())
+        local count = math.max(0, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(section and section.aou_evt_count) or 0)))
+        local first = math.max(1, count - EVENT_HISTORY_LIMIT + 1)
+        for i = first, count do
+            local row = section["aou_evt_" .. i]
+            if row ~= nil and tostring(row) ~= "" then rows[#rows + 1] = tostring(row) end
+        end
+    end)
+    return rows
+end
+
+local function persistEventSamples()
+    local current = AOUA.Session.eventSamples or {}
+    if #current == 0 then return true, 0 end
+    local ok = pcall(function()
+        local name = common.GetAddonName()
+        local section = userMods.GetGlobalConfigSection(name)
+        if type(section) ~= "table" then section = {} end
+        local oldCount = math.max(0, math.min(100000, math.floor(tonumber(section.aou_evt_count) or 0)))
+        local combined = {}
+        local keepOld = math.max(0, EVENT_HISTORY_LIMIT - #current)
+        local firstOld = math.max(1, oldCount - keepOld + 1)
+        for i = firstOld, oldCount do
+            local oldRow = section["aou_evt_" .. i]
+            if oldRow ~= nil and tostring(oldRow) ~= "" then combined[#combined + 1] = tostring(oldRow) end
+        end
+        for i = 1, #current do combined[#combined + 1] = current[i] end
+        while #combined > EVENT_HISTORY_LIMIT do table.remove(combined, 1) end
+        local oldSlots = math.min(EVENT_HISTORY_LIMIT, oldCount)
+        for i = 1, #combined do section["aou_evt_" .. i] = combined[i] end
+        for i = #combined + 1, oldSlots do section["aou_evt_" .. i] = "" end
+        section.aou_evt_count = #combined
+        section.aou_evt_schema = "v1"
+        section.aou_evt_fight_id = tonumber(AOUA.Session.fightId) or 0
+        section.aou_evt_last_dropped = tonumber(AOUA.Session.eventSamplesDropped) or 0
+        section.aou_evt_last_seconds = tonumber(AOUA.Session.elapsedSeconds) or 0
+        userMods.SetGlobalConfigSection(name, section)
+    end)
+    return ok, ok and #current or 0
+end
+
+function AOUA.OnFightStop()
+    ensureSession()
+    if not AOUA.Session.started then return true, 0 end
+    AOUA.Session.started = false
+    local ok, count = persistEventSamples()
+    AOUA.Session.persistedEvents = ok and count or 0
+    return ok, count
+end
+
+function AOUA.EventExport(count)
+    local rows = loadPersistedEventSamples()
+    for i = 1, #(AOUA.Session.eventSamples or {}) do
+        rows[#rows + 1] = AOUA.Session.eventSamples[i]
+    end
+    count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 300)))
+    local first = math.max(1, #rows - count + 1)
+    if #rows == 0 then
+        if type(message) == "function" then message("event export: no stored events") end
+        return false
+    end
+    local function emit(line)
+        if type(message) == "function" then pcall(message, line) end
+    end
+    local function emitChunks(kind, value)
+        local size = 58
+        local parts = math.max(1, math.ceil(#value / size))
+        for part = 1, parts do
+            emit("AOUCSV|" .. kind .. "|" .. part .. "|" .. parts .. "|" ..
+                string.sub(value, (part - 1) * size + 1, part * size))
+        end
+    end
+    local total = #rows - first + 1
+    emit("AOUCSV|BEGIN|2|" .. total .. "|events")
+    emitChunks("H", EVENT_COLUMNS)
+    for i = first, #rows do emitChunks("R" .. (i - first + 1), rows[i]) end
+    emit("AOUCSV|END")
+    return true
 end
 
 local function journalRow(map, key, limit)
@@ -520,7 +687,8 @@ local function recordHealing(kind, params, amount, resolvedAbilityName)
         b.effective = b.effective + reportedHeal
         b.hpMeasured = b.hpMeasured + 1
         b.overhealUnknown = b.overhealUnknown + 1
-        recordHealthPhase(kind, params, reportedHeal, "reported")
+        local hpBefore, hpQuality, targetMaxHp = recordHealthPhase(kind, params, reportedHeal, "reported")
+        appendEventSample(kind, params, reportedHeal, hpBefore, hpQuality, targetMaxHp, nil, resolvedAbilityName)
     end
 
     local resisted, runeResisted, absorbed, overload = math.max(0, N(params.resisted)),
@@ -608,7 +776,8 @@ function AOUA.OnHit(combatant, mode, params, determination, spellInfo)
         end
     end
     if kind == "damage" then
-        recordHealthPhase(kind, params, amount, "estimated")
+        local hpBefore, hpQuality, targetMaxHp = recordHealthPhase(kind, params, amount, "estimated")
+        appendEventSample(kind, params, amount, hpBefore, hpQuality, targetMaxHp, rawDetermination, spellInfo and spellInfo.Name)
         recordDamageJournal("outgoing", params, amount, spellInfo and spellInfo.Name)
     elseif kind == "healing" then
         recordHealing("healing", params, amount, spellInfo and spellInfo.Name)
@@ -691,6 +860,20 @@ function AOUA.OnIncomingDamage(params)
             end
         end
     end
+    local value, limit, real = safeHealth(params.target)
+    local hpBefore, hpQuality
+    if value ~= nil and limit and limit > 0 then
+        if real then
+            hpBefore = math.max(0, math.min(1, (value + amount) / limit))
+            hpQuality = "estimated_pre"
+        else
+            hpBefore = math.max(0, math.min(1, value / limit))
+            hpQuality = "post_only"
+        end
+    else
+        hpQuality = "unknown"
+    end
+    appendEventSample("incoming", params, amount, hpBefore, hpQuality, real and limit or nil, nil, nil)
     recordDamageJournal("incoming", params, amount)
 end
 
@@ -965,6 +1148,23 @@ function AOUA.OnSlash(input)
     end
     if cmd == "events" or cmd == "journal" then
         return true, journalReport()
+    end
+    if cmd == "eventlog" then
+        local stored = 0
+        pcall(function()
+            local section = userMods.GetGlobalConfigSection(common.GetAddonName())
+            stored = tonumber(section and section.aou_evt_count) or 0
+        end)
+        return true, "Event history: stored=" .. fmt(stored) ..
+            ", current=" .. fmt(#(AOUA.Session.eventSamples or {})) ..
+            ", dropped in current fight=" .. fmt(AOUA.Session.eventSamplesDropped or 0) ..
+            ", buffer limit=" .. fmt(EVENT_BUFFER_LIMIT) ..
+            ", storage limit=" .. fmt(EVENT_HISTORY_LIMIT)
+    end
+    if cmd == "eventexport" or cmd == "rawexport" then
+        local count = tonumber(string.match(rest, "^(%d+)"))
+        local ok = AOUA.EventExport(count)
+        return true, ok and "Event export sent as AOUCSV chunks; copy all AOUCSV lines and convert with AoU_ChatLog_To_CSV.html." or "No event rows to export."
     end
     if cmd == "stats" then
         return true, determinationReport() ..
