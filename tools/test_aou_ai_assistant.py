@@ -21,6 +21,10 @@ class FakeResponse:
 
 
 class AIAssistantTests(unittest.TestCase):
+    def test_default_model_is_qwen_27b(self):
+        self.assertEqual(ai.DEFAULT_MODEL, "qwen3.5:27b")
+
+
     def test_compact_payload_omits_raw_event_details(self):
         profile = {
             "settings": {"mode": "mixed", "resolve_coefficient": 0.015, "freeze_resolve_pool": True},
