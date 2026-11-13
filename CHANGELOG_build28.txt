@@ -108,3 +108,5 @@ Combat API event journal extension
 - API fields and semantics cross-checked against the addon API documentation; verification inside Allods Sunshine 6.0 remains necessary.
 
 - Resets the detailed API event journal at TUMeter combat start and retains the last combat report until the next fight; legacy /aou diff and /aou defstat counters remain session-wide.
+
+- Raw event diagnostics now report callback/match/accept counts. The first incoming hit to the local avatar may start the meter before analytics collection, avoiding loss of the opening strike when combat-state flags update late.
