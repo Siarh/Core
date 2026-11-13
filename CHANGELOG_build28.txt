@@ -138,3 +138,13 @@ The following entries supersede earlier prototype notes where they conflict.
 - The importer removes known Mastery/Resolve/Ruthlessness/critical multipliers from observed output amounts. Unknown target-side reductions remain part of the sample weight; HPS events that may already be capped are flagged and produce conservative recommendations.
 - Added regression coverage for the CSV importer, self/ally HPS, tank resistance/rune handling, Resolve coefficient selection, bounded event persistence and AOUCSV export.
 - GitHub Actions checks Lua syntax, journal tests, Python formula tests, importer tests, then packages a testable DPScope-build28 ZIP artifact. This CI does not substitute for live client validation.
+
+AI advisor and optional desktop LLM integration
+------------------------------------------------
+- Added Scripts/AoUMeterAI.lua, loaded after the stat optimizer. /aou ai on|off toggles the in-game advisor and persists its state in a separate config key without touching legacy /aou rec records.
+- /aou ai status reports the active local engine, /aou ai advice repeats the latest conclusion, and /aou ai export sends the event history to chat for local conversion.
+- The in-game advisor reports sample confidence, HP/Resolve coverage, self-versus-ally healing balance, and next controlled tests. Its deterministic observations are explicitly kept separate from the formula optimizer's numeric recommendations.
+- Added tools/aou_ai_assistant.py, an optional desktop companion using the OpenAI Responses API. It reads the formula profile/report and sends only a compact summary; raw combat rows, ability names and target identifiers are omitted. API calls occur only when the desktop script is run manually, with OPENAI_API_KEY supplied through the environment and store=false.
+- The Allods client has no confirmed outbound HTTP API, so the game does not call the remote LLM directly. The in-game toggle controls the local advisor; it does not stop a separately launched desktop Python process.
+- Added Lua and Python regression tests for the AI toggle, sample-quality scoring, recipient-specific HPS observations and privacy-conscious payload compaction.
+
