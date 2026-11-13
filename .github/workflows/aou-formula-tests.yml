@@ -6,6 +6,7 @@ on:
     paths:
       - "tools/aou_formula_calculator.py"
       - "tools/aou_analyze.py"
+      - "tools/aou_event_history_to_profile.py"
       - "tools/test_aou_formula_calculator.py"
       - "tools/test_aou_analytics_journal.lua"
       - "tools/aou_profile_template.json"
