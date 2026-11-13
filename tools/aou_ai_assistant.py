@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_MODEL = "qwen3.5:27b"
+
+
 SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DPScope для Allods Online / Sunshine 6.0.
 Работай строго по переданному JSON-отчёту и профилю боя.
 
@@ -278,8 +281,8 @@ def main() -> int:
     parser.add_argument("--report", type=Path, default=Path("aou_report.json"))
     parser.add_argument("--out", type=Path, default=Path("aou_ai_advice.md"))
     parser.add_argument(
-        "--model", default=os.environ.get("OLLAMA_MODEL", "qwen3.5"),
-        help="имя локальной модели Ollama; по умолчанию qwen3.5"
+        "--model", default=os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL),
+        help="имя локальной модели Ollama; по умолчанию qwen3.5:27b"
     )
     parser.add_argument(
         "--ollama-url", default=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
