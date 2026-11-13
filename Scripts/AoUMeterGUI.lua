@@ -313,7 +313,9 @@ function TUMeterGUI:UpdateOptim()
 		local gap = Settings.OptGap or 36
 		local y = dp.OptSpellTop + n * 18 + gap
 
-		local W = userMods.ToWString
+		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
+		-- Russian UTF-8 generated at runtime. Use the optimizer's safe converter.
+		local W = Optim.ToWString or userMods.ToWString
 		-- a cell starting with "@" is the key of a localized text
 		local function cell(v)
 			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
