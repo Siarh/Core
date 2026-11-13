@@ -482,7 +482,7 @@ end
 function RegisterHealthWatch(id)
 	if not id or healthWatchRegistered[id] or healthWatchCount >= 64 then return end
 	local ok = pcall(common.RegisterEventHandler, RetrieveHealthChangedEvent,
-		"EVENT_OBJECT_HEALTH_CHANGED", { id = id })
+		"EVENT_OBJECT_HEALTH_CHANGED", { id = id }, true)
 	if ok then
 		healthWatchRegistered[id] = true
 		healthWatchCount = healthWatchCount + 1
@@ -531,6 +531,10 @@ function metricReset()
 	RegisterEventHandlersNew("EVENT_UNIT_DAMAGE_RECEIVED", RetrieveDDEvent , paramsBlockDD)
 	RegisterEventHandlersNew("EVENT_UNIT_DAMAGE_RECEIVED", RetrieveDDEventIN , paramsBlockDDIN)
 	RegisterEventHandlersNew("EVENT_UNIT_FOLLOWERS_LIST_CHANGED", ReloadPet, paramsBlockID)
+
+	if AOUA and type(AOUA.OnEventRegistrationStats) == "function" then
+		pcall(AOUA.OnEventRegistrationStats, #paramsBlockDDIN, #paramsBlockHealIN, healthWatchCount)
+	end
 end
 
 function ReloadPet(params)
@@ -567,7 +571,7 @@ end
 function RegisterEventHandlersNew(event, handler, params )
 	if params then 
 		for i,params1 in ipairs(params) do 
-			common.RegisterEventHandler(handler, event, params1)
+			common.RegisterEventHandler(handler, event, params1, true)
 		end
 	else 
 		common.RegisterEventHandler(handler, event)
