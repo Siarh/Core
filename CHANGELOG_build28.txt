@@ -112,3 +112,11 @@ Combat API event journal extension
 - Raw event diagnostics now report callback/match/accept counts. The first incoming hit to the local avatar may start the meter before analytics collection, avoiding loss of the opening strike when combat-state flags update late.
 
 - Explicitly requests personal-event activation for filtered health, damage and healing registrations, and exposes registered target/unit filter counts in /aou events for troubleshooting.
+
+
+Latest combat-log regression fixes:
+- Removed duplicate accumulation of outgoing healing in the DPScope aggregate; the aggregate and per-ability journal now count the same event once.
+- Passes the meter's resolved spell name into analytics. Received-heal ability rows are relabelled from the matching raw callback without adding the event or amount again.
+- Treats the EVENT_HEALING_RECEIVED heal value as the reported applied amount. Overload, resisted, runeResisted and absorbed are retained as separate raw modifier counters and are not subtracted from heal; overheal remains explicitly unknown unless a separate API field is confirmed.
+- School labels omit the internal ENUM_SubElement_ prefix.
+- Adds Lua regression tests for single-count healing, received-heal relabelling, non-additive modifier fields and damage-school labelling. CI runs these alongside syntax and formula tests.
