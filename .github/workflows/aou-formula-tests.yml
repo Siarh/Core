@@ -15,6 +15,16 @@ on:
       - "Scripts/AoUMeterEvents.lua"
       - "Scripts/AoUMeterInit.lua"
       - "Scripts/AoUMeterData.lua"
+      - "Locales/**"
+      - "Widgets/**"
+      - "AddonDesc.(UIAddon).xdb"
+      - "AoUMeterSettings.txt"
+      - "AoU_ChatLog_To_CSV.html"
+      - "README_Optimizer.txt"
+      - "CHANGELOG_build28.txt"
+      - "desc.txt"
+      - "name.txt"
+      - "tools/README_formula_calculator.txt"
       - ".github/workflows/aou-formula-tests.yml"
   workflow_dispatch:
 
@@ -46,3 +56,32 @@ jobs:
         run: |
           python -m unittest -v test_aou_formula_calculator.py
           python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
+
+
+  package-addon:
+    needs: formula-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: build28-source
+      - name: Build DPScope build28 archive
+        run: |
+          mkdir -p package/DPScope/tools
+          cp -a Scripts Locales Widgets package/DPScope/
+          cp -a "AddonDesc.(UIAddon).xdb" AoUMeterSettings.txt AoU_ChatLog_To_CSV.html \
+            README_Optimizer.txt CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
+          cp -a tools/aou_formula_calculator.py tools/aou_event_history_to_profile.py \
+            tools/aou_profile_template.json tools/README_formula_calculator.txt package/DPScope/tools/
+          cd package
+          zip -qr ../DPScope-build28.zip DPScope
+          cd ..
+          sha256sum DPScope-build28.zip
+      - name: Upload testable addon archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: DPScope-build28
+          path: DPScope-build28.zip
+          if-no-files-found: error
+          retention-days: 30
