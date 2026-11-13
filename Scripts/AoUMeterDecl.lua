@@ -27,7 +27,7 @@ Global( "DMGTYPES", 3 )                     -- Number of type of damage (see enu
 Global( "MISSTYPES", 2 )                    -- Number of type of damage (see enumMiss)
 Global( "BLOCKDMGTYPES", 8 )                -- Number of block damage (see enumHitBlock & enumHealResist)
 Global( "EXTRATYPES", 1 )                   -- Number of extra info (see enumGlobalInfo)
-Global( "OPTROWS", 28 )                      -- Number of rows of the stat optimizer block (AoUMeterOptim.lua)
+Global( "OPTROWS", 36 )                      -- Number of rows of the stat optimizer block (AoUMeterOptim.lua)
 --------------------------------------------------------------------------------
 -- Settings (-> See AoUMeterSettings.txt to make them 'public' for end-user)
 --------------------------------------------------------------------------------
