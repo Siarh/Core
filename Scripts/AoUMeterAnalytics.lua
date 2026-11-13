@@ -348,13 +348,29 @@ end
 local function resourceKey(value)
     if value == nil then return nil end
     if type(value) == "string" or type(value) == "number" then return tostring(value) end
-    local ok, id = pcall(function() return value:GetInstanceId() end)
-    return (ok and id ~= nil) and tostring(id) or nil
+
+    -- ResourceId:GetInstanceId may return an opaque UniqueId userdata.
+    -- Prefer a readable resource path or metadata and never print a Lua pointer.
+    local okPath, path = pcall(function() return value:GetPath() end)
+    local pathText = okPath and eventText(path) or nil
+    if pathText then return pathText end
+
+    local okInfo, info = pcall(function() return value:GetInfo() end)
+    if okInfo and type(info) == "table" then
+        local label = eventText(info.sysName) or eventText(info.name) or eventText(info.shortName)
+        if label then return label end
+    end
+
+    local okId, id = pcall(function() return value:GetInstanceId() end)
+    if okId and (type(id) == "string" or type(id) == "number") then
+        return tostring(id)
+    end
+    return nil
 end
 
 local function abilityLabel(params)
     local name = eventText(params.ability)
-    local id = resourceKey(params.spellId or params.abilityId or params.buffId)
+    local id = resourceKey(params.spellId or params.abilityId or params.buffId or params.mapModifierId)
     if name and id then return name .. " [" .. id .. "]" end
     return name or (id and ("id:" .. id)) or "unknown"
 end
@@ -400,6 +416,7 @@ local function recordDamageJournal(activity, params, amount)
     local typeMap, abilityMap = j[activity .. "ByType"], j[activity .. "ByAbility"]
     local elementMap = j[activity .. "ByElement"]
     if elementMap then
+        local element = eventText(params.sysSubElement or params.subElement or params.element) or "unknown"
         local row = journalRow(elementMap, element, 48)
         row.events, row.amount = row.events + 1, row.amount + amount
     end
