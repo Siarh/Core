@@ -16,6 +16,18 @@ onMyEvent["EVENT_UNKNOWN_SLASH_COMMAND"] = function(params)
 
         local cmdText = tostring(converted or "")
 
+        if AOUA and AOUA.OnSlash then
+                local analyticsOK, handled, response = pcall(AOUA.OnSlash, cmdText)
+                if not analyticsOK then
+                        message("DPScope analytics error: " .. tostring(handled))
+                        return
+                end
+                if handled then
+                        message(response)
+                        return
+                end
+        end
+
         if Optim and Optim.OnSlash then
                 local callOK, handled = pcall(Optim.OnSlash, cmdText)
                 if not callOK then
