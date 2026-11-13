@@ -1173,6 +1173,10 @@ function TUMeter:Start()
 
 	self:ResetFight(self.Fight.Current)
     
+    if AOUA and type(AOUA.OnFightStart) == "function" then
+        pcall(AOUA.OnFightStart)
+    end
+
     self:RegenCombatantList()
 
 	self.FightsList[self.Fight.Current]:StartFight()
