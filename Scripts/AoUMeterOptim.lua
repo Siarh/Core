@@ -14,6 +14,7 @@ Optim.Cfg = {
 	hp = 0,         -- max health, used only if the game API does not give it
 	auto = 1,       -- 1: the addon reads the character stats itself (then only /aou fix is needed)
 	font = 1,       -- how Russian texts are produced: 1 = locale files, 2 = cp1251 conversion, 3 = raw UTF-8
+	resolveCoef = 0.015, -- literal user-supplied Resolve equation; use 0.0015 to test the explanatory-text interpretation
 	fM = 0, fR = 0, fU = 0, L = 0, eM = 0, eR = 0, eU = 0, -- offense: fixed (milestones), Luck total, free within the group (equipment + effects)
 	fS = 0, fW = 0, fB = 0, eS = 0, eW = 0, eB = 0,        -- defense: fixed (milestones), free within the group (equipment + effects)
 	bM = 0, bR = 0, bU = 0, bS = 0, bW = 0, bB = 0,        -- free points (base, e.g. 370 in total): can go to ANY stat
@@ -26,7 +27,7 @@ Optim.Cfg = {
 }
 Optim.Memo = { key = nil, lines = nil }
 
-local CFGKEYS = { "mode", "role", "flag", "tw", "hp", "font", "auto", "fM", "fR", "fU", "L", "eM", "eR", "eU", "fS", "fW", "fB", "eS", "eW", "eB", "bM", "bR", "bU", "bS", "bW", "bB", "free", "bal", "thp", "eq", "caut", "on" }
+local CFGKEYS = { "mode", "role", "flag", "tw", "hp", "font", "resolveCoef", "auto", "fM", "fR", "fU", "L", "eM", "eR", "eU", "fS", "fW", "fB", "eS", "eW", "eB", "bM", "bR", "bU", "bS", "bW", "bB", "free", "bal", "thp", "eq", "caut", "on" }
 
 
 local function N(x)
@@ -148,12 +149,15 @@ Optim.RU = {
 	OptErr = "Ошибка расчёта",
 	OptMarg = "Прирост за +50 очков, %",
 	OptHealSplit = "HP до лечения: союзн./себя/доля",
+	OptHealSelf = "HPS: лечение себя",
+	OptHealAlly = "HPS: лечение союзников",
+	OptResolveCoef = "Коэф. Решимости",
 	OptPoolFb = "Пул Решимости: сейчас/после",
 	OptMultFb = "Множитель с учётом пула",
 	OptReset = "Настройки сброшены",
 	OptHelp1 = "Характеристики и свободные очки аддон читает из игры сам. /aou thp N - ср. HP цели, если не определилось; /aou hp N - здоровье",
 	OptHelp2 = "Ручной ввод, если авто не сработало: /aou fix, free, base, atk, def (см. README)",
-	OptHelp3 = "/aou caut N, mark имя, rec list|clear|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
+	OptHelp3 = "/aou caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
 }
 
 -- UTF-8 (Cyrillic) -> Windows-1251 bytes
@@ -387,6 +391,19 @@ function Optim.OnHit(combatant, mode, params, rage)
 				tr[#tr + 1] = { tid = tid, mine = (tid == me), heal = amount, value = v, limit = lim, real = real, pre = frac, same = same }
 				if #tr > 14 then table.remove(tr, 1) end
 			end
+			local recipientKey = (tid == me) and "self" or "ally"
+			local segment = o[recipientKey]
+			if not segment then
+				segment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0, events = 0 }
+				o[recipientKey] = segment
+			end
+			segment.amount = segment.amount + amount
+			segment.hpAmount = segment.hpAmount + amount * frac
+			segment.events = segment.events + 1
+			if rage then
+				segment.poolAmount = segment.poolAmount + amount * rage
+				segment.poolWeight = segment.poolWeight + amount
+			end
 			if tid == me then
 				o.sw = (o.sw or 0) + amount
 				o.shs = (o.shs or 0) + amount * frac
@@ -477,7 +494,7 @@ end
 local function lnF(M, R, U, L, pool, h, mm)
 	local c = math.min(1, fcrit(L) / 1000)
 	local m = masteryMult(M)
-	local r = 1 + R / 1000 * pool * 0.015
+	local r = 1 + R / 1000 * pool * N(Optim.Cfg.resolveCoef or 0.015)
 	local u = 1 + mm(U) * (1 - h)
 	local tc = (Optim.TargetCaution and h < 0.40) and Optim.TargetCaution or 0
 	return math.log(math.max(m, 1e-12)) + math.log(math.max(r, 1e-12))
@@ -1317,6 +1334,28 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local function gain(M, R, U) return (multA(M, R, U, L, heal and pool or curvePool, h, useCurve) / m0 - 1) * 100 end
 		addT("OptMarg", string.format("M%+.1f", gain(nowA[1] + 50, nowA[2], nowA[3])),
 			string.format("R%+.1f", gain(nowA[1], nowA[2] + 50, nowA[3])), string.format("B%+.1f", gain(nowA[1], nowA[2], nowA[3] + 50)))
+		if heal then
+			local segmentFixed = {
+				fM + ((cfg.eq == 1) and 0 or eM),
+				fR + ((cfg.eq == 1) and 0 or eR),
+				fU + ((cfg.eq == 1) and 0 or eU),
+				L
+			}
+			local segmentBudget = (cfg.eq == 1) and (Ea + baseAt) or baseAt
+			for _, item in ipairs({ { "self", "OptHealSelf" }, { "ally", "OptHealAlly" } }) do
+				local seg = o[item[1]]
+				if seg and seg.amount > 0 then
+					local segHp = clamp(seg.hpAmount / seg.amount, 0, 1)
+					local segPool = seg.poolWeight > 0 and (seg.poolAmount / seg.poolWeight) or pool
+					local sm, sr, su = optA(segmentFixed, segmentBudget, segPool, segHp, false)
+					local current = string.format("HP %s%% / пул %s", F1(segHp * 100), F1(segPool))
+					local recommended = string.format("M%s R%s Б%s", I(sm), I(sr), I(su))
+					local delta = string.format("%s/%s/%s", S(sm - nowA[1]), S(sr - nowA[2]), S(su - nowA[3]))
+					addT(item[2], current, recommended, delta)
+				end
+			end
+		end
+		addT("OptResolveCoef", F2(cfg.resolveCoef or 0.015), "", ((cfg.resolveCoef or 0.015) == 0.015) and "literal" or "custom")
 		-- feedback: the new multiplier changes the damage (healing), therefore the pool; calibrate c from the measured pool
 		local gi = main.GlobalInfoList and main.GlobalInfoList[enumGlobalInfo.Determination]
 		local poolc = (gi and tonumber(gi.Avg)) or 0
@@ -1791,6 +1830,14 @@ function Optim.OnSlash(text)
 		else
 			say("/aou tw 1..10")
 		end
+	elseif cmd == "resolvecoef" then
+		local v = tonumber(args[3])
+		if v and (math.abs(v - 0.015) < 0.0000001 or math.abs(v - 0.0015) < 0.0000001) then
+			setk("resolveCoef", v)
+			say("Resolve coefficient = " .. tostring(v) .. (v == 0.015 and " (literal equation)" or " (explanatory-text interpretation)"))
+		else
+			say("/aou resolvecoef 0.015|0.0015")
+		end
 	elseif cmd == "font" then
 		local v = tonumber(args[3])
 		if v and v >= 1 and v <= 3 then
@@ -1805,7 +1852,7 @@ function Optim.OnSlash(text)
 		Optim.ResetCfg()
 		say(Optim.Text("OptReset"))
 	elseif cmd == "show" then
-		say("mode=" .. cfg.mode .. " role=" .. cfg.role .. " flag=" .. cfg.flag .. " tw=" .. cfg.tw .. " hp=" .. cfg.hp)
+		say("mode=" .. cfg.mode .. " role=" .. cfg.role .. " flag=" .. cfg.flag .. " tw=" .. cfg.tw .. " hp=" .. cfg.hp .. " resolveCoef=" .. tostring(cfg.resolveCoef))
 		say("atk fM=" .. cfg.fM .. " fR=" .. cfg.fR .. " fU=" .. cfg.fU .. " L=" .. cfg.L .. " eM=" .. cfg.eM .. " eR=" .. cfg.eR .. " eU=" .. cfg.eU)
 		say("hp reads: ok=" .. Optim.Hp.ok .. " fail=" .. Optim.Hp.fail .. " last=" .. Optim.Hp.last)
 		say("def fS=" .. cfg.fS .. " fW=" .. cfg.fW .. " fB=" .. cfg.fB .. " eS=" .. cfg.eS .. " eW=" .. cfg.eW .. " eB=" .. cfg.eB)
