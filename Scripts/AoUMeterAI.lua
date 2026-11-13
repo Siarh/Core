@@ -86,6 +86,13 @@ local function phaseEventCount(phases)
     return count
 end
 
+local function shortText(value, limit)
+    value = tostring(value or "")
+    limit = limit or 76
+    if #value > limit then return string.sub(value, 1, limit - 3) .. "..." end
+    return value
+end
+
 local function signedStatFocus(current, recommended)
     local labels = { "M", "R", "Б" }
     local best, bestDelta = nil, 0
@@ -154,7 +161,7 @@ function DPScopeAI.Analyze(context)
         if n(context.estimatedHealSamples) > n(context.measuredHealSamples) then
             nextStep = nextStep .. " Значительная часть HP перед лечением оценочная."
         end
-    elseif mode == "tank" or context.hasDefense then
+    elseif mode == "tank" then
         if n(context.incomingPerSecond) <= 0 then
             insight = "Нет достаточного входящего урона для оценки выживаемости."
             nextStep = "Проведи бой с устойчивым входящим уроном и повтори /aou defstat."
@@ -200,8 +207,8 @@ function DPScopeAI.BuildLines(context)
     return {
         { "OptAITitle", "локальный советник", result.confidence, tostring(result.confidenceScore) .. "/100" },
         { "OptAIQuality", tostring(result.eventCount), hpText, poolText },
-        { "OptAIInsight", result.insight, "", "" },
-        { "OptAIFocus", result.nextStep, "", "" }
+        { "OptAIInsight", shortText(result.insight, 76), "", "" },
+        { "OptAIFocus", shortText(result.nextStep, 76), "", "" }
     }
 end
 
