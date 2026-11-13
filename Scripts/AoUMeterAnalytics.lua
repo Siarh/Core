@@ -302,7 +302,7 @@ local function recordHealthPhase(kind, params, amount, confidence)
     end
     local sampleQuality
     if useTransition then sampleQuality = transition.exact and "measured_pre" or "estimated_pre"
-    elseif real then sampleQuality = "measured_pre"
+    elseif real then sampleQuality = "estimated_pre" -- reconstructed from post-event HP plus the reported event amount
     elseif previous and previous.value ~= nil then sampleQuality = "estimated_pre"
     else sampleQuality = "post_only" end
     return frac, sampleQuality, (real and limit or (useTransition and transition.limit or nil))
