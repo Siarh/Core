@@ -78,7 +78,7 @@ local function freshSession()
         journal = freshJournal(),
         rawDiagnostics = {
             incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-            healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+            healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
         },
         determination = freshDeterminationStats(),
         determinationByMode = {
@@ -122,7 +122,7 @@ local function ensureSession()
     AOUA.Session.journal = AOUA.Session.journal or freshJournal()
     AOUA.Session.rawDiagnostics = AOUA.Session.rawDiagnostics or {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
     }
     local j = AOUA.Session.journal
     for _, key in ipairs({
@@ -147,7 +147,7 @@ function AOUA.OnFightStart()
     AOUA.Session.journal = freshJournal()
     AOUA.Session.rawDiagnostics = {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
     }
 end
 
@@ -548,6 +548,14 @@ function AOUA.OnHit(combatant, mode, params, determination)
 end
 
 
+function AOUA.OnEventRegistrationStats(damageFilters, healFilters, healthFilters)
+    ensureSession()
+    local d = AOUA.Session.rawDiagnostics
+    d.damageFilters = tonumber(damageFilters) or 0
+    d.healFilters = tonumber(healFilters) or 0
+    d.healthFilters = tonumber(healthFilters) or 0
+end
+
 function AOUA.OnIncomingDamage(params)
     ensureSession()
     local diag = AOUA.Session.rawDiagnostics
@@ -722,6 +730,8 @@ local function journalReport()
     local rd = AOUA.Session.rawDiagnostics or {}
     local out = {
         "Combat API event journal (current/last combat, local player):",
+        "Registered filters damage/heal/health=" .. fmt(rd.damageFilters) .. "/" ..
+            fmt(rd.healFilters) .. "/" .. fmt(rd.healthFilters),
         "Raw callbacks incoming=" .. fmt(rd.incomingCallbacks) ..
             " matched=" .. fmt(rd.incomingMatched) .. " other=" .. fmt(rd.incomingOther) ..
             " accepted=" .. fmt(rd.incomingAccepted) ..
