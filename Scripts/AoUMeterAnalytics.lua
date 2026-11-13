@@ -27,6 +27,7 @@ local function bucket()
     return {
         events = 0, amount = 0, crits = 0, glancing = 0,
         effective = 0, overheal = 0, reportedOverheal = 0,
+        reportedOverload = 0, overhealUnknown = 0,
         healResisted = 0, runeResisted = 0, healAbsorbed = 0,
         hpMeasured = 0, hpEstimated = 0, hpUnknown = 0,
         determinationSum = 0, determinationSamples = 0,
@@ -109,6 +110,8 @@ local function ensureSession()
         b.healResisted = b.healResisted or 0
         b.runeResisted = b.runeResisted or 0
         b.healAbsorbed = b.healAbsorbed or 0
+        b.reportedOverload = b.reportedOverload or b.reportedOverheal or 0
+        b.overhealUnknown = b.overhealUnknown or 0
     end
     local d = AOUA.Session.defense
     d.shieldPoolLoss = d.shieldPoolLoss or 0
@@ -470,7 +473,7 @@ local function healingJournalDelta(params, amount, effective, overheal, known)
     return {
         amount = amount, effective = effective or 0, overheal = overheal or 0,
         wound = N(params.resisted), runeWound = N(params.runeResisted),
-        absorbed = N(params.absorbed),
+        absorbed = N(params.absorbed), overload = N(params.overload),
         lifeSteal = params.isLifeSteal and 1 or 0,
         crits = params.isCritical and 1 or 0,
         known = known and 1 or 0, unknown = known and 0 or 1
@@ -488,6 +491,7 @@ local function recordHealingJournal(kind, params, amount, effective, overheal, k
     row.wound = (row.wound or 0) + delta.wound
     row.runeWound = (row.runeWound or 0) + delta.runeWound
     row.absorbed = (row.absorbed or 0) + delta.absorbed
+    row.overload = (row.overload or 0) + delta.overload
     row.lifeSteal = (row.lifeSteal or 0) + delta.lifeSteal
     row.crits = (row.crits or 0) + delta.crits
     local lethality = tonumber(params.lethality)
@@ -507,44 +511,27 @@ end
 
 local function recordHealing(kind, params, amount, resolvedAbilityName)
     local b = AOUA.Session[kind]
-    if amount > 0 then addEvent(b, amount, params) end
-    local reported = tonumber(params.overload)
-    local resisted, runeResisted, absorbed = math.max(0, N(params.resisted)),
-        math.max(0, N(params.runeResisted)), math.max(0, N(params.absorbed))
+    local reportedHeal = math.max(0, amount)
+    if reportedHeal > 0 then
+        addEvent(b, reportedHeal, params)
+        -- EVENT_HEALING_RECEIVED reports the heal amount after the recipient's
+        -- missing-HP cap. Treat this as the applied amount; the modifier fields
+        -- are separate raw counters and must not be subtracted from it.
+        b.effective = b.effective + reportedHeal
+        b.hpMeasured = b.hpMeasured + 1
+        b.overhealUnknown = b.overhealUnknown + 1
+        recordHealthPhase(kind, params, reportedHeal, "reported")
+    end
+
+    local resisted, runeResisted, absorbed, overload = math.max(0, N(params.resisted)),
+        math.max(0, N(params.runeResisted)), math.max(0, N(params.absorbed)),
+        math.max(0, N(params.overload))
     b.healResisted = b.healResisted + resisted
     b.runeResisted = b.runeResisted + runeResisted
     b.healAbsorbed = b.healAbsorbed + absorbed
-    local reportedLoss = resisted + runeResisted + absorbed
-    local effective, overheal, method
-    if reported ~= nil then
-        overheal = math.max(0, math.min(amount, reported))
-        effective = math.max(0, amount - overheal - reportedLoss)
-        method = "reported"
-    elseif amount > 0 then
-        local hp, maxHp, real = safeHealth(params.unitId)
-        local previous = params.unitId and AOUA.HpCache[params.unitId] or nil
-        local transition = params.unitId and AOUA.HealthTransitions[params.unitId] or nil
-        local gained
-        if transition and transition.direction == 1 and transition.delta and transition.delta > 0 then
-            gained = transition.delta
-        elseif hp ~= nil and real and previous and previous.real and previous.limit == maxHp then
-            gained = math.max(0, hp - previous.value)
-        end
-        if gained ~= nil then
-            local afterLoss = math.max(0, amount - reportedLoss)
-            effective, overheal, method = math.min(afterLoss, gained), math.max(0, afterLoss - gained), "hp-estimate"
-        end
-    end
-    if effective ~= nil then
-        b.effective, b.overheal = b.effective + effective, b.overheal + overheal
-        if method == "reported" then b.hpMeasured = b.hpMeasured + 1 else b.hpEstimated = b.hpEstimated + 1 end
-        if effective > 0 then recordHealthPhase(kind, params, effective, method) end
-    elseif amount > 0 then
-        b.hpUnknown = b.hpUnknown + 1
-        AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
-    end
-    if reported ~= nil then b.reportedOverheal = b.reportedOverheal + reported end
-    return recordHealingJournal(kind, params, amount, effective, overheal, effective ~= nil, resolvedAbilityName)
+    b.reportedOverload = b.reportedOverload + overload
+
+    return recordHealingJournal(kind, params, reportedHeal, reportedHeal, 0, true, resolvedAbilityName)
 end
 
 local function movePendingHealAbility(pending, resolvedName)
@@ -562,7 +549,7 @@ local function movePendingHealAbility(pending, resolvedName)
     newRow.events = newRow.events + 1
     for _, field in ipairs({
         "amount", "effective", "overheal", "wound", "runeWound",
-        "absorbed", "lifeSteal", "crits", "known", "unknown"
+        "absorbed", "overload", "lifeSteal", "crits", "known", "unknown"
     }) do
         local value = N(delta[field])
         oldRow[field] = N(oldRow[field]) - value
@@ -766,11 +753,11 @@ end
 local function healingReport()
     local a, b = AOUA.Session.healing, AOUA.Session.receivedHeal
     local function one(label, x)
-        return label .. ": nominal=" .. fmt(x.amount) ..
-            ", effective=" .. fmt(x.effective) ..
-            ", overheal=" .. fmt(x.overheal) ..
-            ", wound/debuff loss=" .. fmt(x.healResisted + x.runeResisted + x.healAbsorbed) ..
-            ", confidence reported/estimated/unknown=" ..
+        return label .. ": heal field/applied=" .. fmt(x.amount) .. "/" .. fmt(x.effective) ..
+            ", overheal=unknown (" .. fmt(x.overhealUnknown) .. " events)" ..
+            ", raw overload/resisted/rune/absorbed=" .. fmt(x.reportedOverload) .. "/" ..
+            fmt(x.healResisted) .. "/" .. fmt(x.runeResisted) .. "/" .. fmt(x.healAbsorbed) ..
+            ", applied confidence reported/estimated/unknown=" ..
             fmt(x.hpMeasured) .. "/" .. fmt(x.hpEstimated) .. "/" .. fmt(x.hpUnknown)
     end
     return "Healing:\n" .. one("outgoing", a) .. "\n" .. one("received", b)
@@ -866,16 +853,18 @@ local function journalReport()
     end, 4)
     out[#out + 1] = topJournalRows("Received healing by ability", j.receivedHealByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
-            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
-            " wound/rune/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
+            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/n/a" ..
+            " overload/wound/rune/absorbed=" .. fmt(x.overload) .. "/" ..
+            fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
             " crits=" .. fmt(x.crits) .. " lifeSteal=" .. fmt(x.lifeSteal) ..
             " lethality avg=" .. (N(x.lethalitySamples) > 0 and string.format("%.1f", N(x.lethalitySum) / N(x.lethalitySamples)) or "n/a") ..
             " (n=" .. fmt(x.lethalitySamples) .. ") unknown=" .. fmt(x.unknown)
     end, 5)
     out[#out + 1] = topJournalRows("Outgoing healing by ability", j.outgoingHealByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
-            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
-            " wounds/runes/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed)
+            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/n/a" ..
+            " overload/wounds/runes/absorbed=" .. fmt(x.overload) .. "/" ..
+            fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed)
     end, 4)
     out[#out + 1] = "Effect tags are hit-time snapshots; exact absorbed damage is not attributed to individual tags."
     return table.concat(out, "\n")
