@@ -28,8 +28,8 @@ class AIAssistantTests(unittest.TestCase):
         for name in ("OptSchA.txt", "OptSchE.txt", "OptSchN.txt", "OptSchL.txt"):
             path = __import__("pathlib").Path("../Locales/rus") / name
             raw = path.read_bytes()
-            self.assertFalse(raw.startswith(b"\\xff\\xfe") or raw.startswith(b"\\xfe\\xff"), name)
-            self.assertNotIn(b"\\x00", raw, name)
+            self.assertFalse(raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"), name)
+            self.assertNotIn(b"\x00", raw, name)
             text = raw.decode("utf-8")
             self.assertTrue(text.strip(), name)
 
