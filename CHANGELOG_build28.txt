@@ -106,3 +106,5 @@ Combat API event journal extension
 - Adds /aou events (also /dpscope events) for a compact combat-event journal report.
 - Journal maps are bounded to 48-64 keys per category to limit memory growth.
 - API fields and semantics cross-checked against the addon API documentation; verification inside Allods Sunshine 6.0 remains necessary.
+
+- Resets the detailed API event journal at TUMeter combat start and retains the last combat report until the next fight; legacy /aou diff and /aou defstat counters remain session-wide.
