@@ -65,7 +65,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: build28-source
+          ref: ${{ github.sha }}
       - name: Build DPScope build28 archive
         run: |
           mkdir -p package/DPScope/tools
