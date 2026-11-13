@@ -3,7 +3,7 @@
 -- Desc: DPScope evidence-based combat advisor and AI command bridge.
 --
 -- The in-game client has no confirmed outbound HTTP API. This module therefore
--- runs a deterministic local advisor. The optional desktop OpenAI companion is
+-- runs a deterministic local advisor. The optional desktop Ollama/Qwen companion is
 -- tools/aou_ai_assistant.py and consumes exported calculator JSON.
 --------------------------------------------------------------------------------
 Global("DPScopeAI", {})
