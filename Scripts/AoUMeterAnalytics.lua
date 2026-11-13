@@ -259,7 +259,7 @@ local function recordHealthPhase(kind, params, amount, confidence)
     end
     if (kind == "healing" or kind == "receivedHeal") and not real and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
-        return
+        return nil, "unknown", nil
     end
 
     if value ~= nil then AOUA.HpCache[id] = { value = value, limit = limit, real = real } end
@@ -300,7 +300,12 @@ local function recordHealthPhase(kind, params, amount, confidence)
             AOUA.Session.targetHealth.estimated = AOUA.Session.targetHealth.estimated + 1
         end
     end
-    return frac, confidence, (real and limit or nil)
+    local sampleQuality
+    if useTransition then sampleQuality = transition.exact and "measured_pre" or "estimated_pre"
+    elseif real then sampleQuality = "measured_pre"
+    elseif previous and previous.value ~= nil then sampleQuality = "estimated_pre"
+    else sampleQuality = "post_only" end
+    return frac, sampleQuality, (real and limit or (useTransition and transition.limit or nil))
 end
 
 -- Health-change events provide the before/after delta directly. They are
@@ -408,7 +413,7 @@ end
 local isLocalObject
 local EVENT_HISTORY_LIMIT = 1000
 local EVENT_BUFFER_LIMIT = 2000
-local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C"
+local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax"
 
 local function sampleNumber(value)
     local n = tonumber(value)
@@ -425,6 +430,15 @@ local function captureStatSnapshot()
             for _, key in ipairs({ "M", "R", "U", "L", "S", "W", "B", "C" }) do
                 local row = values[key]
                 snapshot[key] = row and tonumber(row.total) or nil
+            end
+        end
+    end
+    if avatar and type(avatar.GetId) == "function" and Optim and type(Optim.GetHealth) == "function" then
+        local okId, id = pcall(avatar.GetId)
+        if okId then
+            local okHp, _, maximum, real = pcall(Optim.GetHealth, id)
+            if okHp and real and tonumber(maximum) and maximum > 0 then
+                snapshot.HPmax = tonumber(maximum)
             end
         end
     end
@@ -453,7 +467,7 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         tostring(AOUA.Session.elapsedSeconds or 0), kind,
         sampleNumber(amount), sampleNumber((hpBefore ~= nil) and hpBefore * 100 or nil),
         hpQuality or "unknown", sampleNumber(targetMaxHp),
-        params.isCritical and "1" or "0", element,
+        (params.isCritical == nil) and "" or (params.isCritical and "1" or "0"), element,
         eventText(params.damageSource) or "", sampleNumber(params.resist),
         sampleNumber(params.absorb), sampleNumber(params.runesAbsorb),
         sampleNumber(params.shieldBlock), sampleNumber(params.parry),
@@ -462,7 +476,8 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         sampleNumber(params.overallPreventedDamage), sampleNumber(determination or params.determination),
         recipient, ability,
         sampleNumber(stats.M), sampleNumber(stats.R), sampleNumber(stats.U), sampleNumber(stats.L),
-        sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C)
+        sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C),
+        sampleNumber(stats.HPmax)
     }
     samples[#samples + 1] = table.concat(values, "|")
 end
