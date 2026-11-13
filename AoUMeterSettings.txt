@@ -32,6 +32,7 @@ Settings.Opt = {
 	tw   = 4,       -- PvP: wanted seconds of control until immunity (1..10), for Will
 	hp   = 0,       -- max health, only needed if the game does not give it (0 = automatic)
 	auto = 1,       -- 1: the addon reads the character stats itself (then only fM..fB below are needed), 0: use the manual values below
+	resolveCoef = 0.015, -- Решимость: буквальная формула; альтернативное 0.0015 соответствует текстовому пояснению
 	font = 1,       -- Russian text rendering: 1 = locale files (default), 2 = cp1251 conversion, 3 = raw UTF-8. Try 2 if you see garbled letters
 
 	-- Offense. f* = development milestones only (never moved), e* = equipment + effects (free points)
