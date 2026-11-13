@@ -209,16 +209,40 @@ def _model_name_matches(installed: str, requested: str) -> bool:
     return normalize(installed.strip()) == normalize(requested.strip())
 
 
-def check_ollama(base_url: str, model: str, timeout: int = 10) -> list[str]:
-    models = list_ollama_models(base_url, timeout)
-    if not any(_model_name_matches(item, model) for item in models):
-        installed = ", ".join(models) if models else "(список пуст)"
-        raise RuntimeError(
-            f"Модель {model} не найдена в локальном Ollama. Установленные модели: {installed}. "
-            f"Выполни ollama pull {model} или укажи установленную модель через --model."
-        )
-    return models
+def resolve_ollama_model(models: list[str], requested: str) -> str:
+    """Resolve a generic model family to an installed concrete Ollama tag."""
+    exact = next((item for item in models if _model_name_matches(item, requested)), None)
+    if exact:
+        return exact
 
+    requested_base = requested.strip().split(":", 1)[0]
+    # A bare qwen3.5 name is a family selector. Prefer 9B as the balanced,
+    # lower-resource default, then fall back to the smallest listed variant.
+    if requested_base.lower() == "qwen3.5" and ":" not in requested.strip():
+        prefix = requested_base.lower() + ":"
+        candidates = [
+            item for item in models
+            if item.lower().startswith(prefix) and not item.lower().endswith(":latest")
+        ]
+        if candidates:
+            preferred = next(
+                (item for item in candidates if item.lower().split(":", 1)[1] == "9b"),
+                None,
+            )
+            if preferred:
+                return preferred
+            return sorted(candidates, key=lambda item: item.lower())[0]
+
+    installed = ", ".join(models) if models else "(список пуст)"
+    raise RuntimeError(
+        f"Модель {requested} не найдена в локальном Ollama. Установленные модели: {installed}. "
+        f"Укажи точное имя через --model. Для загрузки модели используй ollama pull."
+    )
+
+
+def check_ollama(base_url: str, model: str, timeout: int = 10) -> str:
+    models = list_ollama_models(base_url, timeout)
+    return resolve_ollama_model(models, model)
 
 def call_ollama(
     payload: dict[str, Any], model: str,
@@ -273,10 +297,11 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        selected_model = check_ollama(args.ollama_url, args.model)
         if args.check:
-            models = check_ollama(args.ollama_url, args.model)
+            models = list_ollama_models(args.ollama_url)
             print("Ollama доступна. Установленные модели: " + ", ".join(models))
-            print(f"Выбранная модель найдена: {args.model}")
+            print(f"Выбрана модель: {selected_model}")
             return 0
 
         profile = json.loads(args.profile.read_text(encoding="utf-8"))
@@ -290,12 +315,12 @@ def main() -> int:
             return 0
 
         print(
-            f"Отправляю компактную сводку локально в Ollama ({args.model}); "
+            f"Отправляю компактную сводку локально в Ollama ({selected_model}); "
             "внешний API и ключ не используются."
         )
-        answer = call_ollama(payload, args.model, args.ollama_url, args.timeout)
+        answer = call_ollama(payload, selected_model, args.ollama_url, args.timeout)
         args.out.write_text(answer + "\n", encoding="utf-8")
-        print(f"Локальный AI-разбор сохранён: {args.out} (model={args.model})")
+        print(f"Локальный AI-разбор сохранён: {args.out} (model={selected_model})")
         return 0
     except (OSError, json.JSONDecodeError, RuntimeError, ValueError) as exc:
         print(f"Ошибка AI-помощника: {exc}", file=sys.stderr)
