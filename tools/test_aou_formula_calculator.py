@@ -264,6 +264,45 @@ class FormulaTests(unittest.TestCase):
         self.assertTrue(profile["settings"]["freeze_resolve_pool"])
         self.assertEqual(profile["allocation_budget"], 10)
 
+    def test_event_import_reconstructs_tank_resistance_and_rune_absorption(self):
+        common = {
+            "fight_id": "9", "profile": "pve", "second": "2",
+            "target_hp_before": "30", "hp_quality": "estimated_pre",
+            "resolve_pool": "50", "M": "100", "R": "200", "U": "300", "L": "50",
+            "S": "150", "W": "120", "B": "250", "C": "200", "HPmax": "50000",
+            "block": "0", "parry": "0", "barrier": "0", "absorb": "0", "mount": "0",
+        }
+        incoming = dict(common, kind="incoming", observed_amount="900", resist="200",
+                        runes_absorb="100", element="ENUM_SubElement_FIRE",
+                        ability="Incoming strike", critical="")
+        outgoing = dict(common, kind="damage", observed_amount="10000",
+                        target_hp_before="75", hp_quality="estimated_pre", target_max_hp="100000",
+                        resolve_pool="50", runes_absorb="0", element="PHYSICAL",
+                        critical="0", ability="Outgoing strike")
+        profile = event_import.build_profile([outgoing, incoming], 8, 0.015)
+        tank = profile["activities"]["tank_fight_9"]
+        self.assertEqual(tank["mode"], "tank")
+        self.assertAlmostEqual(profile["stats"]["resistances"]["elements"], (900 + 100 + 200) * 10 / (900 + 100))
+        self.assertEqual(tank["samples"][0]["rune_absorbed"], 100)
+        self.assertEqual(tank["samples"][0]["outgoing_damage"], 10000)
+        report = calc.calculate_profile(profile)
+        self.assertIn("tank", report["cross_activity_recommendations"])
+        self.assertIn("elements", report["cross_activity_recommendations"]["tank"]["added_points"])
+        self.assertGreater(report["activities"]["tank_fight_9"]["simulation"]["survival_seconds"], 0)
+
+    def test_event_import_excludes_overlapping_incoming_mitigation(self):
+        stats = {"mastery": 100, "resolve": 200, "ruthlessness": 300, "luck": 50, "caution": 100}
+        row = {
+            "kind": "incoming", "observed_amount": "900", "target_hp_before": "30",
+            "hp_quality": "measured_pre", "resist": "200", "runes_absorb": "100",
+            "block": "25", "element": "FIRE"
+        }
+        sample, reason, school, rating = event_import.tank_event_to_sample(row, stats)
+        self.assertIsNone(sample)
+        self.assertTrue(reason.startswith("overlapping_defense_components:"))
+        self.assertIsNone(school)
+        self.assertIsNone(rating)
+
 
 if __name__ == "__main__":
     unittest.main()
