@@ -365,6 +365,22 @@
       <name>OptMultFb</name>
       <resource href="OptMultFb.txt" />
     </Item>
+      <Item>
+      <name>OptAITitle</name>
+      <resource href="OptAITitle.txt" />
+    </Item>
+    <Item>
+      <name>OptAIQuality</name>
+      <resource href="OptAIQuality.txt" />
+    </Item>
+    <Item>
+      <name>OptAIInsight</name>
+      <resource href="OptAIInsight.txt" />
+    </Item>
+    <Item>
+      <name>OptAIFocus</name>
+      <resource href="OptAIFocus.txt" />
+    </Item>
   </items>
 </UIRelatedTexts>
 
