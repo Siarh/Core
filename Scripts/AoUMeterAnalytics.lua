@@ -60,8 +60,8 @@ local function freshSession()
         },
         journal = {
             incomingByType = {}, incomingByAbility = {}, incomingByAttacker = {},
-            incomingTargetEffects = {}, incomingSourceEffects = {},
-            outgoingByType = {}, outgoingByAbility = {},
+            incomingTargetEffects = {}, incomingSourceEffects = {}, incomingByElement = {},
+            outgoingByType = {}, outgoingByAbility = {}, outgoingByElement = {},
             outgoingTargetEffects = {}, outgoingSourceEffects = {},
             receivedHealByAbility = {}, outgoingHealByAbility = {}
         },
@@ -104,8 +104,8 @@ local function ensureSession()
     local j = AOUA.Session.journal
     for _, key in ipairs({
         "incomingByType", "incomingByAbility", "incomingByAttacker",
-        "incomingTargetEffects", "incomingSourceEffects",
-        "outgoingByType", "outgoingByAbility",
+        "incomingTargetEffects", "incomingSourceEffects", "incomingByElement",
+        "outgoingByType", "outgoingByAbility", "outgoingByElement",
         "outgoingTargetEffects", "outgoingSourceEffects",
         "receivedHealByAbility", "outgoingHealByAbility"
     }) do j[key] = j[key] or {} end
@@ -355,12 +355,21 @@ local function recordDamageJournal(activity, params, amount)
     local sourceType = eventText(params.damageSource) or "unknown"
     local ability = sourceType .. " / " .. abilityLabel(params)
     local typeMap, abilityMap = j[activity .. "ByType"], j[activity .. "ByAbility"]
+    local elementMap = j[activity .. "ByElement"]
+    if elementMap then
+        local row = journalRow(elementMap, element, 48)
+        row.events, row.amount = row.events + 1, row.amount + amount
+    end
     if typeMap then
         local row = journalRow(typeMap, sourceType, 48)
         row.events, row.amount = row.events + 1, row.amount + amount
         row.absorbed = (row.absorbed or 0) + N(params.overallAbsorbedDamage)
         row.prevented = (row.prevented or 0) + N(params.overallPreventedDamage)
         row.runesAbsorb = (row.runesAbsorb or 0) + N(params.runesAbsorb)
+        row.buffAbsorb = (row.buffAbsorb or 0) + N(params.absorb)
+        row.barrier = (row.barrier or 0) + N(params.barrier)
+        row.mount = (row.mount or 0) + N(params.toMount)
+        row.multiplierAbsorb = (row.multiplierAbsorb or 0) + N(params.multipliersAbsorb)
         row.block = (row.block or 0) + N(params.shieldBlock)
         row.parry = (row.parry or 0) + N(params.parry)
         row.resist = (row.resist or 0) + N(params.resist)
@@ -372,6 +381,10 @@ local function recordDamageJournal(activity, params, amount)
         row.absorbed = (row.absorbed or 0) + N(params.overallAbsorbedDamage)
         row.prevented = (row.prevented or 0) + N(params.overallPreventedDamage)
         row.runesAbsorb = (row.runesAbsorb or 0) + N(params.runesAbsorb)
+        row.buffAbsorb = (row.buffAbsorb or 0) + N(params.absorb)
+        row.barrier = (row.barrier or 0) + N(params.barrier)
+        row.mount = (row.mount or 0) + N(params.toMount)
+        row.multiplierAbsorb = (row.multiplierAbsorb or 0) + N(params.multipliersAbsorb)
         row.block = (row.block or 0) + N(params.shieldBlock)
         row.parry = (row.parry or 0) + N(params.parry)
         row.resist = (row.resist or 0) + N(params.resist)
@@ -624,6 +637,9 @@ local function journalReport()
             ", zero amount=" .. fmt(d.zeroAmountEvents) ..
             ", fully prevented/absorbed=" .. fmt(d.fullyPreventedEvents)
     }
+    out[#out + 1] = topJournalRows("Incoming damage by school", j.incomingByElement, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount)
+    end, 5)
     out[#out + 1] = topJournalRows("Incoming damage by source type", j.incomingByType, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
             " API absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented) ..
@@ -632,7 +648,8 @@ local function journalReport()
     out[#out + 1] = topJournalRows("Incoming abilities", j.incomingByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " amount=" .. fmt(x.amount) ..
             " block/parry/resist=" .. fmt(x.block) .. "/" .. fmt(x.parry) .. "/" .. fmt(x.resist) ..
-            " rune=" .. fmt(x.runesAbsorb)
+            " buff/barrier/mount=" .. fmt(x.buffAbsorb) .. "/" .. fmt(x.barrier) .. "/" .. fmt(x.mount) ..
+            " rune/multiplier=" .. fmt(x.runesAbsorb) .. "/" .. fmt(x.multiplierAbsorb)
     end, 5)
     out[#out + 1] = topJournalRows("Incoming attackers", j.incomingByAttacker, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount)
@@ -644,6 +661,9 @@ local function journalReport()
     out[#out + 1] = topJournalRows("Attacker effects during incoming hits (correlation only)", j.incomingSourceEffects, "amount", function(k, x)
         return k .. " hits=" .. fmt(x.events) .. " damage-during-effect=" .. fmt(x.amount)
     end, 4)
+    out[#out + 1] = topJournalRows("Outgoing damage by school", j.outgoingByElement, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount)
+    end, 5)
     out[#out + 1] = topJournalRows("Outgoing abilities", j.outgoingByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
             " crits=" .. fmt(x.crits) .. " target absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented)
@@ -652,8 +672,15 @@ local function journalReport()
         return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
             fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
             " wound/rune/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
-            " lifeSteal=" .. fmt(x.lifeSteal) .. " unknown=" .. fmt(x.unknown)
+            " crits=" .. fmt(x.crits) .. " lifeSteal=" .. fmt(x.lifeSteal) ..
+            " lethality samples=" .. fmt(x.lethalitySamples) ..
+            " unknown=" .. fmt(x.unknown)
     end, 5)
+    out[#out + 1] = topJournalRows("Outgoing healing by ability", j.outgoingHealByAbility, "amount", function(k, x)
+        return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
+            fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
+            " wounds/runes/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed)
+    end, 4)
     out[#out + 1] = "Effect tags are hit-time snapshots; exact absorbed damage is not attributed to individual tags."
     return table.concat(out, "\n")
 end
