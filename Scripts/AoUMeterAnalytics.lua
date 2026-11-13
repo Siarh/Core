@@ -522,8 +522,10 @@ end
 
 function AOUA.EventExport(count)
     local rows = loadPersistedEventSamples()
-    for i = 1, #(AOUA.Session.eventSamples or {}) do
-        rows[#rows + 1] = AOUA.Session.eventSamples[i]
+    if AOUA.Session.started then
+        for i = 1, #(AOUA.Session.eventSamples or {}) do
+            rows[#rows + 1] = AOUA.Session.eventSamples[i]
+        end
     end
     count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 300)))
     local first = math.max(1, #rows - count + 1)
