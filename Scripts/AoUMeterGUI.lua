@@ -238,7 +238,7 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		GlobalInfoPanel:Show()
 
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
-		GlobalInfoPanel.Bar:SetWidth(356 * (GlobalInfoData.Percentage / 100))
+		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
 		GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))
@@ -263,7 +263,7 @@ function TUMeterGUI:DisplaySpell(spellIndex)
 		--LogInfo(spellData.Element)
 		
 		spellPanel.Bar:SetColor(DamageTypeColors[spellData.Element] or { r = 1.0; g = 1.0; b = 1.0; a = 1 } )
-		spellPanel.Bar:SetWidth(356 * (spellData.Percentage / 100))
+		spellPanel.Bar:SetWidth(396 * (spellData.Percentage / 100))
 
 		spellPanel.Name:SetVal("Index", common.FormatInt(spellIndex , "%d"))
 		spellPanel.Name:SetVal("Prefix", spellData.Prefix)
@@ -409,7 +409,7 @@ function TUMeterGUI:DisplaySpellDetails(spellInfoData, spellInfoPanel, title)
 		spellInfoPanel:Show()
 
 		spellInfoPanel.Bar:SetColor(HitTypeColors[spellInfoData.ID])
-		spellInfoPanel.Bar:SetWidth(356 * (math.abs(spellInfoData.Percentage) / 100))
+		spellInfoPanel.Bar:SetWidth(396 * (math.abs(spellInfoData.Percentage) / 100))
 
 		spellInfoPanel.Name:SetVal("Name", title[spellInfoData.ID])
 		spellInfoPanel.Count:SetVal("Count", common.FormatInt(spellInfoData.Count , "%d"))
