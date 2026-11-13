@@ -220,7 +220,7 @@ def calculate_event(event: dict[str, Any], mode: str, stats: dict[str, Any], cfg
     m_mult = mastery_multiplier(stats.get("mastery", 0.0))
     r_mult = resolve_multiplier(
         stats.get("resolve", 0.0), pool_used,
-        cfg.get("resolve_coefficient", 0.0015),
+        cfg.get("resolve_coefficient", 0.015),
     )
     # Ruthlessness is applied after resistance, block/parry and measured rune
     # absorption, matching the supplied hit sequence. This matters when rune_absorbed
@@ -666,6 +666,128 @@ def optimize(activity: dict[str, Any], base_stats: dict[str, Any], budget: int, 
     }
 
 
+
+def optimize_multi_activity(
+    activities: list[tuple[str, dict[str, Any], float]],
+    base_stats: dict[str, Any],
+    budget: int,
+    cfg: dict[str, Any],
+) -> dict[str, Any]:
+    """Allocate the same stat budget against several activities.
+
+    Each activity is normalized to its own baseline before weighting, so a
+    high-throughput raid does not drown out a lower-number PvP or solo activity.
+    Activities without a defensible objective are excluded and named explicitly.
+    """
+    budget = int(clamp(num(budget), 0, 500))
+    if not activities:
+        return {"status": "insufficient_data", "reason": "Нет выбранных активностей."}
+
+    modes = {str(activity.get("mode", "dps")).lower() for _, activity, _ in activities}
+    if len(modes) != 1:
+        return {
+            "status": "unsupported",
+            "reason": "Общий бюджет оптимизируется отдельно для УВС, HPS и защиты; смешивать разные цели нельзя.",
+        }
+    mode = next(iter(modes))
+    stats = dict(base_stats)
+    nested_res = dict(stats.get("resistances", {}) or {})
+    for resistance_key in ("armor", "elements", "divine", "nature"):
+        if resistance_key not in stats and resistance_key in nested_res:
+            stats[resistance_key] = num(nested_res[resistance_key], 10.0)
+
+    included = []
+    excluded = []
+    for name, activity, weight in activities:
+        weight = max(0.0, num(weight, 1.0))
+        if weight <= 0:
+            excluded.append({"activity": name, "reason": "zero_weight"})
+            continue
+        score, basis = _score_for_optimization(activity, stats, cfg)
+        if score is None or score <= 0:
+            excluded.append({"activity": name, "reason": basis})
+        else:
+            included.append({
+                "name": name, "activity": activity, "weight": weight,
+                "baseline": float(score), "basis": basis,
+            })
+    if not included:
+        return {
+            "status": "insufficient_data",
+            "reason": "Ни одна активность не имеет достаточных данных для оптимизации.",
+            "excluded_activities": excluded,
+        }
+
+    candidates = _optimizable_stats(mode, cfg)
+    total_weight = sum(row["weight"] for row in included)
+
+    def normalized_score(candidate_stats: dict[str, Any]) -> float | None:
+        total = 0.0
+        for row in included:
+            score, _ = _score_for_optimization(row["activity"], candidate_stats, cfg)
+            if score is None:
+                return None
+            total += row["weight"] * score / row["baseline"]
+        return total / total_weight if total_weight > 0 else None
+
+    baseline_score = normalized_score(stats)
+    added = {key: 0 for key in candidates}
+    if budget <= 0:
+        return {
+            "status": "no_budget", "mode": mode, "added_points": added,
+            "baseline_normalized_score": baseline_score,
+            "recommended_normalized_score": baseline_score,
+            "included_activities": [row["name"] for row in included],
+            "excluded_activities": excluded,
+        }
+
+    for _ in range(budget):
+        best_key = None
+        best_score = -math.inf
+        for key in candidates:
+            test = dict(stats)
+            test[key] = num(test.get(key)) + 1
+            candidate_score = normalized_score(test)
+            if candidate_score is not None and candidate_score > best_score:
+                best_key, best_score = key, candidate_score
+        if best_key is None:
+            break
+        stats[best_key] = num(stats.get(best_key)) + 1
+        added[best_key] += 1
+
+    final_score = normalized_score(stats)
+    return {
+        "status": "calculated" if sum(added.values()) == budget else "partial",
+        "mode": mode,
+        "objective": "weighted_mean_of_per_activity_relative_gains",
+        "added_points": added,
+        "recommended_stats": {key: num(stats.get(key)) for key in candidates},
+        "baseline_normalized_score": baseline_score,
+        "recommended_normalized_score": final_score,
+        "estimated_gain_percent": ((final_score - 1.0) * 100.0) if final_score is not None else None,
+        "included_activities": [
+            {"name": row["name"], "weight": row["weight"], "baseline": row["baseline"], "objective": row["basis"]}
+            for row in included
+        ],
+        "excluded_activities": excluded,
+        "method": "greedy integer marginal allocation; each activity normalized to its own baseline",
+    }
+
+
+def _healing_recipient_segments(activity: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Split measured HPS samples into self and ally subsets when recipient is known."""
+    result: dict[str, dict[str, Any]] = {}
+    samples = activity.get("samples", [])
+    for role in ("self", "ally"):
+        selected = [
+            event for event in samples
+            if str(event.get("recipient", event.get("target_role", ""))).lower() == role
+        ]
+        if selected:
+            result[role] = {**activity, "samples": selected}
+    return result
+
+
 def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     cfg = dict(profile.get("settings", {}))
     stats = dict(profile.get("stats", {}))
@@ -674,7 +796,7 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     report: dict[str, Any] = {
         "formula_model": "user-supplied Allods 7.0/Sunshine formula set",
         "assumptions": {
-            "resolve_coefficient": num(cfg.get("resolve_coefficient", 0.0015)),
+            "resolve_coefficient": num(cfg.get("resolve_coefficient", 0.015)),
             "might_affects_healing": bool(cfg.get("might_affects_healing", True)),
             "resolve_gain_uses_actual_divided_by_event_multiplier": True,
             "will_in_tank_optimizer_requires_control_weight": True,
@@ -692,23 +814,43 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "activities": {},
         "warnings": [],
     }
-    # The source text itself contains a 10x ambiguity in the Resolve multiplier.
+    # The supplied literal Resolve equation uses 0.015; the explanatory sentence implies 0.0015.
     coefficient = num(cfg.get("resolve_coefficient", 0.0015))
-    if abs(coefficient - 0.0015) < 1e-12:
-        report["warnings"].append("Resolve coefficient 0.0015 selected from the explanatory sentence; literal equation alternative is 0.015. Verify which scale the server uses.")
-    elif abs(coefficient - 0.015) < 1e-12:
-        report["warnings"].append("Resolve coefficient 0.015 selected from the literal equation; explanatory sentence alternative implies 0.0015. Verify which scale the server uses.")
+    if abs(coefficient - 0.015) < 1e-12:
+        report["warnings"].append("Resolve coefficient 0.015 selected from the literal equation supplied by the user; the explanatory sentence implies 0.0015. Confirm this 10x scale against the live server.")
+    elif abs(coefficient - 0.0015) < 1e-12:
+        report["warnings"].append("Resolve coefficient 0.0015 selected from the explanatory sentence; the literal equation supplied by the user says 0.015. Confirm this 10x scale against the live server.")
     else:
         report["warnings"].append("Custom Resolve coefficient used. Compare it against the exact server scale before treating recommendations as calibrated.")
     if "max_hp" not in cfg and "class_k" not in cfg:
         report["warnings"].append("No max_hp/class_k supplied: automatic Resolve gain and tank health cannot be modelled accurately.")
+    weighted_by_mode: dict[str, list[tuple[str, dict[str, Any], float]]] = {}
     for name, activity in profile.get("activities", {}).items():
         sim = simulate(activity, stats, cfg)
         item: dict[str, Any] = {"simulation": sim}
+        mode = str(activity.get("mode", "dps")).lower()
+        weight = num(activity.get("weight", 1.0), 1.0)
+        weighted_by_mode.setdefault(mode, []).append((name, activity, weight))
         if budget > 0:
             item["recommendation"] = optimize(activity, fixed, budget, cfg)
+            if mode == "hps":
+                segments = {}
+                for role, subset in _healing_recipient_segments(activity).items():
+                    segment_sim = simulate(subset, stats, cfg)
+                    segment = {"simulation": segment_sim}
+                    segment["recommendation"] = optimize(subset, fixed, budget, cfg)
+                    segments[role] = segment
+                if segments:
+                    item["recipient_segments"] = segments
         report["activities"][name] = item
         report["warnings"].extend(sim.get("warnings", []))
+
+    if budget > 0:
+        report["cross_activity_recommendations"] = {
+            mode: optimize_multi_activity(rows, fixed, budget, cfg)
+            for mode, rows in weighted_by_mode.items()
+            if mode in ("dps", "hps", "tank")
+        }
     # Stable unique warnings.
     report["warnings"] = list(dict.fromkeys(report["warnings"]))
     return report
