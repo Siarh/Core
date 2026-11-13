@@ -76,6 +76,10 @@ local function freshSession()
             otherZeroAmountEvents = 0
         },
         journal = freshJournal(),
+        rawDiagnostics = {
+            incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
+            healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+        },
         determination = freshDeterminationStats(),
         determinationByMode = {
             damage = freshDeterminationStats(),
@@ -116,6 +120,10 @@ local function ensureSession()
     d.missedEvents = d.missedEvents or 0
     d.otherZeroAmountEvents = d.otherZeroAmountEvents or 0
     AOUA.Session.journal = AOUA.Session.journal or freshJournal()
+    AOUA.Session.rawDiagnostics = AOUA.Session.rawDiagnostics or {
+        incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+    }
     local j = AOUA.Session.journal
     for _, key in ipairs({
         "incomingByType", "incomingByAbility", "incomingByAttacker",
@@ -137,6 +145,10 @@ ensureSession()
 function AOUA.OnFightStart()
     ensureSession()
     AOUA.Session.journal = freshJournal()
+    AOUA.Session.rawDiagnostics = {
+        incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0
+    }
 end
 
 local function safeHealth(id)
@@ -537,8 +549,17 @@ end
 
 
 function AOUA.OnIncomingDamage(params)
-    if type(params) ~= "table" or not isLocalObject(params.target) then return end
     ensureSession()
+    local diag = AOUA.Session.rawDiagnostics
+    diag.incomingCallbacks = diag.incomingCallbacks + 1
+    if type(params) ~= "table" then return end
+    if isLocalObject(params.target) then
+        diag.incomingMatched = diag.incomingMatched + 1
+    else
+        diag.incomingOther = diag.incomingOther + 1
+        return
+    end
+    diag.incomingAccepted = diag.incomingAccepted + 1
     local amount = math.max(0, N(params.amount))
     addEvent(AOUA.Session.incoming, amount, params)
     local fightStats = AOUA.Session.journal.incomingStats
@@ -598,8 +619,17 @@ function AOUA.OnIncomingDamage(params)
 end
 
 function AOUA.OnReceivedHeal(params)
-    if type(params) ~= "table" or not isLocalObject(params.unitId) then return end
     ensureSession()
+    local diag = AOUA.Session.rawDiagnostics
+    diag.healCallbacks = diag.healCallbacks + 1
+    if type(params) ~= "table" then return end
+    if isLocalObject(params.unitId) then
+        diag.healMatched = diag.healMatched + 1
+    else
+        diag.healOther = diag.healOther + 1
+        return
+    end
+    diag.healAccepted = diag.healAccepted + 1
     recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)))
 end
 
@@ -689,8 +719,14 @@ end
 local function journalReport()
     local j = AOUA.Session.journal
     local d = j.incomingStats
+    local rd = AOUA.Session.rawDiagnostics or {}
     local out = {
         "Combat API event journal (current/last combat, local player):",
+        "Raw callbacks incoming=" .. fmt(rd.incomingCallbacks) ..
+            " matched=" .. fmt(rd.incomingMatched) .. " other=" .. fmt(rd.incomingOther) ..
+            " accepted=" .. fmt(rd.incomingAccepted) ..
+            "; heals=" .. fmt(rd.healCallbacks) .. "/" .. fmt(rd.healMatched) ..
+            "/" .. fmt(rd.healAccepted),
         "Incoming: events=" .. fmt(d.events) .. ", damage=" .. fmt(d.amount) ..
             ", zero amount=" .. fmt(d.zeroAmountEvents) ..
             ", full absorb (inferred)=" .. fmt(d.fullyAbsorbedEvents) ..
