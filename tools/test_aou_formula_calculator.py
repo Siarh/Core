@@ -3,6 +3,7 @@ import unittest
 
 import aou_formula_calculator as calc
 import aou_analyze
+import aou_event_history_to_profile as event_import
 
 
 class FormulaTests(unittest.TestCase):
@@ -223,6 +224,45 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(segments["self"]["simulation"]["events"], 1)
         self.assertEqual(segments["ally"]["simulation"]["events"], 1)
         self.assertIn("hps", report["cross_activity_recommendations"])
+
+    def test_event_import_normalizes_observed_outgoing_damage(self):
+        stats = {"mastery": 200, "resolve": 400, "ruthlessness": 300, "luck": 150}
+        row = {
+            "observed_amount": "10000", "target_hp_before": "50", "hp_quality": "measured_pre",
+            "resolve_pool": "60", "critical": "0", "runes_absorb": "100",
+            "target_max_hp": "500000", "recipient": "", "second": "3",
+            "ability": "Test", "element": "PHYSICAL"
+        }
+        sample, reason = event_import.event_to_sample(row, stats, 0.015, "dps")
+        self.assertIsNone(reason)
+        out = calc.calculate_event(sample, "dps", stats, {"level": 1, "resolve_coefficient": 0.015}, 0)
+        self.assertAlmostEqual(out["nominal"], 10000, places=6)
+
+    def test_event_import_requires_target_max_hp_for_useful_hps(self):
+        stats = {"mastery": 100, "resolve": 100, "ruthlessness": 100, "luck": 0}
+        row = {
+            "observed_amount": "1000", "target_hp_before": "40", "hp_quality": "measured_pre",
+            "resolve_pool": "30", "critical": "", "runes_absorb": "",
+            "target_max_hp": "", "recipient": "ally", "second": "1"
+        }
+        sample, reason = event_import.event_to_sample(row, stats, 0.015, "hps")
+        self.assertIsNone(sample)
+        self.assertEqual(reason, "target_max_hp_unknown")
+
+    def test_event_import_builds_per_fight_activities_and_freezes_resolve(self):
+        header = {
+            "fight_id": "7", "profile": "pve", "kind": "damage",
+            "observed_amount": "1000", "target_hp_before": "60", "hp_quality": "measured_pre",
+            "target_max_hp": "100000", "critical": "0", "resolve_pool": "30",
+            "runes_absorb": "0", "second": "1", "ability": "Strike", "element": "PHYSICAL",
+            "M": "100", "R": "200", "U": "300", "L": "50"
+        }
+        hps = dict(header, kind="healing", recipient="self", target_max_hp="100000",
+                   target_hp_before="40", observed_amount="500")
+        profile = event_import.build_profile([header, hps], 10, 0.015)
+        self.assertEqual(len(profile["activities"]), 2)
+        self.assertTrue(profile["settings"]["freeze_resolve_pool"])
+        self.assertEqual(profile["allocation_budget"], 10)
 
 
 if __name__ == "__main__":
