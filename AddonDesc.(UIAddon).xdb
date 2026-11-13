@@ -18,6 +18,7 @@
     <Item href="Scripts/AoUMeterAnalytics.lua"/>
     <Item href="Scripts/AoUMeterData.lua"/>
     <Item href="Scripts/AoUMeterOptim.lua"/>
+    <Item href="Scripts/AoUMeterAI.lua"/>
     <Item href="Scripts/AoUMeterGUI.lua"/>
     <Item href="Scripts/AoUMeterEvents.lua"/>
     <Item href="Scripts/AoUMeterInit.lua"/>
