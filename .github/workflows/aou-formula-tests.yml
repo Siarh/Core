@@ -15,6 +15,7 @@ on:
       - "tools/test_aou_ai_assistant.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
+      - "Scripts/AoUMeterGUI.lua"
       - "Scripts/AoUMeterAI.lua"
       - "Scripts/AoUMeterAnalytics.lua"
       - "Scripts/AoUMeterEvents.lua"
@@ -48,6 +49,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lua5.4
           luac -p Scripts/AoUMeterOptim.lua
+          luac -p Scripts/AoUMeterGUI.lua
           luac -p Scripts/AoUMeterAI.lua
           luac -p Scripts/AoUMeterAnalytics.lua
           luac -p Scripts/AoUMeterEvents.lua
