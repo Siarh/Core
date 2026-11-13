@@ -802,6 +802,7 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "will_in_tank_optimizer_requires_control_weight": True,
             "rune_absorption": "only applied when rune_absorbed or rune_absorb_fraction is supplied per event",
             "healing_effective": "uses effective_heal or target_max_hp + target_hp; otherwise unknown",
+            "resolve_pool_replay": "measured pool snapshots are held fixed when settings.freeze_resolve_pool is true",
         },
         "character": {
             "level_multiplier": level_multiplier(cfg.get("level", 1)),
@@ -812,18 +813,20 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "max_hp_model": _max_hp(stats, cfg, fixed),
         },
         "activities": {},
-        "warnings": [],
+        "warnings": list(profile.get("import_warnings", [])),
     }
     # The supplied literal Resolve equation uses 0.015; the explanatory sentence implies 0.0015.
-    coefficient = num(cfg.get("resolve_coefficient", 0.0015))
+    coefficient = num(cfg.get("resolve_coefficient", 0.015))
     if abs(coefficient - 0.015) < 1e-12:
         report["warnings"].append("Resolve coefficient 0.015 selected from the literal equation supplied by the user; the explanatory sentence implies 0.0015. Confirm this 10x scale against the live server.")
     elif abs(coefficient - 0.0015) < 1e-12:
         report["warnings"].append("Resolve coefficient 0.0015 selected from the explanatory sentence; the literal equation supplied by the user says 0.015. Confirm this 10x scale against the live server.")
     else:
         report["warnings"].append("Custom Resolve coefficient used. Compare it against the exact server scale before treating recommendations as calibrated.")
-    if "max_hp" not in cfg and "class_k" not in cfg:
+    if "max_hp" not in cfg and "class_k" not in cfg and not bool(cfg.get("freeze_resolve_pool", False)):
         report["warnings"].append("No max_hp/class_k supplied: automatic Resolve gain and tank health cannot be modelled accurately.")
+    if bool(cfg.get("freeze_resolve_pool", False)):
+        report["warnings"].append("Resolve pool is fixed to measured per-event samples; growth feedback for a changed build is not recalculated from unavailable raw server base values.")
     weighted_by_mode: dict[str, list[tuple[str, dict[str, Any], float]]] = {}
     for name, activity in profile.get("activities", {}).items():
         sim = simulate(activity, stats, cfg)
