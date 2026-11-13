@@ -1192,6 +1192,10 @@ function TUMeter:Stop()
 	self.bCollectData = false
 	self.FightsList[self.Fight.Current]:StopFight()
 	self.FightsList[self.Fight.Total]:StopFight()
+	-- Persist the separate raw-event history without touching the legacy /aou rec store.
+	if AOUA and type(AOUA.OnFightStop) == "function" then
+		pcall(AOUA.OnFightStop)
+	end
 end
 --------------------------------------------------------------------------------
 -- Update the fight time in second (fight time ++)
