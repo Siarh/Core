@@ -772,8 +772,8 @@ local function defenseReport()
         ", runeAbsorb=" .. fmt(d.runesAbsorb) .. ", mount=" .. fmt(d.toMount) ..
         ", multiplierAbsorb=" .. fmt(d.multipliersAbsorb) ..
         "\nAPI totals: absorbed=" .. fmt(d.overallAbsorbed) ..
-        " (" .. fmt(d.totalAbsorbedSamples) .. " samples), prevented=" ..
-        fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)" ..
+        " (" .. fmt(d.totalAbsorbedSamples) .. " samples), net prevented=" ..
+        fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples; negative means net damage increase)" ..
         "\nZero-amount events=" .. fmt(d.zeroAmountEvents) ..
         ", full absorb inferred=" .. fmt(d.fullyAbsorbedEvents) ..
         ", mitigated=" .. fmt(d.fullyPreventedEvents) ..
@@ -806,7 +806,7 @@ local function journalReport()
     local rd = AOUA.Session.rawDiagnostics or {}
     local out = {
         "Combat API event journal (current/last combat, local player):",
-        "Registered filters damage/heal/health=" .. fmt(rd.damageFilters) .. "/" ..
+        "Target filter counts damage/heal/health=" .. fmt(rd.damageFilters) .. "/" ..
             fmt(rd.healFilters) .. "/" .. fmt(rd.healthFilters),
         "Raw callbacks incoming=" .. fmt(rd.incomingCallbacks) ..
             " matched=" .. fmt(rd.incomingMatched) .. " other=" .. fmt(rd.incomingOther) ..
@@ -825,7 +825,7 @@ local function journalReport()
     end, 5)
     out[#out + 1] = topJournalRows("Incoming damage by source type", j.incomingByType, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
-            " API absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented) ..
+            " API absorbed/net prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented) ..
             " runes=" .. fmt(x.runesAbsorb)
     end, 5)
     out[#out + 1] = topJournalRows("Incoming abilities", j.incomingByAbility, "amount", function(k, x)
@@ -849,7 +849,7 @@ local function journalReport()
     end, 5)
     out[#out + 1] = topJournalRows("Outgoing abilities", j.outgoingByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount) ..
-            " crits=" .. fmt(x.crits) .. " target absorbed/prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented)
+            " crits=" .. fmt(x.crits) .. " target absorbed/net prevented=" .. fmt(x.absorbed) .. "/" .. fmt(x.prevented)
     end, 4)
     out[#out + 1] = topJournalRows("Received healing by ability", j.receivedHealByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " heal-field/applied/overheal=" ..
@@ -866,6 +866,7 @@ local function journalReport()
             " overload/wounds/runes/absorbed=" .. fmt(x.overload) .. "/" ..
             fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed)
     end, 4)
+    out[#out + 1] = "Negative net prevented values indicate damage amplification by target-side multipliers, not negative absorption."
     out[#out + 1] = "Effect tags are hit-time snapshots; exact absorbed damage is not attributed to individual tags."
     return table.concat(out, "\n")
 end
