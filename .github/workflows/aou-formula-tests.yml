@@ -7,6 +7,7 @@ on:
       - "tools/aou_formula_calculator.py"
       - "tools/aou_analyze.py"
       - "tools/test_aou_formula_calculator.py"
+      - "tools/test_aou_analytics_journal.lua"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
       - "Scripts/AoUMeterAnalytics.lua"
@@ -35,6 +36,9 @@ jobs:
           luac -p Scripts/AoUMeterEvents.lua
           luac -p Scripts/AoUMeterInit.lua
           luac -p Scripts/AoUMeterData.lua
+          luac -p tools/test_aou_analytics_journal.lua
+      - name: Run analytics journal regression tests
+        run: lua tools/test_aou_analytics_journal.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
