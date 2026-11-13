@@ -405,6 +405,7 @@ local function abilityLabel(params, fallbackName)
     return name or (id and ("id:" .. id)) or "unknown"
 end
 
+local isLocalObject
 local EVENT_HISTORY_LIMIT = 1000
 local EVENT_BUFFER_LIMIT = 2000
 local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C"
@@ -670,7 +671,7 @@ local function recordHealingJournal(kind, params, amount, effective, overheal, k
     return map, key, delta
 end
 
-local function isLocalObject(id)
+isLocalObject = function(id)
     if not id or not avatar or type(avatar.GetId) ~= "function" then return false end
     local ok, playerId = pcall(avatar.GetId)
     return ok and id == playerId
