@@ -1349,8 +1349,9 @@ function Optim.BuildLines(c, fightTime, activeMode)
 					local segPool = seg.poolWeight > 0 and (seg.poolAmount / seg.poolWeight) or pool
 					local sm, sr, su = optA(segmentFixed, segmentBudget, segPool, segHp, false)
 					local current = string.format("HP %s%% / пул %s", F1(segHp * 100), F1(segPool))
-					local recommended = string.format("M%s R%s Б%s", I(sm), I(sr), I(su))
-					local delta = string.format("%s/%s/%s", S(sm - nowA[1]), S(sr - nowA[2]), S(su - nowA[3]))
+					local recM, recR, recU = segmentFixed[1] + sm, segmentFixed[2] + sr, segmentFixed[3] + su
+					local recommended = string.format("M%s R%s Б%s", I(recM), I(recR), I(recU))
+					local delta = string.format("%s/%s/%s", S(recM - nowA[1]), S(recR - nowA[2]), S(recU - nowA[3]))
 					addT(item[2], current, recommended, delta)
 				end
 			end
