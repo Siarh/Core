@@ -532,6 +532,7 @@ function metricReset()
 	RegisterEventHandlersNew("EVENT_UNIT_DAMAGE_RECEIVED", RetrieveDDEventIN , paramsBlockDDIN)
 	RegisterEventHandlersNew("EVENT_UNIT_FOLLOWERS_LIST_CHANGED", ReloadPet, paramsBlockID)
 
+	-- These are per-target filter/watch counts (normally one per group member), not handler-registration totals.
 	if AOUA and type(AOUA.OnEventRegistrationStats) == "function" then
 		pcall(AOUA.OnEventRegistrationStats, #paramsBlockDDIN, #paramsBlockHealIN, healthWatchCount)
 	end
