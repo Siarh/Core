@@ -56,7 +56,9 @@ local function freshSession()
             overallAbsorbed = 0, overallPrevented = 0,
             totalAbsorbedSamples = 0, totalPreventedSamples = 0,
             shieldPoolLoss = 0, shieldPoolGain = 0, shieldPoolSamples = 0,
-            zeroAmountEvents = 0, fullyPreventedEvents = 0
+            zeroAmountEvents = 0, fullyAbsorbedEvents = 0,
+            fullyPreventedEvents = 0, dodgedEvents = 0, missedEvents = 0,
+            otherZeroAmountEvents = 0
         },
         journal = {
             incomingByType = {}, incomingByAbility = {}, incomingByAttacker = {},
@@ -99,7 +101,11 @@ local function ensureSession()
     d.shieldPoolGain = d.shieldPoolGain or 0
     d.shieldPoolSamples = d.shieldPoolSamples or 0
     d.zeroAmountEvents = d.zeroAmountEvents or 0
+    d.fullyAbsorbedEvents = d.fullyAbsorbedEvents or 0
     d.fullyPreventedEvents = d.fullyPreventedEvents or 0
+    d.dodgedEvents = d.dodgedEvents or 0
+    d.missedEvents = d.missedEvents or 0
+    d.otherZeroAmountEvents = d.otherZeroAmountEvents or 0
     AOUA.Session.journal = AOUA.Session.journal or {}
     local j = AOUA.Session.journal
     for _, key in ipairs({
@@ -535,10 +541,29 @@ function AOUA.OnIncomingDamage(params)
     end
     if amount <= 0 then
         d.zeroAmountEvents = d.zeroAmountEvents + 1
-        local prevented = N(params.overallAbsorbedDamage) + N(params.overallPreventedDamage)
-            + N(params.shieldBlock) + N(params.parry) + N(params.resist)
-            + N(params.barrier) + N(params.absorb) + N(params.runesAbsorb)
-        if prevented > 0 then d.fullyPreventedEvents = d.fullyPreventedEvents + 1 end
+        if params.isDodge then
+            d.dodgedEvents = d.dodgedEvents + 1
+        elseif params.isMiss then
+            d.missedEvents = d.missedEvents + 1
+        else
+            local prevented = math.max(0, N(params.overallAbsorbedDamage))
+                + math.max(0, N(params.overallPreventedDamage))
+                + math.max(0, N(params.shieldBlock))
+                + math.max(0, N(params.parry))
+                + math.max(0, N(params.resist))
+                + math.max(0, N(params.barrier))
+                + math.max(0, N(params.absorb))
+                + math.max(0, N(params.toMount))
+                + math.max(0, N(params.runesAbsorb))
+            if prevented > 0 then
+                d.fullyPreventedEvents = d.fullyPreventedEvents + 1
+            elseif tonumber(params.multipliersAbsorb) == nil or N(params.multipliersAbsorb) == 0 then
+                -- API documentation: no damage and no avoidance/mitigation modifier => full absorb.
+                d.fullyAbsorbedEvents = d.fullyAbsorbedEvents + 1
+            else
+                d.otherZeroAmountEvents = d.otherZeroAmountEvents + 1
+            end
+        end
     end
     recordDamageJournal("incoming", params, amount)
 end
@@ -607,7 +632,10 @@ local function defenseReport()
         " (" .. fmt(d.totalAbsorbedSamples) .. " samples), prevented=" ..
         fmt(d.overallPrevented) .. " (" .. fmt(d.totalPreventedSamples) .. " samples)" ..
         "\nZero-amount events=" .. fmt(d.zeroAmountEvents) ..
-        ", fully prevented/absorbed=" .. fmt(d.fullyPreventedEvents) ..
+        ", full absorb inferred=" .. fmt(d.fullyAbsorbedEvents) ..
+        ", mitigated=" .. fmt(d.fullyPreventedEvents) ..
+        ", dodge/miss/other=" .. fmt(d.dodgedEvents) .. "/" .. fmt(d.missedEvents) ..
+        "/" .. fmt(d.otherZeroAmountEvents) ..
         "\nShield pool change (not necessarily damage absorbed): loss=" .. fmt(d.shieldPoolLoss) ..
         ", gain=" .. fmt(d.shieldPoolGain) .. ", samples=" .. fmt(d.shieldPoolSamples)
 end
@@ -635,7 +663,10 @@ local function journalReport()
         "Combat API event journal (local player):",
         "Incoming: events=" .. fmt(d.events) .. ", damage=" .. fmt(d.amount) ..
             ", zero amount=" .. fmt(d.zeroAmountEvents) ..
-            ", fully prevented/absorbed=" .. fmt(d.fullyPreventedEvents)
+            ", full absorb (inferred)=" .. fmt(d.fullyAbsorbedEvents) ..
+            ", mitigated=" .. fmt(d.fullyPreventedEvents) ..
+            ", dodge/miss/other=" .. fmt(d.dodgedEvents) .. "/" .. fmt(d.missedEvents) ..
+            "/" .. fmt(d.otherZeroAmountEvents)
     }
     out[#out + 1] = topJournalRows("Incoming damage by school", j.incomingByElement, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " damage=" .. fmt(x.amount)
@@ -673,8 +704,8 @@ local function journalReport()
             fmt(x.amount) .. "/" .. fmt(x.effective) .. "/" .. fmt(x.overheal) ..
             " wound/rune/absorbed=" .. fmt(x.wound) .. "/" .. fmt(x.runeWound) .. "/" .. fmt(x.absorbed) ..
             " crits=" .. fmt(x.crits) .. " lifeSteal=" .. fmt(x.lifeSteal) ..
-            " lethality samples=" .. fmt(x.lethalitySamples) ..
-            " unknown=" .. fmt(x.unknown)
+            " lethality avg=" .. (N(x.lethalitySamples) > 0 and string.format("%.1f", N(x.lethalitySum) / N(x.lethalitySamples)) or "n/a") ..
+            " (n=" .. fmt(x.lethalitySamples) .. ") unknown=" .. fmt(x.unknown)
     end, 5)
     out[#out + 1] = topJournalRows("Outgoing healing by ability", j.outgoingHealByAbility, "amount", function(k, x)
         return k .. " n=" .. fmt(x.events) .. " nominal/effective/overheal=" ..
