@@ -100,7 +100,7 @@ local function signedStatFocus(current, recommended)
         return "Распределение близко к текущему оптимуму модели."
     end
     return string.format("Крупнейший сдвиг оптимизатора: %s %s%d очков.", best,
-        bestDelta > 0 and "+" or "", math.floor(bestDelta + (bestDelta >= 0 and 0.5 or -0.5)))
+        bestDelta > 0 and "+" or "", (bestDelta >= 0) and math.floor(bestDelta + 0.5) or math.ceil(bestDelta - 0.5))
 end
 
 function DPScopeAI.Analyze(context)
