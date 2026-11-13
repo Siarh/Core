@@ -1139,7 +1139,7 @@ function TUMeter:UpdateData(fightId, combatantID, mode, params, spellInfo)
 	if Combatant and Combatant:IsClose() then -- don't record data from combatant too far
 		-- Analytics runs once per event in the current fight and receives the real combatant.
 		if fightId == self.Fight.Current and AOUA and type(AOUA.OnHit) == "function" then
-			pcall(AOUA.OnHit, Combatant, mode, params, spellInfo and spellInfo.Determination)
+			pcall(AOUA.OnHit, Combatant, mode, params, spellInfo and spellInfo.Determination, spellInfo)
 		end
 		Combatant.Data[mode].Amount = Combatant.Data[mode].Amount + params.amount
 
