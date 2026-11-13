@@ -161,4 +161,61 @@ expect(AOUA.Session.rawDiagnostics.damageFilters, 3, "damage target filter count
 expect(AOUA.Session.rawDiagnostics.healFilters, 3, "healing target filter count retained")
 expect(AOUA.Session.rawDiagnostics.healthFilters, 3, "health watch count retained")
 
+
+-- Raw event history is isolated from /aou rec rows, survives fight stop,
+-- and exports using the existing AOUCSV chunk protocol.
+local persistedConfig = {}
+local emittedMessages = {}
+common = { GetAddonName = function() return "DPScope" end }
+userMods = {
+    GetGlobalConfigSection = function() return persistedConfig end,
+    SetGlobalConfigSection = function(_, value) persistedConfig = value end,
+}
+message = function(value) emittedMessages[#emittedMessages + 1] = value end
+avatar.IsExist = function() return true end
+Optim = {
+    MyId = 1001,
+    GetHealth = function() return 500, 1000, true end,
+    ReadStats = function()
+        return {
+            M = { total = 101 }, R = { total = 202 }, U = { total = 303 }, L = { total = 40 },
+            S = { total = 55 }, W = { total = 66 }, B = { total = 77 }, C = { total = 88 }
+        }
+    end
+}
+AOUA.Profile = "raid"
+AOUA.OnFightStart()
+AOUA.OnHit(
+    { ID = 1001 },
+    enumMode.Dps,
+    { target = 2002, amount = 125, isCritical = true, sysSubElement = "ENUM_SubElement_PHYSICAL",
+      damageSource = "DamageSource_SPELL", ability = "Recorded damage", resist = 10, runesAbsorb = 5 },
+    42,
+    { Name = "Recorded damage" }
+)
+AOUA.OnHit(
+    { ID = 1001 },
+    enumMode.Hps,
+    { unitId = 1001, heal = 80, amount = 80, isCritical = false },
+    35,
+    { Name = "Recorded self heal" }
+)
+AOUA.OnIncomingDamage({
+    target = 1001, amount = 50, ability = "Recorded incoming",
+    sysSubElement = "ENUM_SubElement_FIRE", runesAbsorb = 12
+})
+expect(#AOUA.Session.eventSamples, 3, "raw event buffer count")
+expect(AOUA.Session.eventSamples[1]:find("damage", 1, true) ~= nil, true, "outgoing damage sample saved")
+expect(AOUA.Session.eventSamples[2]:find("|self|Recorded self heal|", 1, true) ~= nil, true, "self-heal recipient saved")
+local savedOk, savedCount = AOUA.OnFightStop()
+expect(savedOk, true, "event history persisted")
+expect(savedCount, 3, "persisted event count")
+expect(persistedConfig.aou_evt_count, 3, "event config count")
+expect(persistedConfig.aou_evt_schema, "v1", "event schema version")
+expect(persistedConfig.aou_rec_count, nil, "legacy record keys untouched")
+local exportOk = AOUA.EventExport(3)
+expect(exportOk, true, "event export success")
+assert(emittedMessages[1] == "AOUCSV|BEGIN|2|3|events", "event export begin marker missing")
+assert(emittedMessages[#emittedMessages] == "AOUCSV|END", "event export end marker missing")
+
 print("DPScope analytics journal regression tests passed.")
