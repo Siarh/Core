@@ -1266,8 +1266,10 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local function lg(x) return math.floor(math.log(x + 1) * 8) end
 	local statKey = table.concat({ cfg.mode, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef, (DPScopeAI and DPScopeAI.IsEnabled and DPScopeAI.IsEnabled()) and 1 or 0, fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau }, "|")
-	-- the dynamic inputs (pool, target health, damage per second ...) change every second: coarse buckets, and a recalculation
-	-- at most once per 4 calls unless the stats themselves changed
+	-- dynamic inputs (pool, target health, DPS ...) change during combat. Reuse
+	-- the last full search for up to 10 one-second refreshes; static stat/config
+	-- changes still invalidate it immediately, while the visible current values
+	-- and mitigation rows continue to refresh every second.
 	local selfSeg, allySeg = o.self or {}, o.ally or {}
 	local selfHp = (selfSeg.amount or 0) > 0 and (selfSeg.hpAmount or 0) / selfSeg.amount or 0
 	local allyHp = (allySeg.amount or 0) > 0 and (allySeg.hpAmount or 0) / allySeg.amount or 0
@@ -1277,7 +1279,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local memo = Optim.Memo
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
-	if memo.key == statKey and memo.lines and (memo.dynKey == dynKey or Optim.SinceCalc < 4) then
+	if memo.key == statKey and memo.lines and (memo.dynKey == dynKey or Optim.SinceCalc < 10) then
 		local cached = memo.lines
 		local res = { lines[1], lines[2], lines[3] }
 		for i = 1, #cached do res[#res + 1] = cached[i] end
