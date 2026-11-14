@@ -41,7 +41,7 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
         if "AOUCSV" not in line:
             continue
         # END is a control marker without chunk counters/payload.
-        if re.search(r"AOUCSV\\s*\\|\\s*END(?:\\s|$)", line):
+        if re.search(r"AOUCSV\s*\|\s*END(?:\s|$)", line):
             continue
         match = AOU_LINE_RE.search(line)
         if not match:
