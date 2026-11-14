@@ -45,36 +45,73 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 
 def stat_signature(rows: list[dict[str, str]]) -> dict[str, float]:
-    values: dict[str, list[float]] = {key: [] for key in REQUIRED_STATS}
-    for row in rows:
-        for key in REQUIRED_STATS:
-            value = number(row.get(key))
-            if value is not None:
-                values[key].append(value)
+    """Return median reference stats for optimizer; event normalization uses per-row snapshots."""
     result: dict[str, float] = {}
-    for key, group in values.items():
-        label = STAT_COLUMNS[key]
-        if not group:
+    for key, label in STAT_COLUMNS.items():
+        values = [value for row in rows if (value := number(row.get(key))) is not None]
+        if not values:
             raise ValueError(f"В журнале нет снимка характеристики {key} ({label}).")
-        if max(group) - min(group) > 0.5:
-            raise ValueError(
-                f"Характеристика {key} ({label}) менялась между боями ({min(group):.1f}–{max(group):.1f}). "
-                "Собери CSV для одного набора экипировки/распределения."
-            )
-        result[label] = group[0]
+        result[label] = sorted(values)[len(values) // 2]
     return result
 
 
 def optional_stat_signature(rows: list[dict[str, str]], key: str, label: str) -> float:
     values = [value for row in rows if (value := number(row.get(key))) is not None]
-    if not values:
-        return 0.0
-    if max(values) - min(values) > 0.5:
-        raise ValueError(
-            f"Характеристика {key} ({label}) менялась между боями. "
-            "Раздели экспорт по наборам экипировки."
-        )
-    return values[0]
+    return sorted(values)[len(values) // 2] if values else 0.0
+
+
+def event_stats(row: dict[str, str], fallback: dict[str, float]) -> dict[str, float]:
+    """Use the stat snapshot attached to this event, falling back only when absent."""
+    keys = {"M": "mastery", "R": "resolve", "U": "ruthlessness", "L": "luck",
+            "S": "fortitude", "W": "will", "B": "bloodthirst", "C": "caution"}
+    result = dict(fallback)
+    for column, name in keys.items():
+        value = number(row.get(column))
+        if value is not None:
+            result[name] = value
+    return result
+
+
+def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Descriptive comparison of observed DPS/HPS by exact recorded stat snapshot."""
+    columns = {"M": "mastery", "R": "resolve", "U": "ruthlessness", "L": "luck"}
+    buckets: dict[tuple[float | None, ...], dict[str, Any]] = {}
+    for row in rows:
+        kind = (row.get("kind") or "").strip().lower()
+        if kind not in {"damage", "healing"}:
+            continue
+        signature = tuple(number(row.get(key)) for key in columns)
+        bucket = buckets.setdefault(signature, {
+            "stats": {name: value for name, value in zip(columns.values(), signature)},
+            "damage": 0.0, "healing": 0.0, "damage_events": 0, "healing_events": 0,
+            "fights": set(), "seconds": {},
+        })
+        amount = number(row.get("observed_amount")) or 0.0
+        fight = (row.get("fight_id") or "unknown").strip()
+        second = max(0, int(number(row.get("second")) or 0))
+        bucket["fights"].add(fight)
+        bucket["seconds"].setdefault(fight, set()).add(second)
+        if kind == "damage":
+            bucket["damage"] += amount
+            bucket["damage_events"] += 1
+        else:
+            bucket["healing"] += amount
+            bucket["healing_events"] += 1
+    result = []
+    for bucket in buckets.values():
+        active_seconds = sum(max(1, max(seconds) - min(seconds) + 1) for seconds in bucket["seconds"].values())
+        result.append({
+            "stats": bucket["stats"], "fights": len(bucket["fights"]),
+            "damage_events": bucket["damage_events"], "healing_events": bucket["healing_events"],
+            "observed_damage": round(bucket["damage"], 2),
+            "observed_healing": round(bucket["healing"], 2),
+            "active_seconds_estimate": active_seconds,
+            "observed_dps_estimate": round(bucket["damage"] / active_seconds, 2) if active_seconds else None,
+            "observed_hps_estimate": round(bucket["healing"] / active_seconds, 2) if active_seconds else None,
+        })
+    result.sort(key=lambda item: (item["stats"].get("mastery") or 0, item["stats"].get("resolve") or 0))
+    return {"method": "grouped_by_event_stat_snapshot; active duration estimated from event seconds",
+            "groups": result, "note": "Descriptive, not causal: target, rotation, buffs, encounter and fight duration may differ."}
 
 
 def resistance_family(element: str) -> str | None:
@@ -251,7 +288,7 @@ def build_profile(
         fight_id = (row.get("fight_id") or "unknown").strip()
         profile_name = (row.get("profile") or "unknown").strip()
         if kind == "incoming":
-            sample, reason, school, rating = tank_event_to_sample(row, stats)
+            sample, reason, school, rating = tank_event_to_sample(row, event_stats(row, stats))
             if reason:
                 skipped[reason] += 1
                 continue
@@ -262,7 +299,7 @@ def build_profile(
             continue
 
         mode = "dps" if kind == "damage" else "hps"
-        sample, reason = event_to_sample(row, stats, resolve_coefficient, mode)
+        sample, reason = event_to_sample(row, event_stats(row, stats), resolve_coefficient, mode)
         if reason:
             skipped[reason] += 1
             continue
@@ -334,6 +371,14 @@ def build_profile(
         "Наблюдаемый пул Решимости зафиксирован отдельно на каждом событии; его обратная динамика при изменении статов не пересчитывается.",
         "Для лечения исходная величина callback рассматривается как номинальная базовая величина; если исходное лечение уже было ограничено недостающим HP, рекомендация будет консервативной.",
     ]
+    stat_ranges = {}
+    for key, label in STAT_COLUMNS.items():
+        values = [number(row.get(key)) for row in combat_rows]
+        values = [value for value in values if value is not None]
+        if values and max(values) - min(values) > 0.5:
+            stat_ranges[label] = {"min": min(values), "max": max(values), "distinct_rounded": len({round(value, 1) for value in values})}
+    if stat_ranges:
+        warnings.append("Характеристики менялись в журнале; каждое событие нормализовано по собственному снимку статов. Для сводного оптимизатора используются медианные характеристики. Диапазоны: " + json.dumps(stat_ranges, ensure_ascii=False))
     if skipped:
         warnings.append("Исключено событий по причине: " + ", ".join(f"{key}={value}" for key, value in sorted(skipped.items())))
 
@@ -364,6 +409,7 @@ def build_profile(
             "outgoing_events": len(outgoing_rows),
             "incoming_events": len(incoming_rows),
             "resistance_families": sorted(resistance_ratings),
+            "stat_comparison": compare_stat_sets(combat_rows),
         },
     }
 
