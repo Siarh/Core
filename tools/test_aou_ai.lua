@@ -66,6 +66,20 @@ local unknownHeal = DPScopeAI.Analyze({
 assert(string.find(unknownHeal.insight, "получатели", 1, true),
     "HPS analysis should not attribute heals when recipient IDs are missing")
 
+local defense = DPScopeAI.Analyze({
+    mode = "tank", eventCount = 45, hpSamples = 0, poolSamples = 0,
+    incomingPerSecond = 500, survivalDeltaPct = 4.5, hpMax = 12000
+})
+expect(defense.confidence, "средняя", "defense confidence uses incoming event count")
+assert(string.find(defense.insight, "+4.5%", 1, true),
+    "defense analysis should show modeled survivability change")
+local defenseRows = DPScopeAI.BuildLines({
+    mode = "tank", eventCount = 45, hpSamples = 0, poolSamples = 0,
+    incomingPerSecond = 500, survivalDeltaPct = 4.5, hpMax = 12000
+})
+expect(defenseRows[2][3], "IN", "defense quality uses incoming samples")
+expect(defenseRows[2][4], "HP/RES -", "defense quality does not reuse attack sample ratios")
+
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
 assert(string.find(output[#output], "ON", 1, true), "AI status should report ON")
 assert(string.find(output[#output], "Ollama", 1, true), "AI status should describe the local desktop companion")
