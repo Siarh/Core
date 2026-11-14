@@ -4,6 +4,10 @@
 	<Priority>3</Priority>
 	<Children>
 		<Item href="Buttons/CloseBtn/CloseBtn.(WidgetButton).xdb#xpointer(/WidgetButton)" />
+		<Item href="Tabs/SpellsTabBtn.(WidgetButton).xdb#xpointer(/WidgetButton)" />
+		<Item href="Tabs/StatsTabBtn.(WidgetButton).xdb#xpointer(/WidgetButton)" />
+		<Item href="Tabs/SpellsTabText.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="Tabs/StatsTabText.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 		<Item href="GlobalInfoPanel/GlobalInfoPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="GlobalInfoHeaderPanel/GlobalInfoHeaderPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="SpellPanel/SpellPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
