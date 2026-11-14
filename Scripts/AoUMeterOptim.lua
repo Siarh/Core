@@ -671,14 +671,14 @@ end
 local function score(o, St, Bl, offenseScale)
 	local hp = o.hp0 * (1 + St / 1000)
 	if o.inc <= 0 then return hp end
-	offenseScale = math.max(0, N(offenseScale or 1))
+	offenseScale = math.max(0, offenseScale or 1)
 	-- Bloodthirst is fed by damage dealt, not by healing allies.
 	-- For a healer, only measured self-healing is personal sustain; the HPS
 	-- multiplier scales that self-healing, while allied healing is excluded.
 	local damageScale = o.healMode and 1 or offenseScale
 	local selfHealScale = o.healMode and offenseScale or 1
-	local lifeSteal = share(Bl) * N(o.damageOut) * damageScale
-	local selfHeal = N(o.selfHeal) * selfHealScale
+	local lifeSteal = share(Bl) * (o.damageOut or 0) * damageScale
+	local selfHeal = (o.selfHeal or 0) * selfHealScale
 	local sus = (lifeSteal + selfHeal) * (1 - (o.phi or 0))
 	local c = o.c or 0
 	-- Caution: below 40% health incoming damage is reduced; healing remains a separate sustain source.
