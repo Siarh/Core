@@ -392,6 +392,9 @@ function TUMeterGUI:SetDetailsTab(tab)
 	if self.DetailsTab == tab then return end
 	self.DetailsTab = tab
 	self.Hovering = false
+	-- Put the compact statistics page near the top. The original spell page
+	-- keeps its existing position so legacy spell-detail layout is unchanged.
+	self.DetailsPanel:SetPosition(nil, tab == "stats" and 30 or 230)
 	self:UpdateValues()
 end
 
