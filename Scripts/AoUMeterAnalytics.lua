@@ -1204,12 +1204,17 @@ function AOUA.OnSlash(input)
             ", storage limit=" .. fmt(EVENT_HISTORY_LIMIT)
     end
     if cmd == "eventexport" or cmd == "rawexport" or cmd == "eventfile" then
-        local count = tonumber(string.match(rest, "^(%d+)"))
-        local ok = AOUA.EventExport(count)
+        local countText, pageText = string.match(rest, "^(%d+)%s*(%d*)")
+        local count = tonumber(countText) or 100
+        local page = tonumber(pageText) or 1
+        local ok, summary = AOUA.EventExport(count, page)
+        if not ok then return true, summary or "No event rows to export." end
         if cmd == "eventfile" then
-            return true, ok and "DPScope event-file export is ready: capture all AOUCSV lines/screenshots, OCR them into one UTF-8 text file, then import the text in AoU_ChatLog_To_CSV.html." or "No event rows to export."
+            return true, (summary or "Event export page ready.") ..
+                " Save all page captures into one UTF-8 OCR text file; after the last page run tools/aou_ai_companion.py."
         end
-        return true, ok and "Event export sent as AOUCSV chunks; copy all AOUCSV lines and convert with AoU_ChatLog_To_CSV.html." or "No event rows to export."
+        return true, (summary or "Event export page sent.") ..
+            " Append this page to the same OCR text file before exporting the next page."
     end
     if cmd == "stats" then
         return true, determinationReport() ..
