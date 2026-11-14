@@ -12,7 +12,9 @@ on:
       - "tools/test_aou_ai.lua"
       - "tools/aou_ai_assistant.py"
       - "tools/README_ollama_ai.txt"
-      - "tools/test_aou_ai_assistant.py"\n      - "tools/aou_ai_companion.py"\n      - "tools/test_aou_ai_companion.py"
+      - "tools/test_aou_ai_assistant.py"
+      - "tools/aou_ai_companion.py"
+      - "tools/test_aou_ai_companion.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
       - "Scripts/AoUMeterGUI.lua"
@@ -83,7 +85,7 @@ jobs:
           cp -a "AddonDesc.(UIAddon).xdb" AoUMeterSettings.txt AoU_ChatLog_To_CSV.html \
             README_Optimizer.txt CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
           cp -a tools/aou_formula_calculator.py tools/aou_event_history_to_profile.py \
-            tools/aou_profile_template.json tools/aou_ai_assistant.py tools/README_formula_calculator.txt \
+            tools/aou_profile_template.json tools/aou_ai_assistant.py tools/aou_ai_companion.py \\n            tools/README_formula_calculator.txt
             tools/README_ollama_ai.txt package/DPScope/tools/
           cd package
           zip -qr ../DPScope-build28.zip DPScope
