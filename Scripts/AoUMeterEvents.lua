@@ -142,20 +142,6 @@ onReaction["CloseSpellInfoPanelBtnReaction"] = function(reaction)
 	DPSMeterGUI.DetailsPanel:Hide()
 end
 --------------------------------------------------------------------------------
--- Switch between the compact spell list and the separate statistics page
---------------------------------------------------------------------------------
-onReaction["SwitchSpellsTabReaction"] = function(reaction)
-	if DPSMeterGUI and DPSMeterGUI.SetDetailsTab then
-		DPSMeterGUI:SetDetailsTab("spells")
-	end
-end
-
-onReaction["SwitchStatsTabReaction"] = function(reaction)
-	if DPSMeterGUI and DPSMeterGUI.SetDetailsTab then
-		DPSMeterGUI:SetDetailsTab("stats")
-	end
-end
---------------------------------------------------------------------------------
 -- occurred when the player click on the fight dropdown button in the main panel
 --------------------------------------------------------------------------------
 onReaction["GetFightBtnReaction"] = function(reaction)
