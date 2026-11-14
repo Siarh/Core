@@ -17,6 +17,9 @@ local PHASES = {
     { key = "25_0",   label = "25-0%",   min = 0.00 }
 }
 
+local EVENT_HISTORY_LIMIT = 1000
+local EVENT_BUFFER_LIMIT = 2000
+
 local function N(v)
     local x = tonumber(v)
     if x == nil then return 0 end
@@ -87,14 +90,17 @@ local function freshSession()
             healing = freshDeterminationStats()
         },
         targetHealth = { samples = 0, estimated = 0, unknown = 0, changedEvents = 0 },
-        eventSamples = {}, eventSamplesDropped = 0, elapsedSeconds = 0, fightId = 0,
-        statSnapshot = nil, started = false
+        eventSamples = {}, eventSamplesDropped = 0, eventSampleCount = 0, eventSampleNext = 1,
+        elapsedSeconds = 0, fightId = 0, statSnapshot = nil, started = false
     }
 end
 
 AOUA.Session = AOUA.Session or freshSession()
 AOUA.PendingReceivedHeal = AOUA.PendingReceivedHeal or setmetatable({}, { __mode = "k" })
 local function ensureSession()
+    -- This migration/shape check walks the session journal. Run it once when
+    -- the module loads, not for every combat callback.
+    if AOUA.SessionReady then return end
     if not AOUA.Session.damage or not AOUA.Session.phases or
         not AOUA.Session.defense or not AOUA.Session.determination or
         not AOUA.Session.targetHealth then
@@ -145,8 +151,17 @@ local function ensureSession()
     AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents or 0
     AOUA.Session.eventSamples = AOUA.Session.eventSamples or {}
     AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped or 0
+    AOUA.Session.eventSampleCount = math.max(0, math.min(EVENT_BUFFER_LIMIT,
+        math.floor(tonumber(AOUA.Session.eventSampleCount) or #AOUA.Session.eventSamples)))
+    AOUA.Session.eventSampleNext = math.floor(tonumber(AOUA.Session.eventSampleNext) or
+        ((AOUA.Session.eventSampleCount >= EVENT_BUFFER_LIMIT) and 1 or (AOUA.Session.eventSampleCount + 1)))
+    if AOUA.Session.eventSampleNext < 1 or AOUA.Session.eventSampleNext > EVENT_BUFFER_LIMIT then
+        AOUA.Session.eventSampleNext = 1
+    end
     AOUA.Session.elapsedSeconds = AOUA.Session.elapsedSeconds or 0
+    AOUA.SessionReady = true
 end
+AOUA.SessionReady = false
 ensureSession()
 
 -- Detailed API journal is fight-scoped; keep the last one until the next fight.
@@ -156,6 +171,8 @@ function AOUA.OnFightStart()
     AOUA.Session.journal = freshJournal()
     AOUA.Session.eventSamples = {}
     AOUA.Session.eventSamplesDropped = 0
+    AOUA.Session.eventSampleCount = 0
+    AOUA.Session.eventSampleNext = 1
     AOUA.Session.elapsedSeconds = 0
     AOUA.Session.statSnapshot = nil
     AOUA.Session.started = true
@@ -236,8 +253,7 @@ local function recordHealthPhase(kind, params, amount, confidence)
     -- pre-hit estimate for the next event; using the current post-hit percentage for
     -- every hit incorrectly pins an entire fight to one phase.
     local previous = id and AOUA.HpCache[id] or nil
-    local value, limit, real = safeHealth(id)
-    local transition = AOUA.HealthTransitions[id]
+    local transition = id and AOUA.HealthTransitions[id] or nil
     local expectedDirection = (kind == "damage") and -1 or 1
     local useTransition = false
     if transition then
@@ -253,6 +269,10 @@ local function recordHealthPhase(kind, params, amount, confidence)
         -- Never let an unmatched or opposite-direction transition leak into a later hit.
         if not useTransition then AOUA.HealthTransitions[id] = nil end
     end
+    -- A matching health-change event already contains the pre-hit fraction.
+    -- Avoid another expensive game API query for the same combat event.
+    local value, limit, real
+    if not useTransition then value, limit, real = safeHealth(id) end
     if value == nil and not useTransition then
         AOUA.Session.targetHealth.unknown = AOUA.Session.targetHealth.unknown + 1
         return nil, "unknown", nil
@@ -342,6 +362,7 @@ function AOUA.OnHealthChanged(params)
             beforeFrac = beforeFrac,
             direction = directionDelta and (directionDelta < 0 and -1 or (directionDelta > 0 and 1 or 0)) or 0,
             delta = delta,
+            limit = limit,
             exact = (delta ~= nil and real == true)
         }
         AOUA.Session.targetHealth.changedEvents = AOUA.Session.targetHealth.changedEvents + 1
@@ -411,8 +432,6 @@ local function abilityLabel(params, fallbackName)
 end
 
 local isLocalObject
-local EVENT_HISTORY_LIMIT = 1000
-local EVENT_BUFFER_LIMIT = 2000
 local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax"
 
 local function sampleNumber(value)
@@ -449,8 +468,15 @@ end
 local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targetMaxHp, determination, resolvedAbilityName)
     if not AOUA.Session.started then return end
     local samples = AOUA.Session.eventSamples
-    if #samples >= EVENT_BUFFER_LIMIT then
-        table.remove(samples, 1)
+    local sampleCount = AOUA.Session.eventSampleCount or #samples
+    local sampleIndex
+    if sampleCount < EVENT_BUFFER_LIMIT then
+        sampleIndex = sampleCount + 1
+        sampleCount = sampleCount + 1
+    else
+        -- Fixed-size ring buffer: overwrite the oldest row in O(1). The old
+        -- table.remove(samples, 1) shifted up to 1,999 rows for every later hit.
+        sampleIndex = AOUA.Session.eventSampleNext or 1
         AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped + 1
     end
     local targetId = (kind == "damage" or kind == "incoming") and params.target or params.unitId
@@ -479,7 +505,23 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C),
         sampleNumber(stats.HPmax)
     }
-    samples[#samples + 1] = table.concat(values, "|")
+    samples[sampleIndex] = table.concat(values, "|")
+    AOUA.Session.eventSampleCount = sampleCount
+    AOUA.Session.eventSampleNext = (sampleIndex % EVENT_BUFFER_LIMIT) + 1
+end
+
+local function currentEventSamples()
+    local source = AOUA.Session.eventSamples or {}
+    local count = math.max(0, math.min(EVENT_BUFFER_LIMIT,
+        math.floor(tonumber(AOUA.Session.eventSampleCount) or #source)))
+    local rows = {}
+    local first = (count >= EVENT_BUFFER_LIMIT) and (AOUA.Session.eventSampleNext or 1) or 1
+    for i = 0, count - 1 do
+        local index = ((first + i - 1) % EVENT_BUFFER_LIMIT) + 1
+        local row = source[index]
+        if row ~= nil then rows[#rows + 1] = row end
+    end
+    return rows
 end
 
 local function loadPersistedEventSamples()
@@ -497,7 +539,7 @@ local function loadPersistedEventSamples()
 end
 
 local function persistEventSamples()
-    local current = AOUA.Session.eventSamples or {}
+    local current = currentEventSamples()
     if #current == 0 then return true, 0 end
     local ok = pcall(function()
         local name = common.GetAddonName()
@@ -541,9 +583,8 @@ local EVENT_EXPORT_PAGE_SIZE = 10
 function AOUA.EventExport(count, page)
     local rows = loadPersistedEventSamples()
     if AOUA.Session.started then
-        for i = 1, #(AOUA.Session.eventSamples or {}) do
-            rows[#rows + 1] = AOUA.Session.eventSamples[i]
-        end
+        local current = currentEventSamples()
+        for i = 1, #current do rows[#rows + 1] = current[i] end
     end
     count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 100)))
     page = math.max(1, math.floor(tonumber(page) or 1))
