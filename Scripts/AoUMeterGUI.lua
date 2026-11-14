@@ -27,10 +27,6 @@ function TDetailsPanelGUI:CreateNewObject(name)
 	local widget = TWidget:CreateNewObject(name)
 	return setmetatable({
 			CloseButton = widget:GetChildByName("CloseBtn"), -- Close button
-			SpellsTabBtn = widget:GetChildByName("SpellsTabBtn"),
-			StatsTabBtn = widget:GetChildByName("StatsTabBtn"),
-			SpellsTabText = widget:GetChildByName("SpellsTabText"),
-			StatsTabText = widget:GetChildByName("StatsTabText"),
 			PlayerNameText = widget:GetChildByName("SpellPlayerNameTextViewName").Widget,
 
 			GlobalInfoHeaderPanel = widget:GetChildByName("GlobalInfoHeaderPanel"),
@@ -115,7 +111,6 @@ function TUMeterGUI:CreateNewObject(dpsMeter)
 
 			ActiveFight = dpsMeter.Fight.Current,   -- Active fight
 			ActiveMode = enumMode.Dps,          -- Active mode
-			DetailsTab = "spells",              -- "spells" or "stats"
 			SelectedCombatant = nil,            -- Selected combatant
 			SelectedCombatantInfo = nil,         -- Selected combatant info (id, persistentId, name)
 
@@ -293,21 +288,11 @@ function TUMeterGUI:UpdateOptim()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
+	local height = 826
+
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
 	local lines = nil
-
-	-- The long optimizer belongs to its own tab. Keeping it out of the spell
-	-- list prevents the details window from growing past the screen bottom.
-	if self.DetailsTab ~= "stats" then
-		if dp.OptHeight ~= 826 then
-			dp.OptHeight = 826
-			dp:SetHeight(826)
-		end
-		return
-	end
-
-	local height = 58
 	-- only for the player, and not while a spell is pointed (its details use the lower part of the panel)
 	if c and fight and not self.Hovering and avatar.IsExist() and c.ID == avatar.GetId() then
 		local ok, res = pcall(Optim.BuildLines, c, fight.Timer:GetElapsedTime(), self.ActiveMode)
@@ -322,13 +307,11 @@ function TUMeterGUI:UpdateOptim()
 	if lines then
 		-- put the block right after the last displayed spell
 		local n = 0
-		if self.DetailsTab ~= "stats" then
-			for i = 1, MAXSPELLS do
-				if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
-			end
+		for i = 1, MAXSPELLS do
+			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
 		end
-		local gap = (self.DetailsTab == "stats") and 0 or (Settings.OptGap or 36)
-		local y = 36 + n * 18 + gap
+		local gap = Settings.OptGap or 36
+		local y = dp.OptSpellTop + n * 18 + gap
 
 		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
 		-- Russian UTF-8 generated at runtime. Use the optimizer's safe converter.
@@ -359,8 +342,7 @@ function TUMeterGUI:UpdateOptim()
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
-		local shownLines = math.min(#lines, OPTROWS)
-		height = y + 18 + shownLines * 18 + 20
+		height = y + 18 + #lines * 18 + 20
 	end
 
 	if dp.OptHeight ~= height then
@@ -371,52 +353,20 @@ end
 --------------------------------------------------------------------------------
 -- Fill the spell panel
 --------------------------------------------------------------------------------
-function TUMeterGUI:ShowDetailsTabs()
-	local dp = self.DetailsPanel
-	if dp.SpellsTabBtn then dp.SpellsTabBtn:Show() end
-	if dp.StatsTabBtn then dp.StatsTabBtn:Show() end
-	local W = (Optim and Optim.ToWString) or userMods.ToWString
-	local spells = (localization == "rus") and "Умения" or "Spells"
-	local stats = (localization == "rus") and "Статистика" or "Statistics"
-	if dp.SpellsTabText then
-		dp.SpellsTabText:Show()
-		dp.SpellsTabText.Widget:SetVal("Name", W(self.DetailsTab == "spells" and ("[" .. spells .. "]") or spells))
-	end
-	if dp.StatsTabText then
-		dp.StatsTabText:Show()
-		dp.StatsTabText.Widget:SetVal("Name", W(self.DetailsTab == "stats" and ("[" .. stats .. "]") or stats))
-	end
-end
-
-function TUMeterGUI:SetDetailsTab(tab)
-	if tab ~= "stats" then tab = "spells" end
-	if self.DetailsTab == tab then return end
-	self.DetailsTab = tab
-	self.Hovering = false
-	-- Put the compact statistics page near the top. The original spell page
-	-- keeps its existing position so legacy spell-detail layout is unchanged.
-	self.DetailsPanel:SetPosition(nil, tab == "stats" and 30 or 230)
-	self:UpdateValues()
-end
-
 function TUMeterGUI:UpdateSpellList()
 	local detailsPanel = self.DetailsPanel
 	if not detailsPanel:IsVisible() or not self:GetActiveFight() then return end
 
 	detailsPanel:HideAllChild()
+
 	detailsPanel.CloseButton:Show()
-	self:ShowDetailsTabs()
 
 	if self.SelectedCombatant then
+		self.SelectedCombatant:CalculateSpell(self:GetActiveFight().Timer:GetElapsedTime(), self.ActiveMode) -- Important.
+
 		detailsPanel.PlayerNameText:SetVal("Name", self.SelectedCombatant.Name)
 		detailsPanel.PlayerNameText:Show(true)
 
-		if self.DetailsTab == "stats" then
-			self:UpdateOptim()
-			return
-		end
-
-		self.SelectedCombatant:CalculateSpell(self:GetActiveFight().Timer:GetElapsedTime(), self.ActiveMode) -- Important.
 		if self.SelectedCombatant.Data[self.ActiveMode].Amount > 0 then
 			detailsPanel.SpellHeaderPanel:Show()
 			detailsPanel.GlobalInfoHeaderPanel:Show()
