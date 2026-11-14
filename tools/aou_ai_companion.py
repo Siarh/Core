@@ -33,6 +33,7 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
     """Reassemble AOUCSV packets; fail closed on missing or conflicting chunks."""
     chunks: dict[str, dict[int, str]] = {}
     totals: dict[str, int] = {}
+    expected_event_records: int | None = None
     malformed: list[int] = []
     matched = 0
 
@@ -47,7 +48,16 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
         part, total = int(part_text), int(total_text)
         matched += 1
 
-        if kind in {"BEGIN", "END"}:
+        if kind == "BEGIN":
+            if payload.strip().lower() == "events":
+                if expected_event_records is not None and expected_event_records != total:
+                    raise ValueError(
+                        "Страницы относятся к разным выгрузкам: в AOUCSV BEGIN указано "
+                        f"{expected_event_records} и {total} событий."
+                    )
+                expected_event_records = total
+            continue
+        if kind == "END":
             continue
         if total < 1 or part < 1 or part > total:
             raise ValueError(
@@ -103,6 +113,24 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
     )
     if not record_keys:
         raise ValueError("Блоки журнала R1, R2, ... не найдены.")
+    if expected_event_records is not None:
+        actual_ids = sorted(int(RECORD_KEY_RE.match(key).group(1)) for key in record_keys)
+        expected_ids = list(range(1, expected_event_records + 1))
+        missing_ids = sorted(set(expected_ids) - set(actual_ids))
+        extra_ids = sorted(set(actual_ids) - set(expected_ids))
+        if missing_ids or extra_ids:
+            preview = ", ".join(str(value) for value in missing_ids[:20])
+            suffix = " ..." if len(missing_ids) > 20 else ""
+            details = (
+                f"Не хватает записей: {preview}{suffix}."
+                if missing_ids else ""
+            )
+            if extra_ids:
+                details += " Лишние номера записей: " + ", ".join(map(str, extra_ids[:20])) + "."
+            raise ValueError(
+                f"Собраны не все страницы выгрузки: найдено {len(actual_ids)} из "
+                f"{expected_event_records} событий. {details} Добавь OCR-строки всех страниц."
+            )
 
     rows: list[list[str]] = []
     for key in record_keys:
