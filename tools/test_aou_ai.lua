@@ -56,6 +56,15 @@ local weak = DPScopeAI.Analyze({ mode = "dps", eventCount = 5, hpSamples = 1, po
 expect(weak.confidence, "низкая", "low sample confidence")
 assert(string.find(weak.nextStep, "30+", 1, true),
     "low sample analysis should ask for more events")
+assert(string.find(weak.insight, "Мало событий", 1, true),
+    "low sample analysis should not claim the build is already optimal")
+
+local unknownHeal = DPScopeAI.Analyze({
+    mode = "hps", eventCount = 50, hpSamples = 45, poolSamples = 45,
+    totalHealAmount = 1200, incomingPerSecond = 0
+})
+assert(string.find(unknownHeal.insight, "получатели", 1, true),
+    "HPS analysis should not attribute heals when recipient IDs are missing")
 
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
 assert(string.find(output[#output], "ON", 1, true), "AI status should report ON")
