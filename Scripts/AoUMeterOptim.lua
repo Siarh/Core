@@ -664,9 +664,9 @@ local function share(B)
 	return x / (x + 1.8)
 end
 
--- survivability: health / (incoming - Bloodthirst return)
--- Resolve pool growth (formula from the data): pool += round(416.7 * damage / max health / c * k), k by pool, x0.9 per second.
--- The divisor c is not given; it is calibrated from the pool measured in the fight (it was ~2 for a dummy, ~1 for healing).
+-- Survivability objective: effective health against incoming damage.
+-- Bloodthirst uses outgoing damage; in healing mode measured self-healing is
+-- counted separately. Healing delivered to allies never counts as personal sustain.
 
 local function score(o, St, Bl, offenseScale)
 	local hp = o.hp0 * (1 + St / 1000)
@@ -1291,6 +1291,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local useCurve = o.phase ~= nil
 	local attackPool = heal and pool or curvePool
 	local currentMult = offOK and multA(nowA[1], nowA[2], nowA[3], L, attackPool, h, useCurve) or 1
+	local offenseScaleForSurvival = 1
 	local optA3, optD3, faOpt = nowA, nowD, baseAt
 
 	if cfg.flag == 1 then
@@ -1333,7 +1334,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptL", I(L), I(L), "0")
 		addT("OptMult", "x" .. F2(currentMult), "x" .. F2(optimalMult),
 			string.format("%+.1f", (optimalMult / math.max(currentMult, 1e-12) - 1) * 100) .. "%")
-		currentMult = optimalMult / math.max(currentMult, 1e-12)
+		offenseScaleForSurvival = optimalMult / math.max(currentMult, 1e-12)
 	end
 
 	if defOK then
@@ -1342,7 +1343,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptB", I(nowD[3]), I(optD3[3]), S(optD3[3] - nowD[3]))
 		if haveDef then
 			local nowSurvival = score(o2, nowD[1], nowD[3], 1)
-			local optSurvival = score(o2, optD3[1], optD3[3], offOK and currentMult or 1)
+			local optSurvival = score(o2, optD3[1], optD3[3], offenseScaleForSurvival)
 			local ratio = optSurvival / math.max(nowSurvival, 1e-12)
 			addT("OptTTL", "x1.00", "x" .. F2(ratio), string.format("%+.1f", (ratio - 1) * 100) .. "%")
 		else
