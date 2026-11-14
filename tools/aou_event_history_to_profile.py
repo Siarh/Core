@@ -399,6 +399,7 @@ def build_profile(
         "fixed_stats": dict(stats),
         "allocation_budget": allocation_budget,
         "activities": activities,
+        "stat_comparison": compare_stat_sets(combat_rows),
         "import_warnings": warnings,
         "import_summary": {
             "source_rows": len(combat_rows),
