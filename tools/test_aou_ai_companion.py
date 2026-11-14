@@ -73,6 +73,48 @@ class AOUCSVParserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "отсутствуют столбцы"):
             parse_aoucsv_text(text)
 
+    def test_combines_two_export_pages_with_global_record_numbers(self):
+        page_one = "\\n".join([
+            "AOUCSV|BEGIN|2|2|events",
+            "AOUCSV|H|1|1|kind|M|R|U|L|observed_amount",
+            "AOUCSV|R1|1|1|damage|1|2|3|4|5",
+            "AOUCSV|END",
+        ])
+        page_two = "\\n".join([
+            "AOUCSV|BEGIN|2|2|events",
+            "AOUCSV|H|1|1|kind|M|R|U|L|observed_amount",
+            "AOUCSV|R2|1|1|healing|6|7|8|9|10",
+            "AOUCSV|END",
+        ])
+        header, rows, info = parse_aoucsv_text(page_one + "\\n" + page_two)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0][0], "damage")
+        self.assertEqual(rows[1][0], "healing")
+        self.assertEqual(info["data_records"], 2)
+
+    def test_incomplete_page_set_is_rejected(self):
+        text = "\\n".join([
+            "AOUCSV|BEGIN|2|3|events",
+            "AOUCSV|H|1|1|kind|M|R|U|L|observed_amount",
+            "AOUCSV|R1|1|1|damage|1|2|3|4|5",
+            "AOUCSV|R2|1|1|damage|1|2|3|4|5",
+            "AOUCSV|END",
+        ])
+        with self.assertRaisesRegex(ValueError, "Собраны не все страницы выгрузки"):
+            parse_aoucsv_text(text)
+
+    def test_different_event_exports_cannot_be_combined(self):
+        text = "\\n".join([
+            "AOUCSV|BEGIN|2|2|events",
+            "AOUCSV|H|1|1|kind|M|R|U|L|observed_amount",
+            "AOUCSV|R1|1|1|damage|1|2|3|4|5",
+            "AOUCSV|BEGIN|2|3|events",
+            "AOUCSV|H|1|1|kind|M|R|U|L|observed_amount",
+            "AOUCSV|R2|1|1|damage|1|2|3|4|5",
+        ])
+        with self.assertRaisesRegex(ValueError, "разным выгрузкам"):
+            parse_aoucsv_text(text)
+
 
 if __name__ == "__main__":
     unittest.main()
