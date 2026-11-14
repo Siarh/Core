@@ -257,17 +257,14 @@ function RetrieveDDEvent(params)
 	if params.isFall then return end
 	if params.target then RegisterHealthWatch(params.target) end
 
-	local collectedDps
-	
 	if Settings.ModeDPS then
 		params.DDOut = true
-		collectedDps = DPSMeterGUI.DPSMeter:CollectDamageDealedData(params)
+		DPSMeterGUI.DPSMeter:CollectDamageDealedData(params)
 	end
 
-	if collectedDps
-		and DPSMeterGUI:GetActiveFight():GetCombatantCount() <= Settings.HeavyMode_MaxCombatant then
-		DPSMeterGUI:UpdateValues()
-	end
+	-- Do not rebuild and sort the visible statistics UI for every hit.
+	-- EVENT_SECOND_TIMER already refreshes the open panels once per second
+	-- while combat data is being collected. Damage collection above is unchanged.
 end
 
 local function CanCollectRawAnalytics(params, personalField, startOnPersonalEvent)
