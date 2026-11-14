@@ -233,7 +233,7 @@ for i = 1, 2005 do
 end
 expect(AOUA.Session.eventSampleCount, 2000, "ring buffer sample count")
 expect(AOUA.Session.eventSamplesDropped, 5, "ring buffer overwritten rows")
-local ringFirst = AOUA.Session.eventSamples[2]
+local ringFirst = AOUA.Session.eventSamples[6]
 local ringLast = AOUA.Session.eventSamples[1]
 assert(ringFirst:find("|6.0000|", 1, true), "ring buffer oldest sample should be event 6")
 assert(ringLast:find("|2005.0000|", 1, true), "ring buffer newest sample should be event 2005")
