@@ -109,21 +109,33 @@ function DPScopeAI.Analyze(context)
     local mode = context.mode or "dps"
 
     local confidence, confidenceScore
-    if eventCount >= 100 and hpCoverage >= 0.80 and poolCoverage >= 0.70 then
-        confidence, confidenceScore = "высокая", 85
-    elseif eventCount >= 30 and hpCoverage >= 0.50 and poolCoverage >= 0.40 then
-        confidence, confidenceScore = "средняя", 60
-    else
-        confidence, confidenceScore = "низкая", 30
-    end
-
     local qualityStep
-    if eventCount < 30 then
-        qualityStep = "Собери 30+ событий в сопоставимом бою."
-    elseif hpCoverage < 0.50 then
-        qualityStep = "Мало HP-сэмплов: проверь /aou hptest."
-    elseif poolCoverage < 0.40 then
-        qualityStep = "Мало замеров Решимости: повтори бой."
+    if mode == "tank" then
+        if eventCount >= 100 then
+            confidence, confidenceScore = "средняя", 65
+        elseif eventCount >= 30 then
+            confidence, confidenceScore = "средняя", 55
+        else
+            confidence, confidenceScore = "низкая", 25
+        end
+        if eventCount < 30 then
+            qualityStep = "Мало входящих событий: собери 30+ ударов по себе."
+        end
+    else
+        if eventCount >= 100 and hpCoverage >= 0.80 and poolCoverage >= 0.70 then
+            confidence, confidenceScore = "высокая", 85
+        elseif eventCount >= 30 and hpCoverage >= 0.50 and poolCoverage >= 0.40 then
+            confidence, confidenceScore = "средняя", 60
+        else
+            confidence, confidenceScore = "низкая", 30
+        end
+        if eventCount < 30 then
+            qualityStep = "Собери 30+ событий в сопоставимом бою."
+        elseif hpCoverage < 0.50 then
+            qualityStep = "Мало HP-сэмплов: проверь /aou hptest."
+        elseif poolCoverage < 0.40 then
+            qualityStep = "Мало замеров Решимости: повтори бой."
+        end
     end
 
     local incoming = math.max(0, n(context.incomingPerSecond))
@@ -232,6 +244,7 @@ function DPScopeAI.Analyze(context)
     )
 
     return {
+        mode = mode,
         confidence = confidence,
         confidenceScore = confidenceScore,
         eventCount = eventCount,
@@ -285,8 +298,9 @@ function DPScopeAI.BuildLines(context)
     local n1, n2, n3 = splitCells(result.nextStep)
     return {
         { "OptAITitle", "LOCAL", confidence, tostring(result.confidenceScore) .. "/100" },
-        { "OptAIQuality", tostring(result.eventCount), string.format("HP %.0f%%", result.hpCoverage * 100),
-            string.format("RES %.0f%%", result.poolCoverage * 100) },
+        { "OptAIQuality", tostring(result.eventCount),
+            result.mode == "tank" and "IN" or string.format("HP %.0f%%", result.hpCoverage * 100),
+            result.mode == "tank" and "HP/RES -" or string.format("RES %.0f%%", result.poolCoverage * 100) },
         { "OptAIInsight", i1, i2, i3 },
         { "OptAIFocus", n1, n2, n3 }
     }
