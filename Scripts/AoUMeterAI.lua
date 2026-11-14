@@ -190,14 +190,18 @@ function DPScopeAI.Analyze(context)
             ((n(context.hpMax) <= 0) and "Укажи максимум HP: /aou hp N." or
                 "Проверь распределение защиты на следующем бою.")
     else
-        insight = statFocus(context.currentStats, context.recommendedStats)
-        if offenseDelta then
-            insight = appendSentence(insight,
-                string.format("множитель модели %+.1f%%", offenseDelta))
-        end
-        if survivalDelta and survivalDelta < -0.5 then
-            insight = appendSentence(insight,
-                string.format("живучесть снизится на %.1f%%", math.abs(survivalDelta)))
+        if eventCount < 30 then
+            insight = "Мало событий: надёжный вывод пока невозможен."
+        else
+            insight = statFocus(context.currentStats, context.recommendedStats)
+            if offenseDelta then
+                insight = appendSentence(insight,
+                    string.format("множитель модели %+.1f%%", offenseDelta))
+            end
+            if survivalDelta and survivalDelta < -0.5 then
+                insight = appendSentence(insight,
+                    string.format("живучесть снизится на %.1f%%", math.abs(survivalDelta)))
+            end
         end
         if qualityStep then
             nextStep = qualityStep
