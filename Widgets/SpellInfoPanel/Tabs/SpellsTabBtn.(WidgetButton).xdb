@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetButton>
+	<Name>SpellsTabBtn</Name>
+	<Placement>
+		<X><Align>WIDGET_ALIGN_LOW</Align><Pos>218</Pos><Size>82</Size></X>
+		<Y><Align>WIDGET_ALIGN_LOW</Align><Pos>1</Pos><Size>22</Size></Y>
+	</Placement>
+	<IgnoreDblClick>true</IgnoreDblClick>
+	<Variants>
+		<Item>
+			<LayerHighlight href="TabButtonHighlight.(WidgetLayerTiledTexture).xdb#xpointer(/WidgetLayerTiledTexture)" />
+			<PushedOffset x="-2" y="2" />
+			<StateNormal><LayerMain href="TabButtonNormal.(WidgetLayerTiledTexture).xdb#xpointer(/WidgetLayerTiledTexture)" /></StateNormal>
+			<StatePushed><LayerMain href="TabButtonPressed.(WidgetLayerTiledTexture).xdb#xpointer(/WidgetLayerTiledTexture)" /></StatePushed>
+			<ReactionOnUp>true</ReactionOnUp>
+			<Reaction>SwitchSpellsTabReaction</Reaction>
+		</Item>
+	</Variants>
+</WidgetButton>
