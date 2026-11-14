@@ -478,6 +478,15 @@ local paramsBlockID = {}
 local eventRegistredDDAndHealUnits = {}
 local healthWatchRegistered = {}
 local healthWatchCount = 0
+local healthWatchPlayerId = nil
+
+local function RefreshHealthWatchPlayerId()
+    healthWatchPlayerId = nil
+    if avatar and type(avatar.GetId) == "function" then
+        local ok, id = pcall(avatar.GetId)
+        if ok then healthWatchPlayerId = id end
+    end
+end
 
 function RetrieveHealthChangedEvent(params)
 	if params and AOUA and type(AOUA.OnHealthChanged) == "function" then
@@ -486,7 +495,11 @@ function RetrieveHealthChangedEvent(params)
 end
 
 function RegisterHealthWatch(id)
-	if not id or healthWatchRegistered[id] or healthWatchCount >= 64 then return end
+	-- Only the local character needs an exact health-change stream for personal
+	-- incoming damage and shield telemetry. Other objects use GetHealthInfo and
+	-- the previous per-combat-event snapshot, avoiding dozens of high-frequency
+	-- registrations in raids and target-heavy fights.
+	if not id or id ~= healthWatchPlayerId or healthWatchRegistered[id] or healthWatchCount >= 64 then return end
 	local ok = pcall(common.RegisterEventHandler, RetrieveHealthChangedEvent,
 		"EVENT_OBJECT_HEALTH_CHANGED", { id = id }, true)
 	if ok then
@@ -496,6 +509,7 @@ function RegisterHealthWatch(id)
 end
 
 function metricReset()
+	RefreshHealthWatchPlayerId()
 	if #paramsBlockDD > 0 then
 		common.UnRegisterEvent("EVENT_HEALING_RECEIVED")
 		common.UnRegisterEvent("EVENT_UNIT_DAMAGE_RECEIVED")
@@ -531,6 +545,10 @@ function metricReset()
 		addToHandlerR(avatar.GetId() )
 	end
 	
+
+	-- Ensure a single local-player HP subscription even if the group API omits
+	-- the avatar from its returned member list.
+	if healthWatchPlayerId then RegisterHealthWatch(healthWatchPlayerId) end
 
 	RegisterEventHandlersNew("EVENT_HEALING_RECEIVED", RetrieveHealEvent , paramsBlockHeal)
 	RegisterEventHandlersNew("EVENT_HEALING_RECEIVED", RetrieveHealEventIN , paramsBlockHealIN)
