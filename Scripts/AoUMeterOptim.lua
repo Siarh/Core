@@ -400,6 +400,27 @@ function Optim.OnHit(combatant, mode, params, rage)
 		end
 		Optim.CacheParams, Optim.CacheV, Optim.CacheLim, Optim.CacheReal = params, v, lim, real
 	end
+
+	-- Keep the real healing totals even when the client cannot read the
+	-- recipient's HP. HP-weighted samples remain conditional on a valid read.
+	local healSegment
+	if mode == enumMode.Hps then
+		local recipientKey = (tid == me) and "self" or "ally"
+		healSegment = o[recipientKey]
+		if not healSegment then
+			healSegment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0,
+				events = 0, preSamples = 0, estimatedSamples = 0, unknownHpSamples = 0 }
+			o[recipientKey] = healSegment
+		end
+		healSegment.amount = healSegment.amount + amount
+		healSegment.events = healSegment.events + 1
+		if tid == me then
+			o.sw = (o.sw or 0) + amount
+		else
+			o.aw = (o.aw or 0) + amount
+		end
+	end
+
 	if v then
 		local frac = v / lim
 		if mode == enumMode.Hps then
@@ -427,25 +448,19 @@ function Optim.OnHit(combatant, mode, params, rage)
 				Optim.HealTraceHead = (head % 14) + 1
 				Optim.HealTraceCount = math.min(14, Optim.HealTraceCount + 1)
 			end
-			local recipientKey = (tid == me) and "self" or "ally"
-			local segment = o[recipientKey]
-			if not segment then
-				segment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0, events = 0, preSamples = 0, estimatedSamples = 0 }
-				o[recipientKey] = segment
-			end
-			segment.amount = segment.amount + amount
-			segment.hpAmount = segment.hpAmount + amount * frac
-			segment.events = segment.events + 1
-			if real then segment.preSamples = segment.preSamples + 1 else segment.estimatedSamples = segment.estimatedSamples + 1 end
-			if rage then
-				segment.poolAmount = segment.poolAmount + amount * rage
-				segment.poolWeight = segment.poolWeight + amount
+			local segment = healSegment
+			if segment then
+				segment.hpAmount = segment.hpAmount + amount * frac
+				if real then segment.preSamples = segment.preSamples + 1
+				else segment.estimatedSamples = segment.estimatedSamples + 1 end
+				if rage then
+					segment.poolAmount = segment.poolAmount + amount * rage
+					segment.poolWeight = segment.poolWeight + amount
+				end
 			end
 			if tid == me then
-				o.sw = (o.sw or 0) + amount
 				o.shs = (o.shs or 0) + amount * frac
 			else
-				o.aw = (o.aw or 0) + amount
 				o.ahs = (o.ahs or 0) + amount * frac
 			end
 		end
@@ -488,6 +503,9 @@ function Optim.OnHit(combatant, mode, params, rage)
 			row.n = row.n + 1
 			o.poolHist[phase] = row
 		end
+	end
+	if mode == enumMode.Hps and not v and healSegment then
+		healSegment.unknownHpSamples = healSegment.unknownHpSamples + 1
 	end
 	if rage then
 		o.pw = o.pw + amount
@@ -1162,11 +1180,43 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local main = heal and hl or dd
 	local o = main.Opt
 
+	local function makeAIContext()
+		local duration = math.max(N(fightTime), 1)
+		local healOpt = hl.Opt or {}
+		local selfSeg, allySeg = healOpt.self or {}, healOpt.ally or {}
+		local lowHpEvents = 0
+		for i = 1, 5 do lowHpEvents = lowHpEvents + N(o and o.histN and o.histN[i]) end
+		return {
+			mode = (activeMode == enumMode.Def) and "tank" or (heal and "hps" or "dps"),
+			eventCount = N(o and (o.eventSamples or o.hpSamples)),
+			hpSamples = N(o and o.hpSamples),
+			poolSamples = N(o and o.poolSamples),
+			lowHpEvents = lowHpEvents,
+			incomingPerSecond = N(df and df.Amount) / duration,
+			damagePerSecond = N(dd and dd.Amount) / duration,
+			selfAmount = N(healOpt.sw or selfSeg.amount),
+			allyAmount = N(healOpt.aw or allySeg.amount),
+			selfHealPerSecond = N(healOpt.sw or selfSeg.amount) / duration,
+			allyHealPerSecond = N(healOpt.aw or allySeg.amount) / duration,
+			measuredHealSamples = N(selfSeg.preSamples) + N(allySeg.preSamples),
+			estimatedHealSamples = N(selfSeg.estimatedSamples) + N(allySeg.estimatedSamples),
+			hpMax = N(cfg.hp)
+		}
+	end
+	local function appendAI(target, context)
+		if not DPScopeAI or type(DPScopeAI.BuildLines) ~= "function" then return end
+		local ok, aiRows = pcall(DPScopeAI.BuildLines, context)
+		if ok and type(aiRows) == "table" then
+			for i = 1, #aiRows do target[#target + 1] = aiRows[i] end
+		end
+	end
+
 	local totalStats = cfg.auto == 1 and Optim.ReadStats() or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
 	if not o or o.pw <= 0 then
 		add("OptNoData")
 		add("OptHelpRow")
+		appendAI(lines, makeAIContext())
 		return lines
 	end
 
@@ -1240,6 +1290,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local defOK = (nowD[1] + nowD[2] + nowD[3]) > 0 or hasAutoDefense or (hasFreePool and hpMax > 0)
 	if not offOK and not defOK then
 		add("OptSet")
+		appendAI(lines, makeAIContext())
 		return lines
 	end
 
@@ -1270,9 +1321,10 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
 	if memo.key == statKey and memo.lines and (memo.dynKey == dynKey or Optim.SinceCalc < 10) then
-		-- The compact panel has one fixed header row; append cached result rows from row 2.
+		-- Keep the optimizer cache and its evidence summary in sync.
 		local res = { lines[1] }
 		for i = 1, #memo.lines do res[#res + 1] = memo.lines[i] end
+		appendAI(res, memo.aiContext or makeAIContext())
 		return res
 	end
 	Optim.SinceCalc = 0
@@ -1293,6 +1345,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local attackPool = heal and pool or curvePool
 	local currentMult = offOK and multA(nowA[1], nowA[2], nowA[3], L, attackPool, h, useCurve) or 1
 	local offenseScaleForSurvival = 1
+	local survivalDeltaPct = nil
 	local optA3, optD3, faOpt = nowA, nowD, baseAt
 
 	if cfg.flag == 1 then
@@ -1346,7 +1399,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			local nowSurvival = score(o2, nowD[1], nowD[3], 1)
 			local optSurvival = score(o2, optD3[1], optD3[3], offenseScaleForSurvival)
 			local ratio = optSurvival / math.max(nowSurvival, 1e-12)
-			addT("OptTTL", "x1.00", "x" .. F2(ratio), string.format("%+.1f", (ratio - 1) * 100) .. "%")
+			survivalDeltaPct = (ratio - 1) * 100
+			addT("OptTTL", "x1.00", "x" .. F2(ratio), string.format("%+.1f", survivalDeltaPct) .. "%")
 		else
 			addT("OptHpNeed")
 		end
@@ -1356,8 +1410,22 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		addT("OptFree", I(baseAt) .. "/" .. I(baseDt), I(faOpt) .. "/" .. I(F - faOpt), S(faOpt - baseAt))
 	end
 
+	local aiContext = makeAIContext()
+	aiContext.currentStats = nowA
+	aiContext.recommendedStats = optA3
+	aiContext.offenseDeltaPct = offOK and
+		((multA(optA3[1], optA3[2], optA3[3], L, attackPool, h, useCurve) /
+			math.max(currentMult, 1e-12) - 1) * 100) or nil
+	aiContext.survivalDeltaPct = survivalDeltaPct
+	aiContext.hpMax = hpMax
+	aiContext.autoStats = totalStats ~= nil
+	aiContext.freePool = F
+	aiContext.offenseFree = faOpt
+
 	Optim.Memo.key, Optim.Memo.dynKey, Optim.Memo.lines = statKey, dynKey, tail
+	Optim.Memo.aiContext = aiContext
 	for i = 1, #tail do lines[#lines + 1] = tail[i] end
+	appendAI(lines, aiContext)
 	return lines
 end
 
