@@ -43,6 +43,9 @@ expect(AOUA.Session.healing.effective, 100, "outgoing applied total")
 expect(AOUA.Session.healing.overhealUnknown, 1, "outgoing unknown overheal count")
 expect(AOUA.Session.healing.reportedOverload, 10, "outgoing reported overload total")
 expect(outgoing.events, 1, "outgoing ability events")
+expect(AOUA.Session.determinationByMode.healing.samples, 1, "outgoing healing Resolve sample in history")
+expect(AOUA.Session.eventSamples[1]:find("|50.0000|", 1, true) ~= nil, true,
+    "outgoing healing Resolve value in raw event sample")
 
 -- A raw received-heal callback is recorded immediately. The legacy meter then
 -- supplies a resolved spell name for the same params table. Relabel the row
@@ -217,5 +220,30 @@ local exportOk = AOUA.EventExport(3)
 expect(exportOk, true, "event export success")
 assert(emittedMessages[1] == "AOUCSV|BEGIN|2|3|events", "event export begin marker missing")
 assert(emittedMessages[#emittedMessages] == "AOUCSV|END", "event export end marker missing")
+
+-- The bounded event buffer must keep the newest 2,000 samples without
+-- shifting the whole table on every callback after it fills.
+AOUA.OnFightStart()
+for i = 1, 2005 do
+    AOUA.OnHit(
+        { ID = 1001 }, enumMode.Dps,
+        { target = 2002, amount = i, ability = "Ring buffer test" },
+        nil, { Name = "Ring buffer test" }
+    )
+end
+expect(AOUA.Session.eventSampleCount, 2000, "ring buffer sample count")
+expect(AOUA.Session.eventSamplesDropped, 5, "ring buffer overwritten rows")
+local ringFirst = AOUA.Session.eventSamples[2]
+local ringLast = AOUA.Session.eventSamples[1]
+assert(ringFirst:find("|6.0000|", 1, true), "ring buffer oldest sample should be event 6")
+assert(ringLast:find("|2005.0000|", 1, true), "ring buffer newest sample should be event 2005")
+local ringSaved, ringCount = AOUA.OnFightStop()
+expect(ringSaved, true, "ring buffer persistence")
+expect(ringCount, 2000, "ring buffer rows persisted before history cap")
+expect(persistedConfig.aou_evt_count, 1000, "persisted event history remains capped")
+assert(persistedConfig.aou_evt_1:find("|1006.0000|", 1, true),
+    "persisted history should begin with newest 1,000 ring rows")
+assert(persistedConfig.aou_evt_1000:find("|2005.0000|", 1, true),
+    "persisted history should end with latest event")
 
 print("DPScope analytics journal regression tests passed.")
