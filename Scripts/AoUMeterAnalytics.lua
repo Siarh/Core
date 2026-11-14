@@ -864,7 +864,7 @@ function AOUA.OnHit(combatant, mode, params, determination, spellInfo)
         appendEventSample(kind, params, amount, hpBefore, hpQuality, targetMaxHp, rawDetermination, spellInfo and spellInfo.Name)
         recordDamageJournal("outgoing", params, amount, spellInfo and spellInfo.Name)
     elseif kind == "healing" then
-        recordHealing("healing", params, amount, spellInfo and spellInfo.Name, rawDetermination)
+        recordHealing("healing", params, amount, rawDetermination, spellInfo and spellInfo.Name)
     end
 end
 
