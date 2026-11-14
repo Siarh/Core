@@ -65,6 +65,12 @@ local unknownHeal = DPScopeAI.Analyze({
 })
 assert(string.find(unknownHeal.insight, "получатели", 1, true),
     "HPS analysis should not attribute heals when recipient IDs are missing")
+local unknownHealWhileHit = DPScopeAI.Analyze({
+    mode = "hps", eventCount = 50, hpSamples = 45, poolSamples = 45,
+    totalHealAmount = 1200, incomingPerSecond = 500
+})
+assert(string.find(unknownHealWhileHit.insight, "получатели", 1, true),
+    "HPS analysis should disclose unknown recipients even during incoming damage")
 
 local defense = DPScopeAI.Analyze({
     mode = "tank", eventCount = 45, hpSamples = 0, poolSamples = 0,
