@@ -535,7 +535,10 @@ function AOUA.OnFightStop()
     return ok, count
 end
 
-function AOUA.EventExport(count)
+-- Export only a small page per invocation: bulk chat output can freeze the client.
+local EVENT_EXPORT_PAGE_SIZE = 10
+
+function AOUA.EventExport(count, page)
     local rows = loadPersistedEventSamples()
     if AOUA.Session.started then
         for i = 1, #(AOUA.Session.eventSamples or {}) do
@@ -543,11 +546,23 @@ function AOUA.EventExport(count)
         end
     end
     count = math.max(1, math.min(EVENT_HISTORY_LIMIT, math.floor(tonumber(count) or 100)))
-    local first = math.max(1, #rows - count + 1)
+    page = math.max(1, math.floor(tonumber(page) or 1))
     if #rows == 0 then
         if type(message) == "function" then message("event export: no stored events") end
-        return false
+        return false, "No event rows to export."
     end
+
+    local first = math.max(1, #rows - count + 1)
+    local selected = #rows - first + 1
+    local pages = math.max(1, math.ceil(selected / EVENT_EXPORT_PAGE_SIZE))
+    if page > pages then
+        return false, "Page " .. page .. " does not exist; available pages: 1-" .. pages .. "."
+    end
+    local pageFirst = first + (page - 1) * EVENT_EXPORT_PAGE_SIZE
+    local pageLast = math.min(#rows, pageFirst + EVENT_EXPORT_PAGE_SIZE - 1)
+    local rowFirst = pageFirst - first + 1
+    local rowLast = pageLast - first + 1
+
     local function emit(line)
         if type(message) == "function" then pcall(message, line) end
     end
@@ -559,12 +574,21 @@ function AOUA.EventExport(count)
                 string.sub(value, (part - 1) * size + 1, part * size))
         end
     end
-    local total = #rows - first + 1
-    emit("AOUCSV|BEGIN|2|" .. total .. "|events")
+
+    -- Every page repeats the identical header and global row numbering so that
+    -- multiple page captures can be concatenated into one OCR text file.
+    emit("AOUCSV|BEGIN|2|" .. selected .. "|events")
     emitChunks("H", EVENT_COLUMNS)
-    for i = first, #rows do emitChunks("R" .. (i - first + 1), rows[i]) end
+    for i = pageFirst, pageLast do
+        emitChunks("R" .. (i - first + 1), rows[i])
+    end
     emit("AOUCSV|END")
-    return true
+
+    local summary = "Event export page " .. page .. "/" .. pages ..
+        ": rows " .. rowFirst .. "-" .. rowLast .. " of " .. selected ..
+        ". Capture this page, then run /aou eventfile " .. count .. " " ..
+        (page + 1) .. " for the next page."
+    return true, summary
 end
 
 local function journalRow(map, key, limit)
