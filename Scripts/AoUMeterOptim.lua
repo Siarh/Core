@@ -1260,7 +1260,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		math.floor((o.hpSamples or 0) / 10), math.floor((o.poolSamples or 0) / 10),
 		N(selfSeg.events)
 	}, "|")
-	local statKey = table.concat({
+	local statKey = "compact-healer-v2|" .. table.concat({
 		cfg.mode, cfg.role, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef,
 		fM, fR, fU, L, bM, bR, bU, eM, eR, eU,
 		fS, fW, fB, bS, bW, bB, eS, eW, eB, heal and 1 or 0, cau
@@ -1270,7 +1270,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	Optim.Perf.calls = Optim.Perf.calls + 1
 	Optim.SinceCalc = (Optim.SinceCalc or 0) + 1
 	if memo.key == statKey and memo.lines and (memo.dynKey == dynKey or Optim.SinceCalc < 10) then
-		local res = { lines[1], lines[2], lines[3] }
+		-- The compact panel has one fixed header row; append cached result rows from row 2.
+		local res = { lines[1] }
 		for i = 1, #memo.lines do res[#res + 1] = memo.lines[i] end
 		return res
 	end
