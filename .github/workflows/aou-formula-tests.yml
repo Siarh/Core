@@ -12,7 +12,7 @@ on:
       - "tools/test_aou_ai.lua"
       - "tools/aou_ai_assistant.py"
       - "tools/README_ollama_ai.txt"
-      - "tools/test_aou_ai_assistant.py"
+      - "tools/test_aou_ai_assistant.py"\n      - "tools/aou_ai_companion.py"\n      - "tools/test_aou_ai_companion.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
       - "Scripts/AoUMeterGUI.lua"
@@ -64,7 +64,7 @@ jobs:
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
-          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py
+          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py test_aou_ai_companion.py
           python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
 
 
