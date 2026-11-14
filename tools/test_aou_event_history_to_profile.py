@@ -30,6 +30,7 @@ class ChangingStatsTests(unittest.TestCase):
         low = next(group for group in comparison["groups"] if group["stats"]["mastery"] == 445.1)
         self.assertEqual(low["observed_damage"], 1000)
         self.assertEqual(low["observed_healing"], 500)
+        self.assertEqual(low["healing_by_recipient"]["self"]["amount"], 500)
         self.assertEqual(low["observed_dps_estimate"], 1000)
 
     def test_profile_build_accepts_multiple_mastery_snapshots(self):
