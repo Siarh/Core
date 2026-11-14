@@ -359,7 +359,8 @@ function TUMeterGUI:UpdateOptim()
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
-		height = y + 18 + #lines * 18 + 20
+		local shownLines = math.min(#lines, OPTROWS)
+		height = y + 18 + shownLines * 18 + 20
 	end
 
 	if dp.OptHeight ~= height then
