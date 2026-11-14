@@ -759,7 +759,7 @@ isLocalObject = function(id)
     return ok and id == playerId
 end
 
-local function recordHealing(kind, params, amount, resolvedAbilityName)
+local function recordHealing(kind, params, amount, determination, resolvedAbilityName)
     local b = AOUA.Session[kind]
     local reportedHeal = math.max(0, amount)
     if reportedHeal > 0 then
@@ -972,7 +972,7 @@ function AOUA.OnReceivedHeal(params)
         return
     end
     diag.healAccepted = diag.healAccepted + 1
-    local map, key, delta = recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)))
+    local map, key, delta = recordHealing("receivedHeal", params, math.max(0, N(params.heal or params.amount)), params.determination, nil)
     if map and key and delta then
         local lethality = tonumber(params.lethality)
         AOUA.PendingReceivedHeal[params] = {
