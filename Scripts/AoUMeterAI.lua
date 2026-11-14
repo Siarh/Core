@@ -110,13 +110,37 @@ local function signedStatFocus(current, recommended)
         bestDelta > 0 and "+" or "", (bestDelta >= 0) and math.floor(bestDelta + 0.5) or math.ceil(bestDelta - 0.5))
 end
 
+local function statFocus(current, recommended)
+    local labels = { "М", "Р", "Б" }
+    local best, bestDelta = nil, 0
+    for i = 1, 3 do
+        local delta = n(recommended and recommended[i]) - n(current and current[i])
+        if math.abs(delta) > math.abs(bestDelta) then
+            bestDelta, best = delta, labels[i]
+        end
+    end
+    if not best or math.abs(bestDelta) < 1 then
+        return "Распределение почти оптимально по модели."
+    end
+    local points = bestDelta > 0 and math.floor(bestDelta + 0.5) or math.ceil(bestDelta - 0.5)
+    return "Сдвиг " .. best .. " " .. (points > 0 and "+" or "") .. tostring(points) .. " оч."
+end
+
+local function appendSentence(base, extra)
+    if not extra or extra == "" then return base end
+    if not base or base == "" then return extra end
+    return base .. "; " .. extra
+end
+
 function DPScopeAI.Analyze(context)
     context = context or {}
-    local eventCount = n(context.eventCount)
-    local hpSamples = n(context.hpSamples)
-    local poolSamples = n(context.poolSamples)
-    local hpCoverage = eventCount > 0 and hpSamples / eventCount or 0
-    local poolCoverage = eventCount > 0 and poolSamples / eventCount or 0
+    local eventCount = math.max(0, math.floor(n(context.eventCount)))
+    local hpSamples = math.max(0, math.floor(n(context.hpSamples)))
+    local poolSamples = math.max(0, math.floor(n(context.poolSamples)))
+    local hpCoverage = eventCount > 0 and math.min(1, hpSamples / eventCount) or 0
+    local poolCoverage = eventCount > 0 and math.min(1, poolSamples / eventCount) or 0
+    local mode = context.mode or "dps"
+
     local confidence, confidenceScore
     if eventCount >= 100 and hpCoverage >= 0.80 and poolCoverage >= 0.70 then
         confidence, confidenceScore = "высокая", 85
@@ -126,66 +150,110 @@ function DPScopeAI.Analyze(context)
         confidence, confidenceScore = "низкая", 30
     end
 
-    local insight, nextStep
-    local mode = context.mode or "dps"
+    local qualityStep
     if eventCount < 30 then
-        insight = "Пока мало событий для устойчивого вывода; не меняй сборку по короткому фрагменту боя."
-        nextStep = "Собери не менее 30 событий в сопоставимой ротации."
+        qualityStep = "Собери 30+ событий в сопоставимом бою."
     elseif hpCoverage < 0.50 then
-        insight = "У значительной части событий нет пригодного снимка HP цели; оценка Беспощадности ненадёжна."
-        nextStep = "Проверь чтение HP цели командой /aou hptest и повтори бой."
+        qualityStep = "Мало HP-сэмплов: проверь /aou hptest."
     elseif poolCoverage < 0.40 then
-        insight = "Пул Решимости записан не для всех событий; сравнение Решимости имеет пониженную надёжность."
-        nextStep = "Повтори бой и сравни количество сэмплов /aou stats."
-    elseif mode == "hps" then
-        local selfAmount = n(context.selfAmount)
-        local allyAmount = n(context.allyAmount)
-        local total = selfAmount + allyAmount
-        local allyShare = total > 0 and allyAmount / total or 0
-        local selfShare = total > 0 and selfAmount / total or 0
-        if total <= 0 then
-            insight = "Нет раздельной статистики получателей лечения в этом фрагменте."
-            nextStep = "Проведи бой с лечением себя и союзников, затем проверь HPS-блок."
-        elseif allyShare >= 0.70 then
-            insight = "Большая часть зарегистрированного лечения направлена союзникам (" ..
-                string.format("%.0f%%", allyShare * 100) .. ")."
-            nextStep = "Сверь строку HPS союзников с полезным лечением: перелечивание пока может быть неизвестно."
-        elseif selfShare >= 0.70 then
-            insight = "Большая часть зарегистрированного лечения пришлась на самого персонажа (" ..
-                string.format("%.0f%%", selfShare * 100) .. ")."
-            nextStep = "Повтори тест с лечением союзника, чтобы отдельно проверить обе выборки."
+        qualityStep = "Мало замеров Решимости: повтори бой."
+    end
+
+    local incoming = math.max(0, n(context.incomingPerSecond))
+    local selfRate = math.max(0, n(context.selfHealPerSecond))
+    local allyRate = math.max(0, n(context.allyHealPerSecond))
+    local selfAmount = math.max(0, n(context.selfAmount))
+    local allyAmount = math.max(0, n(context.allyAmount))
+    local healTotal = selfAmount + allyAmount
+    local allyShare = healTotal > 0 and allyAmount / healTotal or 0
+    local survivalDelta = tonumber(context.survivalDeltaPct)
+    local offenseDelta = tonumber(context.offenseDeltaPct)
+
+    local insight, nextStep
+    if mode == "hps" then
+        if incoming > 0 and selfRate <= 0 then
+            insight = "Входящий урон есть; личный HPS не записан."
+        elseif incoming > 0 then
+            local coverage = selfRate / incoming
+            if coverage < 0.30 then
+                insight = "Личный HPS заметно ниже входящего урона."
+            elseif coverage < 0.75 then
+                insight = "Личное лечение частично покрывает входящий урон."
+            else
+                insight = "Личный HPS близок к входящему урону."
+            end
+        elseif healTotal > 0 then
+            insight = "Лечение зарегистрировано; входящий урон не обнаружен."
         else
-            insight = "Лечение распределено между собой и союзниками; отдельные HPS-выборки можно сравнивать."
-            nextStep = "Сравни качество HP-сэмплов для строк лечения себя и союзников."
+            insight = "В этом фрагменте нет данных о лечении."
         end
-        if n(context.estimatedHealSamples) > n(context.measuredHealSamples) then
-            nextStep = nextStep .. " Значительная часть HP перед лечением оценочная."
+        if allyShare >= 0.70 then
+            insight = appendSentence(insight, "основной объём HPS уходит союзникам")
+        elseif healTotal > 0 and allyShare <= 0.30 then
+            insight = appendSentence(insight, "значительная часть HPS направлена себе")
+        end
+        if survivalDelta then
+            insight = appendSentence(insight,
+                string.format("модель живучести %+.1f%%", survivalDelta))
+        end
+        if qualityStep then
+            nextStep = qualityStep
+        elseif incoming > 0 and n(context.hpMax) <= 0 then
+            nextStep = "Укажи максимум HP: /aou hp N."
+        else
+            nextStep = "Сверь личный HPS и защиту ещё в двух боях."
         end
     elseif mode == "tank" then
-        if n(context.incomingPerSecond) <= 0 then
-            insight = "Нет достаточного входящего урона для оценки выживаемости."
-            nextStep = "Проведи бой с устойчивым входящим уроном и повтори /aou defstat."
+        if incoming <= 0 then
+            insight = "Входящий урон не зарегистрирован; защита не оценивается."
+        elseif survivalDelta then
+            insight = string.format("По модели живучесть изменится на %+.1f%%.", survivalDelta)
+        elseif n(context.hpMax) <= 0 then
+            insight = "Входящий урон есть, но максимум HP неизвестен."
         else
-            insight = "Защитный профиль рассчитан по записанному входящему урону; компоненты поглощения не суммируются."
-            nextStep = "Сверь школы урона и качество HP-сэмплов; не меняй резисты по одному типу удара."
+            insight = "Входящий урон записан; оценка защиты предварительная."
         end
+        nextStep = qualityStep or
+            ((n(context.hpMax) <= 0) and "Укажи максимум HP: /aou hp N." or
+                "Проверь распределение защиты на следующем бою.")
     else
-        insight = signedStatFocus(context.currentStats, context.recommendedStats)
-        if n(context.lowHpEvents) < 5 then
-            nextStep = "Для оценки Беспощадности добавь бой с большим числом ударов по целям ниже 50% HP."
-        elseif n(context.poolSamples) < 50 then
-            nextStep = "Собери ещё один сопоставимый бой, чтобы проверить стабильность пула Решимости."
+        insight = statFocus(context.currentStats, context.recommendedStats)
+        if offenseDelta then
+            insight = appendSentence(insight,
+                string.format("множитель модели %+.1f%%", offenseDelta))
+        end
+        if survivalDelta and survivalDelta < -0.5 then
+            insight = appendSentence(insight,
+                string.format("живучесть снизится на %.1f%%", math.abs(survivalDelta)))
+        end
+        if qualityStep then
+            nextStep = qualityStep
+        elseif n(context.lowHpEvents) < 5 then
+            nextStep = "Для U собери больше ударов по целям ниже 50% HP."
         else
-            nextStep = "Проверь рекомендацию на следующем сопоставимом бою; сравнивай DPS за одинаковую ротацию."
+            nextStep = "Проверь результат на следующем сопоставимом бою."
         end
     end
 
+    if n(context.estimatedHealSamples) > n(context.measuredHealSamples) and mode == "hps" then
+        nextStep = appendSentence(nextStep, "Часть HP до лечения оценочная.")
+    end
+
+    local modeName = mode == "hps" and "HPS" or (mode == "tank" and "защита" or "УВС")
+    local detail = ""
+    if mode == "hps" then
+        detail = string.format(" Входящий=%.0f/с, себе=%.0f/с, союзникам=%.0f/с.",
+            incoming, selfRate, allyRate)
+    elseif mode == "tank" then
+        detail = string.format(" Входящий урон=%.0f/с.", incoming)
+    end
     local summary = string.format(
-        "AI %s: %s. События=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%). %s Следующий шаг: %s",
-        confidence, mode == "hps" and "HPS" or (mode == "tank" and "защита" or "УВС"),
-        eventCount, hpSamples, eventCount, hpCoverage * 100,
-        poolSamples, eventCount, poolCoverage * 100, insight, nextStep
+        "AI %s (%d/100): %s. Режим=%s, событий=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%).%s Следующий шаг: %s",
+        confidence, confidenceScore, insight, modeName, eventCount,
+        hpSamples, eventCount, hpCoverage * 100,
+        poolSamples, eventCount, poolCoverage * 100, detail, nextStep or "Собери ещё один сопоставимый бой."
     )
+
     return {
         confidence = confidence,
         confidenceScore = confidenceScore,
@@ -193,28 +261,57 @@ function DPScopeAI.Analyze(context)
         hpCoverage = hpCoverage,
         poolCoverage = poolCoverage,
         insight = insight,
-        nextStep = nextStep,
+        nextStep = nextStep or "Собери ещё один сопоставимый бой.",
         summary = summary
     }
+end
+
+local function splitCells(value)
+    local rest = tostring(value or "")
+    local cells = { "", "", "" }
+    for slot = 1, 3 do
+        rest = string.gsub(rest, "^%s+", "")
+        if rest == "" then break end
+        if #rest <= 20 then
+            cells[slot] = rest
+            rest = ""
+            break
+        end
+        local cut = 20
+        while cut > 0 do
+            local byte = string.byte(rest, cut + 1)
+            if not byte or byte < 128 or byte >= 192 then break end
+            cut = cut - 1
+        end
+        local space = nil
+        for i = 1, cut do
+            if string.byte(rest, i) == 32 then space = i end
+        end
+        if space and space > 1 then cut = space - 1 end
+        if cut < 1 then cut = math.min(#rest, 20) end
+        cells[slot] = string.sub(rest, 1, cut)
+        rest = string.sub(rest, cut + 1)
+    end
+    if rest ~= "" then
+        cells[3] = string.sub(cells[3], 1, math.max(1, #cells[3] - 3)) .. "..."
+    end
+    return cells[1], cells[2], cells[3]
 end
 
 function DPScopeAI.BuildLines(context)
     if not DPScopeAI.IsEnabled() then return {} end
     local result = DPScopeAI.Analyze(context)
     DPScopeAI.LastSummary = result.summary
-    -- Keep the in-window AI payload strictly ASCII. The Allods client renders
-    -- localized resource strings safely, while arbitrary runtime UTF-8 text
-    -- cannot be passed through the optimizer value cells without mojibake.
-    local level = (result.confidence == "высокая" and "HIGH")
-        or (result.confidence == "средняя" and "MEDIUM")
-        or "LOW"
-    local hpText = string.format("HP %.0f%%", result.hpCoverage * 100)
-    local poolText = string.format("Resolve %.0f%%", result.poolCoverage * 100)
+
+    local confidence = result.confidence
+    local i1, i2, i3 = splitCells(result.insight)
+    local n1, n2, n3 = splitCells(result.nextStep)
     return {
-        { "OptAITitle", "LOCAL", level, tostring(result.confidenceScore) .. "/100" },
-        { "OptAIQuality", tostring(result.eventCount), hpText, poolText },
-        { "OptAIInsight", "Use /aou ai advice", "", "" },
-        { "OptAIFocus", "Use /aou ai advice", "", "" }
+        { "OptAITitle", "LOCAL", confidence, tostring(result.confidenceScore) .. "/100" },
+        { "OptAIQuality", tostring(result.eventCount), string.format("HP %.0f%%", result.hpCoverage * 100),
+            string.format("RES %.0f%%", result.poolCoverage * 100) },
+        { "OptAIInsight", i1, i2, i3 },
+        { "OptAIFocus", n1, n2, n3 }
     }
 end
 
@@ -230,7 +327,7 @@ function DPScopeAI.OnSlash(args)
         return true
     elseif sub == "status" then
         emit("DPScope AI advisor = " .. (DPScopeAI.IsEnabled() and "ON" or "OFF") ..
-            "; engine=local evidence rules; OpenAI companion=tools/aou_ai_assistant.py (manual desktop run).")
+            "; engine=local evidence rules; desktop Ollama companion=tools/aou_ai_assistant.py (manual local run).")
         return true
     elseif sub == "advice" then
         if not DPScopeAI.IsEnabled() then
@@ -238,7 +335,7 @@ function DPScopeAI.OnSlash(args)
         elseif DPScopeAI.LastSummary then
             emit(DPScopeAI.LastSummary)
         else
-            emit("No AI analysis yet. Open your character details after collecting combat data.")
+            emit("No AI analysis yet. Open the DPScope details panel after collecting combat data.")
         end
         return true
     elseif sub == "export" then
