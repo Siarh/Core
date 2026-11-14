@@ -214,6 +214,20 @@ local function phaseFor(frac)
     return "25_0"
 end
 
+-- Consume the matching pre-hit HP transition once. A valid transition means
+-- the health-change callback already did the expensive game API read.
+local function takeHealthTransition(id, expectedDirection, amount)
+    local transition = id and AOUA.HealthTransitions[id] or nil
+    if not transition then return nil end
+    local matches = transition.direction == expectedDirection and transition.beforeFrac ~= nil
+    if matches and transition.delta ~= nil then
+        local difference = math.abs(math.abs(transition.delta) - amount)
+        matches = difference <= math.max(2, amount * 0.05)
+    end
+    AOUA.HealthTransitions[id] = nil
+    return matches and transition or nil
+end
+
 local function addEvent(b, amount, params)
     b.events = b.events + 1
     b.amount = b.amount + amount
@@ -253,22 +267,9 @@ local function recordHealthPhase(kind, params, amount, confidence)
     -- pre-hit estimate for the next event; using the current post-hit percentage for
     -- every hit incorrectly pins an entire fight to one phase.
     local previous = id and AOUA.HpCache[id] or nil
-    local transition = id and AOUA.HealthTransitions[id] or nil
     local expectedDirection = (kind == "damage") and -1 or 1
-    local useTransition = false
-    if transition then
-        if transition.direction == expectedDirection and transition.beforeFrac ~= nil then
-            if transition.delta ~= nil then
-                local difference = math.abs(math.abs(transition.delta) - amount)
-                useTransition = difference <= math.max(2, amount * 0.05)
-            else
-                -- Percent-only delta: useful phase estimate, but not a measured HP amount.
-                useTransition = true
-            end
-        end
-        -- Never let an unmatched or opposite-direction transition leak into a later hit.
-        if not useTransition then AOUA.HealthTransitions[id] = nil end
-    end
+    local transition = takeHealthTransition(id, expectedDirection, amount)
+    local useTransition = transition ~= nil
     -- A matching health-change event already contains the pre-hit fraction.
     -- Avoid another expensive game API query for the same combat event.
     local value, limit, real
@@ -966,20 +967,29 @@ function AOUA.OnIncomingDamage(params)
             end
         end
     end
-    local value, limit, real = safeHealth(params.target)
-    local hpBefore, hpQuality
-    if value ~= nil and limit and limit > 0 then
-        if real then
-            hpBefore = math.max(0, math.min(1, (value + amount) / limit))
-            hpQuality = "estimated_pre"
-        else
-            hpBefore = math.max(0, math.min(1, value / limit))
-            hpQuality = "post_only"
-        end
+    local transition = takeHealthTransition(params.target, -1, amount)
+    local value, limit, real
+    local hpBefore, hpQuality, targetMaxHp
+    if transition then
+        hpBefore = transition.beforeFrac
+        hpQuality = transition.exact and "measured_pre" or "estimated_pre"
+        targetMaxHp = transition.limit
     else
-        hpQuality = "unknown"
+        value, limit, real = safeHealth(params.target)
+        if value ~= nil and limit and limit > 0 then
+            if real then
+                hpBefore = math.max(0, math.min(1, (value + amount) / limit))
+                hpQuality = "estimated_pre"
+            else
+                hpBefore = math.max(0, math.min(1, value / limit))
+                hpQuality = "post_only"
+            end
+        else
+            hpQuality = "unknown"
+        end
+        targetMaxHp = real and limit or nil
     end
-    appendEventSample("incoming", params, amount, hpBefore, hpQuality, real and limit or nil, nil, nil)
+    appendEventSample("incoming", params, amount, hpBefore, hpQuality, targetMaxHp, nil, nil)
     recordDamageJournal("incoming", params, amount)
 end
 
