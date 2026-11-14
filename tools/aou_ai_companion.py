@@ -40,6 +40,9 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
     for line_no, line in enumerate(source.splitlines(), 1):
         if "AOUCSV" not in line:
             continue
+        # END is a control marker without chunk counters/payload.
+        if re.search(r"AOUCSV\\s*\\|\\s*END(?:\\s|$)", line):
+            continue
         match = AOU_LINE_RE.search(line)
         if not match:
             malformed.append(line_no)
