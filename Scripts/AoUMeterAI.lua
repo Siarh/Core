@@ -245,8 +245,13 @@ function DPScopeAI.OnSlash(args)
         if not DPScopeAI.IsEnabled() then
             emit("AI advisor is OFF. Use /aou ai on before AI export.")
         elseif AOUA and type(AOUA.EventExport) == "function" then
-            emit("Exporting combat events for the desktop AI companion. Copy all AOUCSV lines from chat.")
-            AOUA.EventExport(1000)
+            local ok, summary = AOUA.EventExport(1000, 1)
+            if ok then
+                emit((summary or "Event export page 1 is ready.") ..
+                    " Capture this page, then continue with /aou eventfile 1000 2, 3, and so on.")
+            else
+                emit(summary or "Event export is unavailable.")
+            end
         else
             emit("Event export is unavailable.")
         end
