@@ -84,7 +84,7 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
         bucket = buckets.setdefault(signature, {
             "stats": {name: value for name, value in zip(columns.values(), signature)},
             "damage": 0.0, "healing": 0.0, "damage_events": 0, "healing_events": 0,
-            "fights": set(), "seconds": {},
+            "fights": set(), "seconds": {}, "healing_by_recipient": {},
         })
         amount = number(row.get("observed_amount")) or 0.0
         fight = (row.get("fight_id") or "unknown").strip()
@@ -97,6 +97,12 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
         else:
             bucket["healing"] += amount
             bucket["healing_events"] += 1
+            recipient = (row.get("recipient") or "unknown").strip().lower()
+            segment = bucket["healing_by_recipient"].setdefault(
+                recipient, {"amount": 0.0, "events": 0}
+            )
+            segment["amount"] += amount
+            segment["events"] += 1
     result = []
     for bucket in buckets.values():
         active_seconds = sum(max(1, max(seconds) - min(seconds) + 1) for seconds in bucket["seconds"].values())
@@ -105,6 +111,10 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
             "damage_events": bucket["damage_events"], "healing_events": bucket["healing_events"],
             "observed_damage": round(bucket["damage"], 2),
             "observed_healing": round(bucket["healing"], 2),
+            "healing_by_recipient": {
+                key: {"amount": round(value["amount"], 2), "events": value["events"]}
+                for key, value in sorted(bucket["healing_by_recipient"].items())
+            },
             "active_seconds_estimate": active_seconds,
             "observed_dps_estimate": round(bucket["damage"] / active_seconds, 2) if active_seconds else None,
             "observed_hps_estimate": round(bucket["healing"] / active_seconds, 2) if active_seconds else None,
