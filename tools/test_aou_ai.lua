@@ -34,6 +34,8 @@ expect(section.aou_ai_enabled, 1, "AI on persisted")
 local rows = DPScopeAI.BuildLines({
     mode = "hps", eventCount = 120, hpSamples = 110, poolSamples = 100,
     selfAmount = 1000, allyAmount = 9000,
+    selfHealPerSecond = 10, allyHealPerSecond = 90, incomingPerSecond = 40,
+    survivalDeltaPct = 3.2, hpMax = 10000,
     measuredHealSamples = 60, estimatedHealSamples = 40,
     currentStats = { 100, 200, 300 },
     recommendedStats = { 120, 190, 290 }
@@ -42,8 +44,9 @@ expect(#rows, 4, "AI panel row count")
 expect(rows[1][1], "OptAITitle", "AI title row")
 expect(rows[1][2], "LOCAL", "AI row must use ASCII-safe payload")
 expect(rows[2][3], "HP 92%", "AI HP payload")
-expect(rows[2][4], "Resolve 83%", "AI Resolve payload")
-expect(rows[3][2], "Use /aou ai advice", "AI insight must not inject runtime UTF-8")
+expect(rows[2][4], "RES 83%", "AI Resolve payload")
+assert(rows[3][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
+assert(rows[4][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
 assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
     "HPS AI summary should identify ally-focused healing")
 assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
@@ -51,10 +54,11 @@ assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
 
 local weak = DPScopeAI.Analyze({ mode = "dps", eventCount = 5, hpSamples = 1, poolSamples = 0 })
 expect(weak.confidence, "низкая", "low sample confidence")
-assert(string.find(weak.insight, "мало событий", 1, true),
+assert(string.find(weak.nextStep, "30+", 1, true),
     "low sample analysis should ask for more events")
 
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
 assert(string.find(output[#output], "ON", 1, true), "AI status should report ON")
+assert(string.find(output[#output], "Ollama", 1, true), "AI status should describe the local desktop companion")
 
 print("DPScope AI advisor tests passed.")
