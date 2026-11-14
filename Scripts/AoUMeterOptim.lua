@@ -1191,11 +1191,16 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		local selfSeg, allySeg = healOpt.self or {}, healOpt.ally or {}
 		local lowHpEvents = 0
 		for i = 1, 5 do lowHpEvents = lowHpEvents + N(o and o.histN and o.histN[i]) end
+		local tankMode = activeMode == enumMode.Def
+		local incomingEvents = 0
+		if tankMode and AOUA and AOUA.Session and AOUA.Session.defense then
+			incomingEvents = N(AOUA.Session.defense.events)
+		end
 		return {
-			mode = (activeMode == enumMode.Def) and "tank" or (heal and "hps" or "dps"),
-			eventCount = N(o and (o.eventSamples or o.hpSamples)),
-			hpSamples = N(o and o.hpSamples),
-			poolSamples = N(o and o.poolSamples),
+			mode = tankMode and "tank" or (heal and "hps" or "dps"),
+			eventCount = tankMode and incomingEvents or N(o and (o.eventSamples or o.hpSamples)),
+			hpSamples = tankMode and 0 or N(o and o.hpSamples),
+			poolSamples = tankMode and 0 or N(o and o.poolSamples),
 			lowHpEvents = lowHpEvents,
 			incomingPerSecond = N(df and df.Amount) / duration,
 			damagePerSecond = N(dd and dd.Amount) / duration,
@@ -1418,8 +1423,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	end
 
 	local aiContext = makeAIContext()
-	aiContext.currentStats = nowA
-	aiContext.recommendedStats = optA3
+	aiContext.currentStats = offOK and nowA or nil
+	aiContext.recommendedStats = offOK and optA3 or nil
 	aiContext.offenseDeltaPct = offOK and
 		((multA(optA3[1], optA3[2], optA3[3], L, attackPool, h, useCurve) /
 			math.max(currentMult, 1e-12) - 1) * 100) or nil
