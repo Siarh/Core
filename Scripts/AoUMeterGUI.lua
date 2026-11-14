@@ -322,10 +322,12 @@ function TUMeterGUI:UpdateOptim()
 	if lines then
 		-- put the block right after the last displayed spell
 		local n = 0
-		for i = 1, MAXSPELLS do
-			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
+		if self.DetailsTab ~= "stats" then
+			for i = 1, MAXSPELLS do
+				if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
+			end
 		end
-		local gap = Settings.OptGap or 36
+		local gap = (self.DetailsTab == "stats") and 0 or (Settings.OptGap or 36)
 		local y = 36 + n * 18 + gap
 
 		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
