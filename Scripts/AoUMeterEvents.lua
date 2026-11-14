@@ -176,14 +176,22 @@ local timerToResetCache = 0
 --------------------------------------------------------------------------------
 -- Event: Group & raid / Appeared & Disappeared
 --------------------------------------------------------------------------------
+-- A new group/raid starts a fresh collection context. Reset() keeps the
+-- previous aggregate available in the Previous fight slot.
 onMyEvent["EVENT_GROUP_APPEARED"] = function()
 	DPSMeterGUI:Reset()
 	metricReset()
 end
 
 onMyEvent["EVENT_RAID_APPEARED"] = onMyEvent["EVENT_GROUP_APPEARED"]
-onMyEvent["EVENT_RAID_DISAPPEARED"] = onMyEvent["EVENT_GROUP_APPEARED"]
-onMyEvent["EVENT_GROUP_DISAPPEARED"] = onMyEvent["EVENT_GROUP_APPEARED"]
+
+-- Leaving a group/raid (for example, exiting an arena) must not reset the
+-- just-finished fight. Only rebuild event filters for the remaining solo state.
+onMyEvent["EVENT_GROUP_DISAPPEARED"] = function()
+	metricReset()
+end
+
+onMyEvent["EVENT_RAID_DISAPPEARED"] = onMyEvent["EVENT_GROUP_DISAPPEARED"]
 --------------------------------------------------------------------------------
 -- Event: Member removed
 --------------------------------------------------------------------------------
