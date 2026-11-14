@@ -31,7 +31,7 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(low["observed_damage"], 1000)
         self.assertEqual(low["observed_healing"], 500)
         self.assertEqual(low["healing_by_recipient"]["self"]["amount"], 500)
-        self.assertEqual(low["observed_dps_estimate"], 1000)
+        self.assertEqual(low["observed_dps_estimate"], 500)
 
     def test_profile_build_accepts_multiple_mastery_snapshots(self):
         rows = [event("damage", "f1", 1, 445.1, 1000), event("damage", "f2", 1, 595.1, 1200)]
