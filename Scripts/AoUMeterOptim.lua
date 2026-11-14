@@ -405,19 +405,24 @@ function Optim.OnHit(combatant, mode, params, rage)
 	-- recipient's HP. HP-weighted samples remain conditional on a valid read.
 	local healSegment
 	if mode == enumMode.Hps then
-		local recipientKey = (tid == me) and "self" or "ally"
-		healSegment = o[recipientKey]
-		if not healSegment then
-			healSegment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0,
-				events = 0, preSamples = 0, estimatedSamples = 0, unknownHpSamples = 0 }
-			o[recipientKey] = healSegment
-		end
-		healSegment.amount = healSegment.amount + amount
-		healSegment.events = healSegment.events + 1
-		if tid == me then
-			o.sw = (o.sw or 0) + amount
+		local recipientKey = (tid == me) and "self" or (tid and "ally" or nil)
+		if recipientKey then
+			healSegment = o[recipientKey]
+			if not healSegment then
+				healSegment = { amount = 0, hpAmount = 0, poolAmount = 0, poolWeight = 0,
+					events = 0, preSamples = 0, estimatedSamples = 0, unknownHpSamples = 0 }
+				o[recipientKey] = healSegment
+			end
+			healSegment.amount = healSegment.amount + amount
+			healSegment.events = healSegment.events + 1
+			if tid == me then
+				o.sw = (o.sw or 0) + amount
+			else
+				o.aw = (o.aw or 0) + amount
+			end
 		else
-			o.aw = (o.aw or 0) + amount
+			o.unknownHealAmount = (o.unknownHealAmount or 0) + amount
+			o.unknownHealEvents = (o.unknownHealEvents or 0) + 1
 		end
 	end
 
@@ -460,7 +465,7 @@ function Optim.OnHit(combatant, mode, params, rage)
 			end
 			if tid == me then
 				o.shs = (o.shs or 0) + amount * frac
-			else
+			elseif tid then
 				o.ahs = (o.ahs or 0) + amount * frac
 			end
 		end
@@ -1196,6 +1201,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			damagePerSecond = N(dd and dd.Amount) / duration,
 			selfAmount = N(healOpt.sw or selfSeg.amount),
 			allyAmount = N(healOpt.aw or allySeg.amount),
+			totalHealAmount = N(hl and hl.Amount),
+			unknownHealAmount = N(healOpt.unknownHealAmount),
 			selfHealPerSecond = N(healOpt.sw or selfSeg.amount) / duration,
 			allyHealPerSecond = N(healOpt.aw or allySeg.amount) / duration,
 			measuredHealSamples = N(selfSeg.preSamples) + N(allySeg.preSamples),
