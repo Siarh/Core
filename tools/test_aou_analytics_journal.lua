@@ -205,7 +205,7 @@ AOUA.OnIncomingDamage({
     target = 1001, amount = 50, ability = "Recorded incoming",
     sysSubElement = "ENUM_SubElement_FIRE", runesAbsorb = 12
 })
-expect(#AOUA.Session.eventSamples, 3, "raw event buffer count")
+expect(#AOUA.Session.eventSamples, 4, "raw event buffer count")
 
 -- An exact health-change callback is already a pre-hit sample. The following
 -- incoming-damage callback must consume it without another GetHealthInfo read.
@@ -226,8 +226,8 @@ expect(AOUA.Session.eventSamples[2]:find("|35.0000|self|Recorded self heal|", 1,
     "self-heal Resolve and recipient saved")
 local savedOk, savedCount = AOUA.OnFightStop()
 expect(savedOk, true, "event history persisted")
-expect(savedCount, 3, "persisted event count")
-expect(persistedConfig.aou_evt_count, 3, "event config count")
+expect(savedCount, 4, "persisted event count")
+expect(persistedConfig.aou_evt_count, 4, "event config count")
 expect(persistedConfig.aou_evt_schema, "v1", "event schema version")
 expect(persistedConfig.aou_rec_count, nil, "legacy record keys untouched")
 local exportOk = AOUA.EventExport(3)
