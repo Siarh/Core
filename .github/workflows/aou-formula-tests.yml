@@ -37,6 +37,8 @@ on:
       - "name.txt"
       - "tools/README_formula_calculator.txt"
       - ".github/workflows/aou-formula-tests.yml"
+  pull_request:
+    branches: [build28-source]
   workflow_dispatch:
 
 jobs:
