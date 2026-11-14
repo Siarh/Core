@@ -163,10 +163,11 @@ function DPScopeAI.Analyze(context)
             end
         elseif healTotal > 0 then
             insight = "Лечение зарегистрировано; входящий урон не обнаружен."
-        elseif n(context.totalHealAmount) > 0 then
-            insight = "HPS есть, но получатели лечения не определены."
         else
             insight = "В этом фрагменте нет данных о лечении."
+        end
+        if healTotal <= 0 and n(context.totalHealAmount) > 0 then
+            insight = appendSentence(insight, "сумма HPS есть, получатели не определены")
         end
         if allyShare >= 0.70 then
             insight = appendSentence(insight, "основной объём HPS уходит союзникам")
