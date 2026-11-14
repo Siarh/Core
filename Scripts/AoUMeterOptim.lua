@@ -1290,7 +1290,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local _, hpLimit, hpReal = Optim.GetHealth(avatar.GetId())
 	local hpMax = (hpReal and hpLimit) or cfg.hp
 	local phi = Optim.HealAbsorbFrac(c)
-	local selfHealRate = heal and N(o.sw) / fightTime or 0
+	local selfHealRate = N(hl.Opt and hl.Opt.sw) / fightTime
 
 	-- A free pool may move between offense and defense even when one group
 	-- currently has zero assigned points.
