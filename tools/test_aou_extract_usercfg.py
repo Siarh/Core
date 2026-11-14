@@ -26,10 +26,10 @@ class UserCfgExtractorTests(unittest.TestCase):
         text = "\n".join([
             "table_begin ScriptUserMods_DPScope",
             " table_begin data",
-            "  aou_evt_schema=l\\"v1\\"",
+            "  aou_evt_schema=l"v1"",
             "  aou_evt_count=2",
-            f"  aou_evt_1=l\\"{row(1)}\\"",
-            f"  aou_evt_2=l\\"{row(2)}\\"",
+            f"  aou_evt_1=l"{row(1)}"",
+            f"  aou_evt_2=l"{row(2)}"",
             " table_end data",
             "table_end ScriptUserMods_DPScope",
         ])
@@ -48,7 +48,7 @@ class UserCfgExtractorTests(unittest.TestCase):
             "table_begin ScriptUserMods_DPScope",
             " table_begin data",
             "  aou_evt_count=1",
-            f"  aou_evt_1=l\\"{row(1)}\\"",
+            f"  aou_evt_1=l"{row(1)}"",
             " table_end data",
             "table_end ScriptUserMods_DPScope",
         ])
@@ -60,7 +60,7 @@ class UserCfgExtractorTests(unittest.TestCase):
             "table_begin ScriptUserMods_DPScope",
             " table_begin data",
             "  aou_evt_count=2",
-            f"  aou_evt_1=l\\"{row(1)}\\"",
+            f"  aou_evt_1=l"{row(1)}"",
             " table_end data",
             "table_end ScriptUserMods_DPScope",
         ])
