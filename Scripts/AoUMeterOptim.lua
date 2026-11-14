@@ -352,7 +352,9 @@ end
 -- Data tracker: damage-weighted target health and Resolve for each hit
 --------------------------------------------------------------------------------
 Optim.Perf = { calls = 0, recalcs = 0 }   -- how many times the model was recalculated
-Optim.HealTrace = {}      -- last heal events: { mine, heal, value, limit, real, pre, same }
+Optim.HealTrace = {}      -- fixed 14-slot ring buffer for diagnostics
+Optim.HealTraceHead = 1
+Optim.HealTraceCount = 0
 Optim.HealStat = { n = 0, same = 0 }
 Optim.LastEv = {}         -- last raw event parameters per mode (for /aou lastev)
 
@@ -410,12 +412,20 @@ function Optim.OnHit(combatant, mode, params, rage)
 			-- trace for diagnostics: do several heals of one unit share the same health read (processed in one batch)?
 			if not second then
 				local tr = Optim.HealTrace
-				local last = tr[#tr]
+				local head = Optim.HealTraceHead
+				local lastIndex = head - 1
+				if lastIndex < 1 then lastIndex = 14 end
+				local last = Optim.HealTraceCount > 0 and tr[lastIndex] or nil
 				local same = (last ~= nil and last.tid == tid and last.value == v)
 				Optim.HealStat.n = Optim.HealStat.n + 1
 				if same then Optim.HealStat.same = Optim.HealStat.same + 1 end
-				tr[#tr + 1] = { tid = tid, mine = (tid == me), heal = amount, value = v, limit = lim, real = real, pre = frac, same = same }
-				if #tr > 14 then table.remove(tr, 1) end
+				local entry = tr[head]
+				if not entry then entry = {}; tr[head] = entry end
+				entry.tid, entry.mine, entry.heal = tid, (tid == me), amount
+				entry.value, entry.limit, entry.real = v, lim, real
+				entry.pre, entry.same = frac, same
+				Optim.HealTraceHead = (head % 14) + 1
+				Optim.HealTraceCount = math.min(14, Optim.HealTraceCount + 1)
 			end
 			local recipientKey = (tid == me) and "self" or "ally"
 			local segment = o[recipientKey]
@@ -1720,10 +1730,13 @@ function Optim.OnSlash(text)
 		local tr = Optim.HealTrace
 		say("heal events: " .. Optim.HealStat.n .. ", same health read as the previous event: " .. Optim.HealStat.same
 			.. " (" .. F1(Optim.HealStat.n > 0 and Optim.HealStat.same / Optim.HealStat.n * 100 or 0) .. "%)")
-		for i = 1, #tr do
-			local e = tr[i]
-			sayLong(i .. ": " .. (e.mine and "self" or "ally") .. " heal=" .. I(e.heal) .. " hp=" .. I(e.value) .. "/" .. I(e.limit)
-				.. (e.real and "" or " (percent only)") .. " pre=" .. F1(e.pre * 100) .. "%" .. (e.same and " same-read" or ""))
+		for i = 1, Optim.HealTraceCount do
+			local idx = (Optim.HealTraceHead - Optim.HealTraceCount + i - 2) % 14 + 1
+			local e = tr[idx]
+			if e then
+				sayLong(i .. ": " .. (e.mine and "self" or "ally") .. " heal=" .. I(e.heal) .. " hp=" .. I(e.value) .. "/" .. I(e.limit)
+					.. (e.real and "" or " (percent only)") .. " pre=" .. F1(e.pre * 100) .. "%" .. (e.same and " same-read" or ""))
+			end
 		end
 	elseif cmd == "lastev" then
 		local mode = (args[3] == "dmg") and enumMode.Dps or enumMode.Hps
