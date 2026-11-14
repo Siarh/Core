@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <WidgetButton>
+	<Priority>2</Priority>
 	<Name>SpellsTabBtn</Name>
 	<Placement>
 		<X><Align>WIDGET_ALIGN_LOW</Align><Pos>218</Pos><Size>82</Size></X>
