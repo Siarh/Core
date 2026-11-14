@@ -44,8 +44,6 @@ expect(AOUA.Session.healing.overhealUnknown, 1, "outgoing unknown overheal count
 expect(AOUA.Session.healing.reportedOverload, 10, "outgoing reported overload total")
 expect(outgoing.events, 1, "outgoing ability events")
 expect(AOUA.Session.determinationByMode.healing.samples, 1, "outgoing healing Resolve sample in history")
-expect(AOUA.Session.eventSamples[1]:find("|50.0000|", 1, true) ~= nil, true,
-    "outgoing healing Resolve value in raw event sample")
 
 -- A raw received-heal callback is recorded immediately. The legacy meter then
 -- supplies a resolved spell name for the same params table. Relabel the row
@@ -209,7 +207,8 @@ AOUA.OnIncomingDamage({
 })
 expect(#AOUA.Session.eventSamples, 3, "raw event buffer count")
 expect(AOUA.Session.eventSamples[1]:find("damage", 1, true) ~= nil, true, "outgoing damage sample saved")
-expect(AOUA.Session.eventSamples[2]:find("|self|Recorded self heal|", 1, true) ~= nil, true, "self-heal recipient saved")
+expect(AOUA.Session.eventSamples[2]:find("|35.0000|self|Recorded self heal|", 1, true) ~= nil, true,
+    "self-heal Resolve and recipient saved")
 local savedOk, savedCount = AOUA.OnFightStop()
 expect(savedOk, true, "event history persisted")
 expect(savedCount, 3, "persisted event count")
