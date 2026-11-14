@@ -23,9 +23,9 @@ import aou_ai_assistant as assistant
 
 
 AOU_LINE_RE = re.compile(
-    r"AOUCSV\\s*\\|\\s*([^|\\s]+)\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\d+)\\s*\\|(.*)$"
+    r"AOUCSV\s*\|\s*([^|\s]+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|(.*)$"
 )
-RECORD_KEY_RE = re.compile(r"^R(\\d+)$")
+RECORD_KEY_RE = re.compile(r"^R(\d+)$")
 REQUIRED_COLUMNS = {"kind", "M", "R", "U", "L", "observed_amount"}
 
 
@@ -127,7 +127,7 @@ def write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as target:
         writer = csv.writer(
             target, delimiter=";", quotechar='"', quoting=csv.QUOTE_ALL,
-            lineterminator="\\r\\n",
+            lineterminator="\r\n",
         )
         writer.writerow(header)
         writer.writerows(rows)
@@ -135,7 +135,7 @@ def write_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
 
 def write_json(path: Path, value: Any) -> None:
     path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\\n",
+        json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
 
@@ -208,7 +208,7 @@ def run_pipeline(args: argparse.Namespace) -> int:
     advice = assistant.call_ollama(
         payload, selected_model, args.ollama_url, timeout=args.timeout
     )
-    advice_path.write_text(advice.rstrip() + "\\n", encoding="utf-8")
+    advice_path.write_text(advice.rstrip() + "\n", encoding="utf-8")
     print(f"AI-разбор сохранён: {advice_path}")
     print(f"Модель: {selected_model}")
     return 0
