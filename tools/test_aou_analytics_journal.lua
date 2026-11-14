@@ -205,7 +205,7 @@ AOUA.OnIncomingDamage({
     target = 1001, amount = 50, ability = "Recorded incoming",
     sysSubElement = "ENUM_SubElement_FIRE", runesAbsorb = 12
 })
-expect(#AOUA.Session.eventSamples, 4, "raw event buffer count")
+expect(#AOUA.Session.eventSamples, 3, "raw event buffer count")
 
 -- An exact health-change callback is already a pre-hit sample. The following
 -- incoming-damage callback must consume it without another GetHealthInfo read.
@@ -218,6 +218,7 @@ AOUA.OnHealthChanged({ id = 1001, healthDelta = -50, healthLimitDelta = 0 })
 local readsAfterHealthEvent = healthReads
 AOUA.OnIncomingDamage({ target = 1001, amount = 50, ability = "Transition correlation" })
 expect(healthReads, readsAfterHealthEvent, "incoming hit reuses exact health transition")
+expect(#AOUA.Session.eventSamples, 4, "transition incoming event sample appended")
 local transitionRow = AOUA.Session.eventSamples[#AOUA.Session.eventSamples]
 assert(transitionRow:find("|50.0000|45.0000|measured_pre|1000.0000|", 1, true),
     "incoming sample should preserve exact pre-hit health fraction")
