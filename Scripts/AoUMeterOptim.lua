@@ -613,28 +613,22 @@ local function optA(fx, Tp, pool, h, curve)
 	if Tp <= 0 then return 0, 0, 0, f(0, 0) end
 	local s = math.max(1, math.ceil(Tp / 20))
 	local best, bx, bu = -1e18, 0, 0
-	local x = 0
-	while x <= Tp do
-		local u = 0
-		while x + u <= Tp do
+	-- Numeric for-loops avoid repeated Lua-level increment/condition checks.
+	-- The candidate sequence and search resolution are identical to the old loops.
+	for x = 0, Tp, s do
+		for u = 0, Tp - x, s do
 			local v = f(x, u)
 			if v > best then best = v; bx = x; bu = u end
-			u = u + s
 		end
-		x = x + s
 	end
 	while s > 1 do
 		local n = math.max(1, math.ceil(s / 5))
 		local cx, cu = bx, bu
-		local x2 = math.max(0, cx - s)
-		while x2 <= cx + s do
-			local u2 = math.max(0, cu - s)
-			while u2 <= cu + s do
+		for x2 = math.max(0, cx - s), cx + s, n do
+			for u2 = math.max(0, cu - s), cu + s, n do
 				local v = f(x2, u2)
 				if v > best then best = v; bx = x2; bu = u2 end
-				u2 = u2 + n
 			end
-			x2 = x2 + n
 		end
 		s = n
 	end
@@ -732,13 +726,19 @@ local function optJ(fxA, Ea, fxD, Ed, F, pool, h, o, bal, curve)
 		local d1, d2, d3, dbest = optD(fxD, Ed + F - fa, o)
 		local obj = abest
 		if bal > 0 then obj = obj + bal * math.log(math.max(dbest, 1e-9)) end
-		return obj, { a1, a2, a3 }, { d1, d2, d3 }
+		-- Return scalars; allocate result tables only when a new best candidate wins.
+		return obj, a1, a2, a3, d1, d2, d3
 	end
 	local bestObj, bestA, bestD, bestFa = nil, nil, nil, 0
 	local function try(fa)
 		if fa < 0 or fa > F then return end
-		local obj, A, D = ev(fa)
-		if bestObj == nil or obj > bestObj then bestObj, bestA, bestD, bestFa = obj, A, D, fa end
+		local obj, a1, a2, a3, d1, d2, d3 = ev(fa)
+		if bestObj == nil or obj > bestObj then
+			bestObj = obj
+			bestA = { a1, a2, a3 }
+			bestD = { d1, d2, d3 }
+			bestFa = fa
+		end
 	end
 	-- three stages (coarse, medium, exact) instead of one fine scan: about 40 evaluations instead of 120
 	local step = math.max(1, math.ceil(F / 8))
