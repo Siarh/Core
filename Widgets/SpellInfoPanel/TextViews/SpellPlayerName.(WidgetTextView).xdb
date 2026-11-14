@@ -4,9 +4,9 @@
 	<Name>SpellPlayerNameTextViewName</Name>
 	<Placement>
 		<X>
-			<Align>WIDGET_ALIGN_LOW</Align>
+			<Align>WIDGET_ALIGN_BOTH</Align>
 			<Pos>40</Pos>
-			<Size>165</Size>
+			<HighPos>40</HighPos>
 		</X>
 		<Y>
 			<Align>WIDGET_ALIGN_LOW</Align>
