@@ -399,27 +399,36 @@ local function eventText(value)
     return text ~= "" and text or nil
 end
 
+local resourceKeyCache = setmetatable({}, { __mode = "k" })
+
 local function resourceKey(value)
     if value == nil then return nil end
-    if type(value) == "string" or type(value) == "number" then return tostring(value) end
+    local valueType = type(value)
+    if valueType == "string" or valueType == "number" then return tostring(value) end
+    if valueType ~= "table" and valueType ~= "userdata" then return nil end
+
+    local cached = resourceKeyCache[value]
+    if cached ~= nil then return cached or nil end
 
     -- ResourceId:GetInstanceId may return an opaque UniqueId userdata.
-    -- Prefer a readable resource path or metadata and never print a Lua pointer.
+    -- Cache its stable label: these metadata calls can otherwise repeat on every hit.
+    local result
     local okPath, path = pcall(function() return value:GetPath() end)
-    local pathText = okPath and eventText(path) or nil
-    if pathText then return pathText end
+    result = okPath and eventText(path) or nil
 
-    local okInfo, info = pcall(function() return value:GetInfo() end)
-    if okInfo and type(info) == "table" then
-        local label = eventText(info.sysName) or eventText(info.name) or eventText(info.shortName)
-        if label then return label end
+    if not result then
+        local okInfo, info = pcall(function() return value:GetInfo() end)
+        if okInfo and type(info) == "table" then
+            result = eventText(info.sysName) or eventText(info.name) or eventText(info.shortName)
+        end
     end
 
-    local okId, id = pcall(function() return value:GetInstanceId() end)
-    if okId and (type(id) == "string" or type(id) == "number") then
-        return tostring(id)
+    if not result then
+        local okId, id = pcall(function() return value:GetInstanceId() end)
+        if okId and (type(id) == "string" or type(id) == "number") then result = tostring(id) end
     end
-    return nil
+    resourceKeyCache[value] = result or false
+    return result
 end
 
 local function abilityLabel(params, fallbackName)
@@ -647,10 +656,23 @@ local function journalRow(map, key, limit)
     return row, key
 end
 
+local tagInfoCache = setmetatable({}, { __mode = "k" })
+
 local function tagInfo(tag)
+    local tagType = type(tag)
+    local cacheable = tagType == "table" or tagType == "userdata"
+    if cacheable then
+        local cached = tagInfoCache[tag]
+        if cached then return cached[1], cached[2] end
+    end
     local ok, info = pcall(function() return tag:GetInfo() end)
-    if not ok or type(info) ~= "table" then return nil, nil end
-    return eventText(info.shortName) or eventText(info.name), info.isHelpful
+    if not ok or type(info) ~= "table" then
+        if cacheable then tagInfoCache[tag] = { false, nil } end
+        return nil, nil
+    end
+    local name, helpful = eventText(info.shortName) or eventText(info.name), info.isHelpful
+    if cacheable then tagInfoCache[tag] = { name or false, helpful } end
+    return name, helpful
 end
 
 local function addTagRows(map, tags, amount)
