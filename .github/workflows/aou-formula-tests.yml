@@ -17,6 +17,7 @@ on:
       - "tools/aou_extract_usercfg.py"
       - "tools/test_aou_extract_usercfg.py"
       - "tools/test_aou_ai_companion.py"
+      - "tools/test_aou_event_history_to_profile.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
       - "Scripts/AoUMeterGUI.lua"
@@ -68,7 +69,7 @@ jobs:
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
-          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py test_aou_ai_companion.py test_aou_extract_usercfg.py
+          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py test_aou_ai_companion.py test_aou_extract_usercfg.py test_aou_event_history_to_profile.py
           python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
 
 
