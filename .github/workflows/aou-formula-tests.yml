@@ -14,6 +14,8 @@ on:
       - "tools/README_ollama_ai.txt"
       - "tools/test_aou_ai_assistant.py"
       - "tools/aou_ai_companion.py"
+      - "tools/aou_extract_usercfg.py"
+      - "tools/test_aou_extract_usercfg.py"
       - "tools/test_aou_ai_companion.py"
       - "tools/aou_profile_template.json"
       - "Scripts/AoUMeterOptim.lua"
@@ -66,7 +68,7 @@ jobs:
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
-          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py test_aou_ai_companion.py
+          python -m unittest -v test_aou_formula_calculator.py test_aou_ai_assistant.py test_aou_ai_companion.py test_aou_extract_usercfg.py
           python aou_formula_calculator.py aou_profile_template.json --out formula_test_report.json
 
 
@@ -85,7 +87,7 @@ jobs:
           cp -a "AddonDesc.(UIAddon).xdb" AoUMeterSettings.txt AoU_ChatLog_To_CSV.html \
             README_Optimizer.txt CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
           cp -a tools/aou_formula_calculator.py tools/aou_event_history_to_profile.py \
-            tools/aou_profile_template.json tools/aou_ai_assistant.py tools/aou_ai_companion.py \
+            tools/aou_profile_template.json tools/aou_ai_assistant.py tools/aou_ai_companion.py tools/aou_extract_usercfg.py \
             tools/README_formula_calculator.txt tools/README_ollama_ai.txt package/DPScope/tools/
           cd package
           zip -qr ../DPScope-build28.zip DPScope
