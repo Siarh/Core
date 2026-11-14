@@ -547,14 +547,15 @@ local function persistEventSamples()
         if type(section) ~= "table" then section = {} end
         local oldCount = math.max(0, math.min(100000, math.floor(tonumber(section.aou_evt_count) or 0)))
         local combined = {}
-        local keepOld = math.max(0, EVENT_HISTORY_LIMIT - #current)
+        local currentFirst = math.max(1, #current - EVENT_HISTORY_LIMIT + 1)
+        local currentToPersist = #current - currentFirst + 1
+        local keepOld = math.max(0, EVENT_HISTORY_LIMIT - currentToPersist)
         local firstOld = math.max(1, oldCount - keepOld + 1)
         for i = firstOld, oldCount do
             local oldRow = section["aou_evt_" .. i]
             if oldRow ~= nil and tostring(oldRow) ~= "" then combined[#combined + 1] = tostring(oldRow) end
         end
-        for i = 1, #current do combined[#combined + 1] = current[i] end
-        while #combined > EVENT_HISTORY_LIMIT do table.remove(combined, 1) end
+        for i = currentFirst, #current do combined[#combined + 1] = current[i] end
         local oldSlots = math.min(EVENT_HISTORY_LIMIT, oldCount)
         for i = 1, #combined do section["aou_evt_" .. i] = combined[i] end
         for i = #combined + 1, oldSlots do section["aou_evt_" .. i] = "" end
