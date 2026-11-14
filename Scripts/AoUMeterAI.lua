@@ -77,41 +77,8 @@ function DPScopeAI.SetEnabled(value)
     return DPScopeAI.IsEnabled()
 end
 
-local function phaseEventCount(phases)
-    local count = 0
-    for i = 1, 4 do
-        local phase = phases and phases[i]
-        if phase then count = count + n(phase.n) end
-    end
-    return count
-end
-
-local function shortText(value, limit)
-    value = tostring(value or "")
-    limit = limit or 76
-    if #value > limit then return string.sub(value, 1, limit - 3) .. "..." end
-    return value
-end
-
-local function signedStatFocus(current, recommended)
-    local labels = { "M", "R", "Б" }
-    local best, bestDelta = nil, 0
-    for i = 1, 3 do
-        local delta = n(recommended and recommended[i]) - n(current and current[i])
-        if math.abs(delta) > math.abs(bestDelta) then
-            bestDelta = delta
-            best = labels[i]
-        end
-    end
-    if not best or math.abs(bestDelta) < 1 then
-        return "Распределение близко к текущему оптимуму модели."
-    end
-    return string.format("Крупнейший сдвиг оптимизатора: %s %s%d очков.", best,
-        bestDelta > 0 and "+" or "", (bestDelta >= 0) and math.floor(bestDelta + 0.5) or math.ceil(bestDelta - 0.5))
-end
-
 local function statFocus(current, recommended)
-    local labels = { "М", "Р", "Б" }
+    local labels = { "М", "Р", "Бесп." }
     local best, bestDelta = nil, 0
     for i = 1, 3 do
         local delta = n(recommended and recommended[i]) - n(current and current[i])
@@ -184,6 +151,8 @@ function DPScopeAI.Analyze(context)
             end
         elseif healTotal > 0 then
             insight = "Лечение зарегистрировано; входящий урон не обнаружен."
+        elseif n(context.totalHealAmount) > 0 then
+            insight = "HPS есть, но получатели лечения не определены."
         else
             insight = "В этом фрагменте нет данных о лечении."
         end
@@ -191,6 +160,10 @@ function DPScopeAI.Analyze(context)
             insight = appendSentence(insight, "основной объём HPS уходит союзникам")
         elseif healTotal > 0 and allyShare <= 0.30 then
             insight = appendSentence(insight, "значительная часть HPS направлена себе")
+        end
+        if offenseDelta then
+            insight = appendSentence(insight,
+                string.format("HPS-множитель %+.1f%%", offenseDelta))
         end
         if survivalDelta then
             insight = appendSentence(insight,
