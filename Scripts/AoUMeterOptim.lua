@@ -583,17 +583,6 @@ local function lnCurveF(M, R, U, L, pool, mm)
 	return score
 end
 
-local function curvePhaseMultipliers(M, R, U, L, pool)
-	local out = {}
-	local m = mf(U / 1000)
-	local mm = function() return m end
-	for i = 1, 4 do
-		local phasePool = type(pool) == "table" and (pool[i] or pool.fallback) or pool
-		out[i] = math.exp(lnF(M, R, U, L, phasePool, HP_PHASE_MID[i], mm))
-	end
-	return out
-end
-
 local function multA(M, R, U, L, pool, h, curve)
 	local m = mf(U / 1000)
 	local mm = function() return m end
