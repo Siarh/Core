@@ -12,7 +12,7 @@ def event(kind, fight, second, mastery, amount):
         "observed_amount": str(amount), "target_hp_before": "100",
         "hp_quality": "measured_pre", "resolve_pool": "50", "critical": "0",
         "runes_absorb": "0", "ability": "Test", "element": "physical",
-        "recipient": "self", "target_max_hp": "100000", "stat_sample_second": str(second), "stat_sample_age": "0",
+        "recipient": "self", "target_max_hp": "100000", "actor_id": "player-1", "target_id": "target-1", "stat_sample_second": str(second), "stat_sample_age": "0",
     }
 
 
@@ -206,6 +206,27 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(analysis["status"], "insufficient_data")
         self.assertEqual(analysis["comparisons"], [])
         self.assertEqual(analysis["excluded_or_unusable"]["stat_snapshot_stale"], 30)
+
+
+
+    def test_different_target_ids_are_not_matched(self):
+        rows = []
+        for prefix, mastery, target in (("base", 1000, "boss-a"), ("test", 1100, "boss-b")):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, 1000)
+                    row.update({
+                        "profile": "pve", "R": "200", "U": "300", "L": "400",
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Holy Wrath", "damage_source": "spell",
+                        "target_id": target, "actor_id": "player-1",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        self.assertEqual(analysis["status"], "insufficient_data")
+        self.assertEqual(analysis["comparisons"], [])
 
 
 
