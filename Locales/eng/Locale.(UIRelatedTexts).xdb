@@ -378,6 +378,10 @@
       <resource href="OptAIMeans.txt" />
     </Item>
     <Item>
+      <name>OptAICrit</name>
+      <resource href="OptAICrit.txt" />
+    </Item>
+    <Item>
       <name>OptAIInsight</name>
       <resource href="OptAIInsight.txt" />
     </Item>
