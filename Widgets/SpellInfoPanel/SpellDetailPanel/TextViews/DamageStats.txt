@@ -4,13 +4,13 @@
 			<r name="Min"/>
 		</tip_blue>
 		<Neutral>
-			<r name="Separator1"/>   |   
+			<r name="Separator1"/> | 
 		</Neutral>
 		<tip_green>
 			<r name="Avg"/>
 		</tip_green>
 		<Neutral>
-			<r name="Separator2"/>   |   
+			<r name="Separator2"/> | 
 		</Neutral>
 		<tip_red>
 			<r name="Max"/>
