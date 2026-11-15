@@ -657,15 +657,15 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         target_quality = number(row.get("target_quality"))
         target_is_mob = str(row.get("target_is_mob") or "").strip()
 
-        actor_match_method = "entity_signature" if actor_signature else (
-            "instance_id" if actor_id_known else "legacy_unverified"
-        )
+        # Keep the player actor tied to its exact instance ID. Cross-instance
+        # archetype matching is allowed for targets only, with a complete
+        # signature; actor descriptors remain diagnostic metadata.
+        actor_match_method = "instance_id" if actor_id_known else "legacy_unverified"
         target_match_method = "entity_signature" if target_signature else (
             "instance_id" if target_id_known else "legacy_unverified"
         )
         actor_match_key = (
-            "entity:" + actor_signature if actor_signature
-            else "instance:" + actor_id if actor_id_known
+            "instance:" + actor_id if actor_id_known
             else "legacy_unknown_actor"
         )
         target_match_key = (
@@ -872,6 +872,13 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                                 if target_match_method == "entity_signature"
                                 else "exact instance ID" if target_match_method == "instance_id"
                                 else "legacy identity unavailable"
+                            ),
+                            "comparison_identity_scope": (
+                                "same_actor_instance_and_target_archetype"
+                                if target_match_method == "entity_signature"
+                                else "same_actor_and_target_instances"
+                                if actor_match_method == "instance_id" and target_match_method == "instance_id"
+                                else "legacy_exploratory_identity"
                             ),
                             "identity_quality": identity_quality,
                             "snapshot_quality": snapshot_quality,

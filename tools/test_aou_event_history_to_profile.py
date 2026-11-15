@@ -232,9 +232,9 @@ class ChangingStatsTests(unittest.TestCase):
                         "ability": "Holy Wrath", "damage_source": "spell",
                         "actor_id": "player-1",
                         "target_id": f"{target_prefix}-{fight_number}",
-                        "actor_name": "Local Character", "actor_level": "90",
+                        "actor_name": "LOCAL CHARACTER" if prefix == "test" else "Local Character", "actor_level": "90",
                         "actor_quality": "0", "actor_is_mob": "0",
-                        "target_name": "Training Creature", "target_level": "90",
+                        "target_name": "TRAINING CREATURE" if prefix == "test" else "Training Creature", "target_level": "90",
                         "target_quality": "4", "target_is_mob": "1",
                     })
                     rows.append(row)
@@ -246,6 +246,9 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["target_name"], "Training Creature")
         self.assertEqual(mastery[0]["target_match_basis"],
                          "normalized name + level + quality + mob classification")
+        self.assertEqual(mastery[0]["comparison_identity_scope"],
+                         "same_actor_instance_and_target_archetype")
+        self.assertEqual(mastery[0]["target_name"], "training creature")
         self.assertEqual(mastery[0]["baseline"]["fights"], 3)
         self.assertEqual(mastery[0]["test"]["fights"], 3)
         self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)

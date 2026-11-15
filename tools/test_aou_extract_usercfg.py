@@ -63,7 +63,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         rows, summary = parse_dpscope_config(text)
         self.assertEqual(len(rows), 2)
         self.assertEqual(summary["stored_events"], 2)
-        self.assertEqual(summary["source_schema"], "v2")
+        self.assertEqual(summary["source_schema"], "v3")
         self.assertEqual(rows[1].split("|")[2], "2")
 
     def test_upgrades_v2_rows_without_inventing_entity_descriptors(self):
