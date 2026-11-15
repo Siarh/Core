@@ -238,3 +238,13 @@ Optimizer and Resolve display repair (follow-up):
 - Added regression coverage for automatic mode disabled, partial stat responses, Resolve value placement and the runtime-cloned detail-row template.
 - No combat records, saved legacy data, user.cfg or analytics thresholds were changed.
 - Disabling the optimizer now suppresses recommendation calculations but keeps the live character-stat rows visible instead of returning an empty panel.
+
+
+Optimizer and Resolve data path repair (current follow-up):
+- The optimizer block now uses the local player's combatant even when a different party member is selected; when no local combatant exists yet, a safe empty combat-data shell still permits live character stats to render.
+- Character-stat reading now falls through an empty/unavailable avatar.GetInnateStats result to avatar.GetSpecialStats, then the documented fairy-bonus stats list; /aou statdiag prints API availability, source, raw stat enum names and mapped values.
+- Resolve Min / Avg / Max are now sampled once per fight second from unit.GetRage for the local player, independently of which ability produced an event. Event-level Resolve remains passed to the optimizer model.
+- The dedicated GlobalInfoPanel template is used for the Resolve row; the current pool value sits beside the label and the Min / Avg / Max field occupies a separate wider area.
+- If no historical samples exist yet, the row shows the live Resolve pool in Avg and dashes for Min / Max rather than hiding the row or fabricating a range.
+- Partial stat snapshots continue to render even when historical Resolve samples already exist.
+- No legacy /aou rec records, analytics event history, Personal\\user.cfg, or formula thresholds were cleared or changed.
