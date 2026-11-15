@@ -52,8 +52,12 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
         end = gui.index("\nend", start)
         block = gui[start:end]
-        self.assertIn("if #rows == 0 then", block)
+        self.assertIn("local hasReadableRow = false", block)
+        self.assertIn("if not hasReadableRow then", block)
+        self.assertIn("targetQualityLabel(data.qualityName or data.quality)", block)
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
+        self.assertIn("common.IsWString", gui)
+        self.assertIn("userMods.FromWString", gui)
         self.assertIn("local targetId = ev and ev.target or nil", block)
         self.assertIn("pcall(Optim.GetTarget)", block)
         self.assertIn('hpText = (russian and "HP " or "HP ") .. "~"', block)
