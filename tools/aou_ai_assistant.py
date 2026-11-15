@@ -24,6 +24,17 @@ DEFAULT_MODEL = "qwen3.5:27b"
 SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DPScope для Allods Online / Sunshine 6.0.
 Работай строго по переданному JSON-отчёту и профилю боя.
 
+ОБЯЗАТЕЛЬНЫЙ ПРИНЦИП АНАЛИЗА ХАРАКТЕРИСТИК:
+- Для каждого допустимого сравнения явно используй формулу ME = ΔResult / ΔStat = (Result_test - Result_base) / (Stat_test - Stat_base).
+- Дополнительно показывай ME на +100 очков: ME_100 = ME * 100. Не подменяй эту величину абсолютным DPS/HPS, разницей процентов или величиной одного удара.
+- В ответе называй Result, единицы Result, Stat, ΔStat, Result_base, Result_test, ΔResult, ME за +1 и ME за +100. Используй уже переданные baseline/test и проверяй арифметику; не придумывай отсутствующие значения.
+- Считай ME только при сопоставимых условиях и изменении одной характеристики. Указывай режим, PvE/PvP, длительность, способность, цель/HP, Resolve, Normal/Critical, получателя лечения, число событий и независимых боёв.
+- Для damage/healing положительная ME означает рост результата. Для incoming отрицательная ME означает снижение входящего урона и является благоприятным защитным эффектом; не называй отрицательное значение плохим автоматически.
+- Не объединяй единицы и контексты разных способностей в одну среднюю ME и не строй абсолютный рейтинг по несовместимым сценариям. Показывай распределение сравнений по контекстам; при смешанных условиях пиши INSUFFICIENT DATA.
+- Проанализируй все переданные controlled_stat_efficiency.comparisons. Не ограничивайся первыми 25, не выбирай только удобные положительные результаты и не игнорируй отрицательные/нулевые результаты. Сверяй total_comparisons и included_events.
+- Если ожидается 1000 экспортных записей, сначала проверь input_data_coverage/import_summary: reconstructed/export_records, source_rows, combat_rows, skipped/included. Если число не совпадает или экспорт неполный, не утверждай, что все 1000 проанализированы.
+- При отсутствии валидных повторных сравнений ME не вычисляй по простому сравнению общего DPS двух разных боёв. Сообщай INSUFFICIENT DATA и предлагай тест, где меняется один стат.
+
 Правила:
 - Не пересчитывай формулы и не придумывай коэффициенты. Числа оптимизатора из отчёта считай результатом детерминированного калькулятора.
 - Не выдавай оценочные HP, сопротивления или полезное лечение за измеренные.
@@ -183,15 +194,67 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             for key in (
                 "classification", "causal_status", "mode", "profile",
                 "duration_band", "ability", "element", "target_hp_band",
-                "target_hp_quality", "resolve_pool_band", "critical", "recipient",
-                "stat", "from", "to", "delta_stat", "baseline", "test",
-                "marginal_efficiency_per_100", "relative_change_per_100_percent",
-                "confidence_interval_95_per_100", "confidence",
+                "target_hp_quality", "resolve_pool_band", "critical", "critical_scope", "recipient",
+                "stat", "from", "to", "delta_stat", "delta_result", "result_unit",
+                "me_formula", "marginal_efficiency_per_stat", "marginal_efficiency_unit_per_stat",
+                "marginal_efficiency_per_100", "marginal_efficiency_unit_per_100",
+                "result_direction", "beneficial_effect_per_100",
+                "baseline", "test", "mean_event_amount_delta_per_100",
+                "relative_change_per_100_percent", "confidence_interval_95_per_stat",
+                "confidence_interval_95_per_100", "confidence", "n_independent_fights",
             )
             if key in item
         }
-        for item in (experimental.get("comparisons", []) or [])[:25]
+        for item in (experimental.get("comparisons", []) or [])
     ]
+
+    me_groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for item in (experimental.get("comparisons", []) or []):
+        group_key = (
+            str(item.get("stat", "unknown")),
+            str(item.get("mode", "unknown")),
+            str(item.get("profile", "unknown")),
+            str(item.get("critical_scope", "unknown")),
+        )
+        me_groups.setdefault(group_key, []).append(item)
+
+    me_summary = []
+    for (stat, mode, profile_name, critical_scope), items in sorted(me_groups.items()):
+        values = [
+            float(item["marginal_efficiency_per_100"])
+            for item in items if item.get("marginal_efficiency_per_100") is not None
+        ]
+        ci_clear = sum(
+            1 for item in items
+            if item.get("confidence_interval_95_per_100")
+            and (
+                item["confidence_interval_95_per_100"][0] > 0
+                or item["confidence_interval_95_per_100"][1] < 0
+            )
+        )
+        me_summary.append({
+            "stat": stat,
+            "mode": mode,
+            "profile": profile_name,
+            "critical_scope": critical_scope,
+            "context_comparison_count": len(items),
+            "me_per_100_context_median": (
+                sorted(values)[len(values) // 2] if values else None
+            ),
+            "me_per_100_context_min": min(values) if values else None,
+            "me_per_100_context_max": max(values) if values else None,
+            "positive_contexts": sum(1 for value in values if value > 0),
+            "negative_contexts": sum(1 for value in values if value < 0),
+            "zero_contexts": sum(1 for value in values if value == 0),
+            "ci_excludes_zero_contexts": ci_clear,
+            "aggregation": "distribution_across_contexts_only_not_pooled_ME",
+        })
+
+    compact_experimental["me_formula"] = "ME = (Result_test - Result_base) / (Stat_test - Stat_base)"
+    compact_experimental["me_formula_per_100"] = "ME_100 = ME * 100"
+    compact_experimental["comparison_count_total"] = len(experimental.get("comparisons", []) or [])
+    compact_experimental["comparisons_included_in_ai_payload"] = len(compact_experimental["comparisons"])
+    compact_experimental["me_summary_by_stat"] = me_summary
 
     effectiveness = profile.get("event_effectiveness", {}) or {}
     compact_effectiveness = {
@@ -231,6 +294,15 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         "activities": activities,
         "cross_activity_recommendations": report.get("cross_activity_recommendations", {}),
         "import_summary": profile.get("import_summary", {}),
+        "input_data_coverage": {
+            key: (profile.get("import_summary", {}) or {}).get(key)
+            for key in (
+                "export_records_expected", "export_records_reconstructed",
+                "export_record_count_matches", "source_rows", "combat_rows",
+                "ignored_non_combat_rows", "included_events", "skipped_events",
+            )
+            if key in (profile.get("import_summary", {}) or {})
+        },
         "stat_comparison": profile.get("stat_comparison", {}),
         "controlled_stat_efficiency": compact_experimental,
         "temporal_performance": compact_temporal,
