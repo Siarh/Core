@@ -239,22 +239,7 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		GlobalInfoPanel:Show()
 
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
-		-- Reserve the trailing 40 px for the yellow percentage label.
-		local globalInfoBarWidth = 356
-		local globalInfoFilledWidth = globalInfoBarWidth * (GlobalInfoData.Percentage / 100)
-		GlobalInfoPanel.Bar:SetWidth(globalInfoFilledWidth)
-
-		-- Global-info rows are cloned from SpellDetailPanel at runtime.
-		-- Give their text fields separate slots; the source template overlaps Count and Min/Avg/Max.
-		GlobalInfoPanel.Name:SetWidth(110)
-		GlobalInfoPanel.Name:SetPosition(5, 1)
-		GlobalInfoPanel.Count:SetWidth(30)
-		GlobalInfoPanel.Count:SetPosition(120, 1)
-		GlobalInfoPanel.Damage:SetWidth(160)
-		GlobalInfoPanel.Damage:SetPosition(156, 1)
-		GlobalInfoPanel.Percent:SetWidth(35)
-		local percentageX = math.max(321, math.min(361, globalInfoFilledWidth + 5))
-		GlobalInfoPanel.Percent:SetPosition(percentageX, 1)
+		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
 		GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))

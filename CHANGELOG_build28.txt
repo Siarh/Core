@@ -212,3 +212,10 @@ Global determination row layout correction:
 - Applied separate runtime widths and positions to the cloned name, event count, Min / Avg / Max, and percentage widgets.
 - Reserved the final 40 px for the percentage label; the filled bar now uses a 356 px track and the yellow percentage follows its filled edge without covering the numeric columns.
 - Moved Min / Avg / Max separator spacing into the active SpellDetailPanel text format and updated regression tests to verify the runtime clone layout.
+
+
+Emergency UI recovery:
+- Removed invalid SetWidth/SetPosition calls made on raw child widgets in DisplayGlobalInfo. Those calls stopped the update loop after drawing the Resolve bar, leaving labels, combat rows, and optimizer output unrefreshed.
+- Restored the known working DisplayGlobalInfo implementation from the pre-layout-change revision.
+- Added regression tests that verify all global-info fields are populated and that wrapper-only methods are not called on raw child widgets.
+- No combat history, user.cfg, legacy records, or analytics calculations were changed.
