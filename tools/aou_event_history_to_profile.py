@@ -971,6 +971,7 @@ def build_profile(
         warnings.append("Исключено событий по причине: " + ", ".join(f"{key}={value}" for key, value in sorted(skipped.items())))
 
     controlled_efficiency = analyze_controlled_stat_efficiency(combat_rows)
+    temporal_performance = build_temporal_performance(combat_rows)
 
     return {
         "settings": {
@@ -991,7 +992,7 @@ def build_profile(
         "allocation_budget": allocation_budget,
         "activities": activities,
         "stat_comparison": compare_stat_sets(combat_rows),
-        "temporal_performance": build_temporal_performance(combat_rows),
+        "temporal_performance": temporal_performance,
         "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
@@ -1004,7 +1005,7 @@ def build_profile(
             "incoming_events": len(incoming_rows),
             "resistance_families": sorted(resistance_ratings),
             "stat_comparison": compare_stat_sets(combat_rows),
-            "temporal_fight_reports": len(build_temporal_performance(combat_rows)["fights"]),
+            "temporal_fight_reports": len(temporal_performance["fights"]),
             "controlled_stat_comparisons": len(controlled_efficiency["comparisons"]),
             "controlled_stat_analysis_status": controlled_efficiency["status"],
             "contaminated_fights_excluded": controlled_efficiency["contaminated_fights_excluded"],
