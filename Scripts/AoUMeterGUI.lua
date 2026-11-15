@@ -239,10 +239,16 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 	local isResolve = GlobalInfoData.ID == enumGlobalInfo.Determination
 	local hasSamples = (GlobalInfoData.Count or 0) > 0
 	local currentResolve = nil
-	if isResolve and avatar and unit and type(unit.GetRage) == "function" then
-		local okId, playerId = pcall(avatar.GetId)
-		if okId and playerId ~= nil then
-			local okRage, value = pcall(unit.GetRage, playerId)
+	if isResolve and unit and type(unit.GetRage) == "function" then
+		-- The row belongs to the selected combatant; for the local player this
+		-- is also the live current pool shown beside the title.
+		local resolveUnitId = self.SelectedCombatant.ID
+		if resolveUnitId == nil and avatar and type(avatar.GetId) == "function" then
+			local okId, playerId = pcall(avatar.GetId)
+			if okId then resolveUnitId = playerId end
+		end
+		if resolveUnitId ~= nil then
+			local okRage, value = pcall(unit.GetRage, resolveUnitId)
 			if okRage and type(value) == "number" then currentResolve = value end
 		end
 	end
@@ -253,16 +259,17 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		GlobalInfoPanel:Show()
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
 		GlobalInfoPanel.Bar:SetPosition(0, 15)
-		local pool = hasSamples and GlobalInfoData.Avg or currentResolve
+		local averagePool = hasSamples and GlobalInfoData.Avg or currentResolve
+		local currentPool = currentResolve ~= nil and currentResolve or averagePool
 		local panelWidth = GlobalInfoPanel:GetWidth()
 		if type(panelWidth) ~= "number" or panelWidth <= 0 then panelWidth = 356 end
-		local percentage = isResolve and pool or GlobalInfoData.Percentage
+		local percentage = isResolve and currentPool or GlobalInfoData.Percentage
 		percentage = math.max(0, math.min(100, tonumber(percentage) or 0))
 		GlobalInfoPanel.Bar:SetWidth(panelWidth * (percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
 		if isResolve then
-			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(pool, "%d"))
+			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
 				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
@@ -270,7 +277,7 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 			else
 				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(pool, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
 				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
 			end
 		else
