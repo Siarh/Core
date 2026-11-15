@@ -47,6 +47,7 @@ function TValueDetails:Reset()
 	self.Min = -1
 	self.Avg = -1
 	self.Max = -1
+	self.LastSampleTime = nil
 end
 --------------------------------------------------------------------------------
 -- Type TTimer
@@ -1154,9 +1155,10 @@ function TUMeter:UpdateData(fightId, combatantID, mode, params, spellInfo)
 				Fight.Timer:SetLastHit()
 			end
 
-			if spellInfo.Determination then
-				Combatant:UpdateGlobalInfo(params, spellInfo.Determination, mode)
-			end
+			-- The visible Resolve Min/Avg/Max range is sampled once per combat
+			-- second in TUMeter:SampleDetermination. Keep per-hit Resolve for the
+			-- optimizer model below, but do not mix event-weighted values into the
+			-- time-series display.
 
 			-- Stat optimizer: collect target health and Resolve for each hit
 			if Optim and Optim.OnHit then
@@ -1207,6 +1209,38 @@ function TUMeter:UpdateFightsTime()
 	self.FightsList[self.Fight.Total]:IncrementFightTime()
 	-- Reset the offtime battle
 	self.OffBattleTime = 0
+end
+
+-- Sample the local player's Resolve pool once per second. This produces a
+-- time-weighted min/average/max series even when no outgoing hit occurs during
+-- a particular second; event-level samples remain available to Optim.OnHit.
+function TUMeter:SampleDetermination()
+	if not self.bCollectData or not avatar or not unit or type(unit.GetRage) ~= "function" then return end
+	local okId, playerId = pcall(avatar.GetId)
+	if not okId or playerId == nil then return end
+	local okRage, value = pcall(unit.GetRage, playerId)
+	if not okRage or type(value) ~= "number" then return end
+
+	local modes = { enumMode.Dps, enumMode.Hps, enumMode.Def, enumMode.IHps }
+	local fightIds = { self.Fight.Current, self.Fight.Total }
+	for _, fightId in ipairs(fightIds) do
+		local fight = self.FightsList[fightId]
+		if fight then
+			local seconds = fight.Timer:GetElapsedTime()
+			local combatant = fight:GetCombatant({ id = playerId })
+			if combatant then
+				for _, mode in ipairs(modes) do
+					local info = combatant.Data[mode] and
+						combatant.Data[mode].GlobalInfoList[enumGlobalInfo.Determination]
+					if info and info.LastSampleTime ~= seconds then
+						info.LastSampleTime = seconds
+						info:RecalcDetails(value)
+						info.Percentage = info.Avg
+					end
+				end
+			end
+		end
+	end
 end
 --------------------------------------------------------------------------------
 -- Update the off-time battle and return the new value
