@@ -52,6 +52,14 @@ local function targetText(value)
 end
 
 local function targetReadableName(value)
+	if value ~= nil and common and type(common.IsWString) == "function"
+		and userMods and type(userMods.FromWString) == "function" then
+		local okWide, isWide = pcall(common.IsWString, value)
+		if okWide and isWide then
+			local okText, plain = pcall(userMods.FromWString, value)
+			if okText and plain ~= nil then value = plain end
+		end
+	end
 	local name = tostring(value or "")
 	name = string.gsub(name, "^%s*(.-)%s*$", "%1")
 	if name == "" or string.match(name, "^userdata:") or string.match(name, "^table:") then return "" end
@@ -501,11 +509,28 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
-	-- Runtime fallback: always try the current target when the analytics journal
-	-- has no profile. The previous version nested this entire read under LastEv,
-	-- so no target was displayed whenever the optimizer had not captured a raw
-	-- event (for example, when its optional tracking switch was off).
-	if #rows == 0 then
+	-- Runtime fallback: try the current target whenever the analytics journal
+	-- has no displayable profile. A profile can exist with no readable metadata
+	-- when the client has already invalidated the event's target object.
+	local hasReadableRow = false
+	for i = 1, #rows do
+		local data = rows[i]
+		local hasResistance = false
+		for _, school in ipairs(data.resistSchools or {}) do
+			if targetSchoolLabel(school.element) ~= "" and targetCompactNumber(school.amount) ~= "" then
+				hasResistance = true
+				break
+			end
+		end
+		if targetReadableName(data.name) ~= "" or targetKindLabel(data.kind) ~= nil
+			or tonumber(data.level) or targetQualityLabel(data.qualityName or data.quality) ~= ""
+			or (tonumber(data.hpCurrent) and tonumber(data.hpLimit) and tonumber(data.hpLimit) > 0)
+			or tonumber(data.hpBeforePercent) or tonumber(data.hpCurrentPercent) or hasResistance then
+			hasReadableRow = true
+			break
+		end
+	end
+	if not hasReadableRow then
 		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
 		local targetId = ev and ev.target or nil
 		if not targetId and Optim and type(Optim.GetTarget) == "function" then
@@ -590,7 +615,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if tonumber(data.level) then
 			descriptors[#descriptors + 1] = (russian and "ур. " or "Lv ") .. tostring(math.floor(data.level))
 		end
-		local quality = targetQualityLabel(data.qualityName)
+		local quality = targetQualityLabel(data.qualityName or data.quality)
 		if quality ~= "" then descriptors[#descriptors + 1] = quality end
 		if #descriptors > 0 then parts[#parts + 1] = table.concat(descriptors, ", ") end
 
