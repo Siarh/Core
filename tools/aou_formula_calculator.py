@@ -754,12 +754,16 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
         event.get("target_hp") is None for event in (activity.get("samples", []) or [])
     )
     unavailable_stats = {}
+    might_is_supplied = (
+        "might" in base_stats
+        or ("might" in cfg and str(cfg.get("might_source", "")).lower() != "assumed_default")
+    )
     if missing_hp and "ruthlessness" in candidates:
         candidates.remove("ruthlessness")
         unavailable_stats["ruthlessness"] = "INSUFFICIENT DATA: target HP is missing for at least one event"
     # The live event snapshot does not currently contain Might or Endurance.
     # Never treat the simulator's convenience defaults as measured character stats.
-    if "might" in candidates and "might" not in base_stats and "might" not in cfg:
+    if "might" in candidates and not might_is_supplied:
         candidates.remove("might")
         unavailable_stats["might"] = "INSUFFICIENT DATA: current Might was not supplied or measured"
     if mode == "tank" and "endurance" in candidates and "endurance" not in base_stats and "endurance" not in cfg:
@@ -858,10 +862,6 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
                 "metric": basis,
             })
 
-    might_is_supplied = (
-        "might" in base_stats
-        or ("might" in cfg and str(cfg.get("might_source", "")).lower() != "assumed_default")
-    )
     return {
         "status": "partial_estimates" if unavailable_stats else ("calculated" if candidates else "insufficient_data"),
         "classification": "ESTIMATED",
