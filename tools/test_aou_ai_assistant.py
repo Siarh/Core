@@ -105,8 +105,17 @@ class AIAssistantTests(unittest.TestCase):
                     "duration_band": "30-60 sec", "ability": "Test",
                     "element": "light", "target_hp_band": "60-80%",
                     "target_hp_quality": "measured_pre", "resolve_pool_band": "50-60%",
-                    "critical": True, "stat": "mastery", "from": 500, "to": 600,
-                    "delta_stat": 100, "baseline": {"fights": 3, "events": 30},
+                    "critical": True, "critical_scope": "normal_only",
+                    "evidence_tier": "strict", "identity_quality": "measured_instance_ids",
+                    "snapshot_quality": "fresh",
+                    "stat": "mastery", "from": 500, "to": 600,
+                    "delta_stat": 100, "delta_result": 25, "result_unit": "reported_amount_per_second",
+                    "me_formula": "ME = (Result_test - Result_base) / (Stat_test - Stat_base)",
+                    "marginal_efficiency_per_stat": 0.25,
+                    "marginal_efficiency_unit_per_stat": "reported amount/s per +1 stat",
+                    "marginal_efficiency_unit_per_100": "reported amount/s per +100 stat",
+                    "result_direction": "maximize", "beneficial_effect_per_100": 25,
+                    "baseline": {"fights": 3, "events": 30},
                     "test": {"fights": 3, "events": 30},
                     "marginal_efficiency_per_100": 25,
                     "relative_change_per_100_percent": 2.5,
@@ -164,6 +173,12 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("raw", model)
         self.assertEqual(payload["controlled_stat_efficiency"]["status"], "comparisons_available")
         self.assertEqual(payload["controlled_stat_efficiency"]["comparisons"][0]["marginal_efficiency_per_100"], 25)
+        comparison = payload["controlled_stat_efficiency"]["comparisons"][0]
+        self.assertEqual(comparison["delta_result"], 25)
+        self.assertEqual(comparison["delta_stat"], 100)
+        self.assertEqual(comparison["marginal_efficiency_per_stat"], 0.25)
+        self.assertEqual(comparison["me_formula"], "ME = (Result_test - Result_base) / (Stat_test - Stat_base)")
+        self.assertEqual(payload["controlled_stat_efficiency"]["comparisons_included_in_ai_payload"], 1)
         temporal = payload["temporal_performance"]
         self.assertEqual(temporal["classification"], "DERIVED")
         self.assertEqual(temporal["fights"][0]["burst_windows"]["3s"]["mean_rate_per_second"], 500)
@@ -209,6 +224,9 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("ESTIMATED", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не являются измеренным игровым эффектом", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("ME = ΔResult / ΔStat", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("не ограничивайся первыми 25", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("legacy_exploratory", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не реальный временной uptime", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("Effective DPS/HPS", ai.SYSTEM_INSTRUCTIONS)
@@ -269,6 +287,79 @@ class AIAssistantTests(unittest.TestCase):
         urlopen.return_value = FakeResponse({"models": [{"name": "llama3.2:latest"}]})
         with self.assertRaisesRegex(RuntimeError, "Укажи точное имя"):
             ai.check_ollama("http://localhost:11434", "qwen3.5")
+
+
+    def test_ai_payload_includes_every_me_comparison_and_separates_legacy(self):
+        comparisons = []
+        for index in range(30):
+            tier = "strict" if index < 15 else "legacy_exploratory"
+            me = float(index - 10)
+            comparisons.append({
+                "classification": "DERIVED",
+                "causal_status": "not_proven",
+                "evidence_tier": tier,
+                "identity_quality": "measured_instance_ids" if tier == "strict" else "legacy_identity_unverified",
+                "snapshot_quality": "fresh" if tier == "strict" else "legacy_age_unverified",
+                "mode": "damage",
+                "profile": "pve",
+                "duration_band": "30-60 sec",
+                "ability": f"Ability {index}",
+                "target_hp_band": "60-80%",
+                "resolve_pool_band": "50-60%",
+                "critical_scope": "all_hits",
+                "stat": "mastery",
+                "from": 500,
+                "to": 600,
+                "delta_stat": 100,
+                "delta_result": me,
+                "me_formula": "ME = (Result_test - Result_base) / (Stat_test - Stat_base)",
+                "marginal_efficiency_per_stat": me / 100,
+                "marginal_efficiency_per_100": me,
+                "marginal_efficiency_unit_per_100": "reported amount/s per +100 stat",
+                "result_direction": "maximize",
+                "baseline": {"fights": 3, "events": 15, "mean_context_rate_per_second": 100},
+                "test": {"fights": 3, "events": 15, "mean_context_rate_per_second": 100 + me},
+                "confidence_interval_95_per_100": [me - 1, me + 1],
+                "confidence": "VERY_LOW" if tier != "strict" else "MEDIUM",
+            })
+
+        profile = {
+            "import_summary": {
+                "export_records_expected": 1000,
+                "export_records_reconstructed": 1000,
+                "export_record_count_matches": True,
+                "source_rows": 1000,
+                "combat_rows": 1000,
+                "ignored_non_combat_rows": 0,
+                "included_events": 900,
+                "skipped_events": {},
+            },
+            "controlled_stat_efficiency": {
+                "status": "comparisons_available",
+                "input_event_rows": 1000,
+                "included_events": 900,
+                "total_comparisons": 30,
+                "strict_comparison_count": 15,
+                "legacy_exploratory_comparison_count": 15,
+                "comparisons": comparisons,
+            },
+        }
+        payload = ai.build_ai_payload(profile, {})
+        me_data = payload["controlled_stat_efficiency"]
+        self.assertEqual(payload["input_data_coverage"]["export_records_reconstructed"], 1000)
+        self.assertEqual(me_data["input_event_rows"], 1000)
+        self.assertEqual(me_data["total_comparisons"], 30)
+        self.assertEqual(me_data["comparisons_included_in_ai_payload"], 30)
+        self.assertEqual(len(me_data["comparisons"]), 30)
+        self.assertEqual(me_data["strict_comparison_count"], 15)
+        self.assertEqual(me_data["legacy_exploratory_comparison_count"], 15)
+        self.assertEqual(len(me_data["me_summary_by_stat"]), 2)
+        strict = next(row for row in me_data["me_summary_by_stat"] if row["evidence_tier"] == "strict")
+        legacy = next(row for row in me_data["me_summary_by_stat"] if row["evidence_tier"] == "legacy_exploratory")
+        self.assertEqual(strict["context_comparison_count"], 15)
+        self.assertEqual(legacy["context_comparison_count"], 15)
+        self.assertEqual(me_data["comparisons"][0]["evidence_tier"], "strict")
+
 
 
 if __name__ == "__main__":
