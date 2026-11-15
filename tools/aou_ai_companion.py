@@ -151,6 +151,10 @@ def parse_aoucsv_text(source: str) -> tuple[list[str], list[list[str]], dict[str
         "data_records": len(rows),
         "data_blocks": len(record_keys),
         "export_chunks": sum(totals.values()),
+        "expected_event_records": expected_event_records if expected_event_records is not None else len(rows),
+        "record_ids_complete": expected_event_records is None or len(rows) == expected_event_records,
+        "first_record_id": 1 if rows else None,
+        "last_record_id": len(rows) if rows else None,
     }
 
 
@@ -213,12 +217,36 @@ def run_pipeline(args: argparse.Namespace) -> int:
     profile = importer.build_profile(
         dict_rows, max(0, min(500, args.budget)), args.resolve_coefficient
     )
+    profile["import_summary"].update({
+        "export_records_expected": export_info["expected_event_records"],
+        "export_records_reconstructed": export_info["data_records"],
+        "export_record_count_matches": (
+            export_info["record_ids_complete"]
+            and export_info["data_records"] == export_info["expected_event_records"]
+        ),
+        "ocr_source_lines": export_info["matched_lines"],
+        "export_chunks": export_info["export_chunks"],
+    })
     report = calculator.calculate_profile(profile)
     write_json(profile_path, profile)
     write_json(report_path, report)
 
-    print(f"Экспорт восстановлен: {export_info['data_records']} записей из {export_info['matched_lines']} строк OCR.")
-    print(f"Событий включено в профиль: {profile['import_summary']['included_events']}.")
+    print(
+        f"Экспорт восстановлен: {export_info['data_records']} / "
+        f"{export_info['expected_event_records']} записей из {export_info['matched_lines']} строк OCR."
+    )
+    print(
+        f"Строк CSV: {profile['import_summary']['source_rows']}; "
+        f"боевых строк: {profile['import_summary']['combat_rows']}; "
+        f"в расчётный профиль включено: {profile['import_summary']['included_events']}."
+    )
+    me = profile["controlled_stat_efficiency"]
+    print(
+        f"ME: strict={me['strict_comparison_count']}, "
+        f"legacy exploratory={me['legacy_exploratory_comparison_count']}, "
+        f"total={me['total_comparisons']}; "
+        "формула ME = delta_result / delta_stat."
+    )
     print(f"Выходная папка: {out_dir}")
     print(f"Профиль: {profile_path}")
     print(f"Расчёт: {report_path}")
