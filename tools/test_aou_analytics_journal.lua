@@ -185,11 +185,24 @@ Optim = {
     end
 }
 AOUA.Profile = "raid"
+object = {
+    IsUnit = function(id) return id == 1001 or id == 2002 end,
+    GetName = function(id)
+        if id == 1001 then return "Test Actor" end
+        if id == 2002 then return "Test Target" end
+        return ""
+    end,
+    IsMob = function(id) return id == 2002 end
+}
+unit = {
+    GetLevel = function() return 90 end,
+    GetQuality = function(id) return id == 2002 and 4 or 0 end
+}
 AOUA.OnFightStart()
 AOUA.OnHit(
     { ID = 1001 },
     enumMode.Dps,
-    { target = 2002, amount = 125, isCritical = true, sysSubElement = "ENUM_SubElement_PHYSICAL",
+    { source = 1001, target = 2002, amount = 125, isCritical = true, sysSubElement = "ENUM_SubElement_PHYSICAL",
       damageSource = "DamageSource_SPELL", ability = "Recorded damage", resist = 10, runesAbsorb = 5 },
     42,
     { Name = "Recorded damage" }
@@ -223,17 +236,19 @@ local transitionRow = AOUA.Session.eventSamples[#AOUA.Session.eventSamples]
 assert(transitionRow:find("|50.0000|45.0000|measured_pre|1000.0000|", 1, true),
     "incoming sample should preserve exact pre-hit health fraction")
 expect(AOUA.Session.eventSamples[1]:find("damage", 1, true) ~= nil, true, "outgoing damage sample saved")
+assert(AOUA.Session.eventSamples[1]:find("|Test Actor|90.0000|0.0000|0|Test Target|90.0000|4.0000|1$", 1),
+    "schema v3 should save stable actor and target descriptors")
 expect(AOUA.Session.eventSamples[2]:find("|35.0000|self|Recorded self heal|", 1, true) ~= nil, true,
     "self-heal Resolve and recipient saved")
 local savedOk, savedCount = AOUA.OnFightStop()
 expect(savedOk, true, "event history persisted")
 expect(savedCount, 4, "persisted event count")
 expect(persistedConfig.aou_evt_count, 4, "event config count")
-expect(persistedConfig.aou_evt_schema, "v2", "event schema version")
+expect(persistedConfig.aou_evt_schema, "v3", "event schema version")
 expect(persistedConfig.aou_rec_count, nil, "legacy record keys untouched")
 local exportOk = AOUA.EventExport(3)
 expect(exportOk, true, "event export success")
-assert(emittedMessages[1] == "AOUCSV|BEGIN|3|3|events", "event export begin marker missing")
+assert(emittedMessages[1] == "AOUCSV|BEGIN|4|3|events", "event export begin marker missing")
 assert(emittedMessages[#emittedMessages] == "AOUCSV|END", "event export end marker missing")
 
 -- The bounded event buffer must keep the newest 2,000 samples without

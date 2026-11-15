@@ -536,6 +536,29 @@ def _fight_stat_signature(row: dict[str, str]) -> tuple[float, ...] | None:
     return tuple(round(float(value), 2) for value in values)
 
 
+
+def _entity_match_signature(row: dict[str, str], prefix: str) -> str | None:
+    """Build a conservative cross-instance entity signature from live API metadata.
+
+    A signature is usable only when name, level, quality and mob classification
+    are all present. It is an archetype hint, not a globally unique template ID.
+    """
+    name = " ".join(str(row.get(f"{prefix}_name") or "").split()).casefold()
+    level = number(row.get(f"{prefix}_level"))
+    quality = number(row.get(f"{prefix}_quality"))
+    is_mob_raw = str(row.get(f"{prefix}_is_mob") or "").strip().lower()
+    if not name or level is None or quality is None or is_mob_raw not in {"0", "1", "true", "false"}:
+        return None
+    is_mob = is_mob_raw in {"1", "true"}
+    level_value = int(level) if level.is_integer() else round(level, 4)
+    quality_value = int(quality) if quality.is_integer() else round(quality, 4)
+    return json.dumps(
+        [name, level_value, quality_value, is_mob],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
 def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, Any]:
     """Compare one-stat changes within matched event contexts and independent fights.
 
@@ -613,19 +636,43 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
 
         actor_id = (row.get("actor_id") or "").strip()
         target_id = (row.get("target_id") or "").strip()
-        identity_is_known = bool(
-            actor_id and target_id
-            and actor_id.lower() not in {"unknown", "none"}
-            and target_id.lower() not in {"unknown", "none"}
-        )
+        actor_id_known = bool(actor_id and actor_id.lower() not in {"unknown", "none"})
+        target_id_known = bool(target_id and target_id.lower() not in {"unknown", "none"})
+        identity_is_known = actor_id_known and target_id_known
         if identity_is_known:
             identity_quality = "measured_instance_ids"
         else:
-            # Legacy schema v1 did not persist object instance IDs. Keep these
-            # events in a separate exploratory stratum; never mix with strict IDs.
+            # Legacy rows can still be explored, but missing identifiers are
+            # never invented or promoted to strict evidence.
             identity_quality = "legacy_identity_unverified"
-            actor_id = "legacy_unknown_actor"
-            target_id = "legacy_unknown_target"
+
+        actor_signature = _entity_match_signature(row, "actor")
+        target_signature = _entity_match_signature(row, "target")
+        actor_name = " ".join(str(row.get("actor_name") or "").split())
+        target_name = " ".join(str(row.get("target_name") or "").split())
+        actor_level = number(row.get("actor_level"))
+        actor_quality = number(row.get("actor_quality"))
+        actor_is_mob = str(row.get("actor_is_mob") or "").strip()
+        target_level = number(row.get("target_level"))
+        target_quality = number(row.get("target_quality"))
+        target_is_mob = str(row.get("target_is_mob") or "").strip()
+
+        actor_match_method = "entity_signature" if actor_signature else (
+            "instance_id" if actor_id_known else "legacy_unverified"
+        )
+        target_match_method = "entity_signature" if target_signature else (
+            "instance_id" if target_id_known else "legacy_unverified"
+        )
+        actor_match_key = (
+            "entity:" + actor_signature if actor_signature
+            else "instance:" + actor_id if actor_id_known
+            else "legacy_unknown_actor"
+        )
+        target_match_key = (
+            "entity:" + target_signature if target_signature
+            else "instance:" + target_id if target_id_known
+            else "legacy_unknown_target"
+        )
 
         signature = _fight_stat_signature(row)
         if signature is None:
@@ -663,7 +710,11 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         else:
             legacy_exploratory_event_rows += 1
         base_stratum = (
-            kind, profile, profile_environment, duration, actor_id, target_id,
+            kind, profile, profile_environment, duration,
+            actor_match_key, target_match_key, actor_match_method, target_match_method,
+            actor_signature or "", target_signature or "",
+            actor_name, actor_level, actor_quality, actor_is_mob,
+            target_name, target_level, target_quality, target_is_mob,
             identity_quality, snapshot_quality,
             ability.lower(), element, damage_source.lower(),
             hp_band_start, hp_quality, target_hp_scale, resolve_band,
@@ -700,7 +751,14 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     def process_context_map(context_map: ContextMap, all_hits_for_luck: bool = False) -> None:
         nonlocal insufficient_pairs, comparison_id
         for stratum, builds in context_map.items():
-            kind, profile, profile_environment, duration, actor_id, target_id, identity_quality, snapshot_quality, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
+            (kind, profile, profile_environment, duration,
+             actor_match_key, target_match_key, actor_match_method, target_match_method,
+             actor_signature, target_signature,
+             actor_name, actor_level, actor_quality, actor_is_mob,
+             target_name, target_level, target_quality, target_is_mob,
+             identity_quality, snapshot_quality,
+             ability, element, damage_source, hp_band, hp_quality, hp_scale,
+             resolve_band, crit, recipient) = stratum
             if all_hits_for_luck:
                 stat_names = ("luck",)
             elif kind in {"damage", "healing"}:
@@ -797,8 +855,24 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "profile": profile,
                             "environment_classification": profile_environment,
                             "duration_band": duration,
-                            "actor_id": actor_id,
-                            "target_id": target_id,
+                            "actor_match_method": actor_match_method,
+                            "target_match_method": target_match_method,
+                            "actor_signature": actor_signature or None,
+                            "target_signature": target_signature or None,
+                            "actor_name": actor_name or None,
+                            "actor_level": actor_level,
+                            "actor_quality": actor_quality,
+                            "actor_is_mob": actor_is_mob or None,
+                            "target_name": target_name or None,
+                            "target_level": target_level,
+                            "target_quality": target_quality,
+                            "target_is_mob": target_is_mob or None,
+                            "target_match_basis": (
+                                "normalized name + level + quality + mob classification"
+                                if target_match_method == "entity_signature"
+                                else "exact instance ID" if target_match_method == "instance_id"
+                                else "legacy identity unavailable"
+                            ),
                             "identity_quality": identity_quality,
                             "snapshot_quality": snapshot_quality,
                             "evidence_tier": (
@@ -913,7 +987,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "insufficient_repeated_pairs": insufficient_pairs,
         "comparisons": comparisons,
         "limitations": [
-            "actor_id/target_id поступают как ключи объекта из callback; если API вернул нестабильный или неизвестный ключ, событие исключается. Ключи не гарантируют одинаковую фазу/состояние цели между боями.",
+            "actor_id/target_id сохраняются как instance IDs. Между разными экземплярами допускается сопоставление только при полном entity signature (имя + уровень + элитность + признак моба); signature является приближённым archetype key, а не уникальным server template ID.",
+            "Entity signature может объединить разные варианты с одинаковым именем, уровнем и элитностью; target HP max order, ability, HP band, Resolve band, element и остальные strata дополнительно ограничивают совпадение, но скрытые состояния цели всё ещё могут различаться.",
             "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
             "ME учитывает rate matched ability context по таймеру боя; это не DPS всего персонажа и зависит от использования способности/ротации.",
             "Для лечения сравнивается reported healing rate, не Effective HPS: callback не содержит достоверный overheal для всех событий.",

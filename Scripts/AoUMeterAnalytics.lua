@@ -19,6 +19,7 @@ local PHASES = {
 
 local EVENT_HISTORY_LIMIT = 1000
 local EVENT_BUFFER_LIMIT = 2000
+local entityMetadataCache = {}
 
 local function N(v)
     local x = tonumber(v)
@@ -178,6 +179,7 @@ function AOUA.OnFightStart()
     AOUA.Session.statSnapshot = nil
     AOUA.Session.statSnapshotSecond = nil
     AOUA.Session.statSnapshotAttemptSecond = nil
+    entityMetadataCache = {}
     AOUA.Session.started = true
     local sequence = 0
     pcall(function()
@@ -445,7 +447,7 @@ local function abilityLabel(params, fallbackName)
 end
 
 local isLocalObject
-local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|actor_id|target_id|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
+local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|actor_id|target_id|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age|actor_name|actor_level|actor_quality|actor_is_mob|target_name|target_level|target_quality|target_is_mob"
 
 local function sampleNumber(value)
     local n = tonumber(value)
@@ -472,6 +474,57 @@ local function eventObjectId(value)
         end
     end
     return nil
+end
+
+-- Capture stable descriptive metadata once per object in the current fight.
+-- Instance IDs remain separate; this descriptor is a cross-instance archetype
+-- hint, not a globally unique server template ID.
+local function captureEntityMetadata(value)
+    local id = eventObjectId(value)
+    if not id then
+        return { name = "", level = "", quality = "", isMob = "" }
+    end
+    local cacheKey = tostring(id)
+    local cached = entityMetadataCache[cacheKey]
+    if cached then return cached end
+
+    local objectId = value
+    if type(value) ~= "string" and type(value) ~= "number" then objectId = id end
+    local name, level, quality, isMob = "", nil, nil, nil
+
+    if object and type(object.GetName) == "function" then
+        local ok, result = pcall(object.GetName, objectId)
+        if ok then name = eventText(result) or "" end
+    end
+
+    local isUnit = false
+    if object and type(object.IsUnit) == "function" then
+        local ok, result = pcall(object.IsUnit, objectId)
+        isUnit = ok and result == true
+    end
+    if isUnit then
+        if unit and type(unit.GetLevel) == "function" then
+            local ok, result = pcall(unit.GetLevel, objectId)
+            if ok and tonumber(result) then level = tonumber(result) end
+        end
+        if unit and type(unit.GetQuality) == "function" then
+            local ok, result = pcall(unit.GetQuality, objectId)
+            if ok and tonumber(result) then quality = tonumber(result) end
+        end
+        if object and type(object.IsMob) == "function" then
+            local ok, result = pcall(object.IsMob, objectId)
+            if ok and type(result) == "boolean" then isMob = result end
+        end
+    end
+
+    local metadata = {
+        name = name,
+        level = sampleNumber(level),
+        quality = sampleNumber(quality),
+        isMob = (isMob == nil) and "" or (isMob and "1" or "0")
+    }
+    entityMetadataCache[cacheKey] = metadata
+    return metadata
 end
 
 -- Refresh innate stats at most once per elapsed fight second interval.
@@ -574,6 +627,8 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
     local ability = eventText(resolvedAbilityName) or abilityLabel(params, nil) or "unknown"
     local element = eventText(params.sysSubElement or params.subElement or params.element) or ""
     element = string.gsub(element, "^ENUM_SubElement_", "")
+    local actorMetadata = captureEntityMetadata(actorId)
+    local targetMetadata = captureEntityMetadata(targetId)
     local values = {
         tostring(AOUA.Session.fightId or 0), AOUA.Profile or (Optim and Optim.Cfg and Optim.Cfg.mode) or "pve",
         tostring(AOUA.Session.elapsedSeconds or 0), kind,
@@ -589,7 +644,9 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         recipient, ability,
         sampleNumber(stats.M), sampleNumber(stats.R), sampleNumber(stats.U), sampleNumber(stats.L),
         sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C),
-        sampleNumber(stats.HPmax), sampleNumber(snapshotSecond), sampleNumber(snapshotAge)
+        sampleNumber(stats.HPmax), sampleNumber(snapshotSecond), sampleNumber(snapshotAge),
+        actorMetadata.name, actorMetadata.level, actorMetadata.quality, actorMetadata.isMob,
+        targetMetadata.name, targetMetadata.level, targetMetadata.quality, targetMetadata.isMob
     }
     samples[sampleIndex] = table.concat(values, "|")
     AOUA.Session.eventSampleCount = sampleCount
@@ -646,7 +703,7 @@ local function persistEventSamples()
         for i = 1, #combined do section["aou_evt_" .. i] = combined[i] end
         for i = #combined + 1, oldSlots do section["aou_evt_" .. i] = "" end
         section.aou_evt_count = #combined
-        section.aou_evt_schema = "v2"
+        section.aou_evt_schema = "v3"
         section.aou_evt_fight_id = tonumber(AOUA.Session.fightId) or 0
         section.aou_evt_last_dropped = tonumber(AOUA.Session.eventSamplesDropped) or 0
         section.aou_evt_last_seconds = tonumber(AOUA.Session.elapsedSeconds) or 0
@@ -705,7 +762,7 @@ function AOUA.EventExport(count, page)
 
     -- Every page repeats the identical header and global row numbering so that
     -- multiple page captures can be concatenated into one OCR text file.
-    emit("AOUCSV|BEGIN|3|" .. selected .. "|events")
+    emit("AOUCSV|BEGIN|4|" .. selected .. "|events")
     emitChunks("H", EVENT_COLUMNS)
     for i = pageFirst, pageLast do
         emitChunks("R" .. (i - first + 1), rows[i])

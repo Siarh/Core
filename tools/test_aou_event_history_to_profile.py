@@ -215,6 +215,65 @@ class ChangingStatsTests(unittest.TestCase):
 
 
 
+    def test_different_target_instances_match_by_complete_entity_signature(self):
+        rows = []
+        for prefix, mastery, amount, target_prefix in (
+            ("base", 1000, 1000, "mob-instance-a"),
+            ("test", 1100, 1050, "mob-instance-b"),
+        ):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
+                    row.update({
+                        "profile": "pve", "R": "200", "U": "300", "L": "400",
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Holy Wrath", "damage_source": "spell",
+                        "actor_id": "player-1",
+                        "target_id": f"{target_prefix}-{fight_number}",
+                        "actor_name": "Local Character", "actor_level": "90",
+                        "actor_quality": "0", "actor_is_mob": "0",
+                        "target_name": "Training Creature", "target_level": "90",
+                        "target_quality": "4", "target_is_mob": "1",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        mastery = [item for item in analysis["comparisons"]
+                   if item["stat"] == "mastery" and item["critical"] is False]
+        self.assertEqual(len(mastery), 1)
+        self.assertEqual(mastery[0]["target_match_method"], "entity_signature")
+        self.assertEqual(mastery[0]["target_name"], "Training Creature")
+        self.assertEqual(mastery[0]["target_match_basis"],
+                         "normalized name + level + quality + mob classification")
+        self.assertEqual(mastery[0]["baseline"]["fights"], 3)
+        self.assertEqual(mastery[0]["test"]["fights"], 3)
+        self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)
+        self.assertEqual(mastery[0]["evidence_tier"], "strict")
+
+    def test_different_target_entity_signatures_are_not_matched(self):
+        rows = []
+        for prefix, mastery, quality in (("base", 1000, "4"), ("test", 1100, "5")):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, 1000)
+                    row.update({
+                        "profile": "pve", "R": "200", "U": "300", "L": "400",
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Holy Wrath", "damage_source": "spell",
+                        "actor_id": "player-1", "target_id": f"mob-{prefix}-{fight_number}",
+                        "actor_name": "Local Character", "actor_level": "90",
+                        "actor_quality": "0", "actor_is_mob": "0",
+                        "target_name": "Training Creature", "target_level": "90",
+                        "target_quality": quality, "target_is_mob": "1",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        self.assertEqual(analysis["status"], "insufficient_data")
+        self.assertEqual(analysis["comparisons"], [])
+
     def test_different_target_ids_are_not_matched(self):
         rows = []
         for prefix, mastery, target in (("base", 1000, "boss-a"), ("test", 1100, "boss-b")):

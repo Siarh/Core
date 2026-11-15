@@ -22,12 +22,16 @@ LEGACY_EVENT_COLUMNS = (
     "block|parry|barrier|mount|multiplier_absorb|overall_absorbed|"
     "overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax"
 )
-EVENT_COLUMNS = (
+V2_EVENT_COLUMNS = (
     "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|"
     "target_max_hp|actor_id|target_id|critical|element|damage_source|resist|"
     "absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|"
     "overall_absorbed|overall_prevented|resolve_pool|recipient|ability|"
     "M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
+)
+EVENT_COLUMNS = (
+    V2_EVENT_COLUMNS + "|actor_name|actor_level|actor_quality|actor_is_mob|"
+    "target_name|target_level|target_quality|target_is_mob"
 )
 SECTION_NAME = "ScriptUserMods_DPScope"
 MAX_EVENTS = 1000
@@ -163,10 +167,12 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         raise ValueError("В user.cfg сохранено 0 событий.")
 
     header = EVENT_COLUMNS.split("|")
+    v2_header = V2_EVENT_COLUMNS.split("|")
     legacy_header = LEGACY_EVENT_COLUMNS.split("|")
     rows: list[str] = []
     missing: list[int] = []
     legacy_rows_upgraded = 0
+    v2_rows_upgraded = 0
     new_rows = 0
     for number in range(1, count + 1):
         key = f"aou_evt_{number}"
@@ -178,6 +184,14 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         if len(fields) == len(header):
             new_rows += 1
             rows.append(value)
+        elif len(fields) == len(v2_header):
+            # Upgrade v2 rows in memory. Instance IDs and snapshot age are
+            # retained; new entity descriptors remain empty because v2 did not
+            # capture them.
+            old = dict(zip(v2_header, fields))
+            normalized = [old.get(column, "") for column in header]
+            rows.append("|".join(normalized))
+            v2_rows_upgraded += 1
         elif len(fields) == len(legacy_header):
             # Upgrade legacy v1 rows in memory only. Old rows have no instance IDs
             # or stat-snapshot age; leave those fields blank so analysis can label
@@ -189,8 +203,9 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         else:
             raise ValueError(
                 f"{key}: найдено {len(fields)} полей; ожидается {len(header)} "
-                f"(актуальная схема) или {len(legacy_header)} (legacy v1). "
-                "Конфиг может иметь другую схему или быть повреждён."
+                f"(актуальная схема v3), {len(v2_header)} (schema v2) или "
+                f"{len(legacy_header)} (legacy v1). Конфиг может иметь другую "
+                "схему или быть повреждён."
             )
     if missing:
         preview = ", ".join(map(str, missing[:20]))
@@ -203,8 +218,9 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         "stored_events": count,
         "rows_read": len(rows),
         "current_schema_rows": new_rows,
+        "v2_rows_upgraded": v2_rows_upgraded,
         "legacy_rows_upgraded": legacy_rows_upgraded,
-        "normalized_schema": "v2",
+        "normalized_schema": "v3",
         "source_schema": values.get("aou_evt_schema", "inferred_from_row_length"),
     }
 
@@ -219,7 +235,7 @@ def chunk_line(kind: str, value: str) -> list[str]:
 
 
 def write_aoucsv(path: Path, rows: list[str]) -> None:
-    lines = [f"AOUCSV|BEGIN|3|{len(rows)}|events"]
+    lines = [f"AOUCSV|BEGIN|4|{len(rows)}|events"]
     lines.extend(chunk_line("H", EVENT_COLUMNS))
     for index, row in enumerate(rows, 1):
         lines.extend(chunk_line(f"R{index}", row))
@@ -308,7 +324,8 @@ def main() -> int:
         print(f"Событий извлечено: {summary['rows_read']} / {summary['stored_events']}")
         print(
             f"Схема источника: {summary['source_schema']}; "
-            f"текущих строк: {summary['current_schema_rows']}; "
+            f"текущих строк v3: {summary['current_schema_rows']}; "
+            f"v2 нормализовано: {summary['v2_rows_upgraded']}; "
             f"legacy v1 нормализовано: {summary['legacy_rows_upgraded']}."
         )
         print("AOUCSV сохранён:", export_text)

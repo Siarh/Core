@@ -3,6 +3,7 @@ import unittest
 
 from aou_extract_usercfg import (
     EVENT_COLUMNS,
+    V2_EVENT_COLUMNS,
     LEGACY_EVENT_COLUMNS,
     extract_named_table,
     parse_config_value,
@@ -17,8 +18,21 @@ def row(number: int) -> str:
         "physical", "test", "0", "0", "0", "0", "0", "0", "0",
         "0", "0", "0", "50", "self", "Ability name", "100", "200",
         "300", "40", "10", "20", "30", "40", "50000", str(number), "0",
+        "Test Actor", "90", "0", "0", "Test Target", "90", "4", "1",
     ]
     assert len(fields) == len(EVENT_COLUMNS.split("|"))
+    return "|".join(fields)
+
+
+def v2_row(number: int) -> str:
+    fields = [
+        "fight1", "pve", str(number), "damage", "1000", "0.5",
+        "measured_pre", "50000", "player-1", "target-1", "0",
+        "physical", "test", "0", "0", "0", "0", "0", "0", "0",
+        "0", "0", "0", "50", "self", "Ability name", "100", "200",
+        "300", "40", "10", "20", "30", "40", "50000", str(number), "0",
+    ]
+    assert len(fields) == len(V2_EVENT_COLUMNS.split("|"))
     return "|".join(fields)
 
 
@@ -39,7 +53,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         text = "\n".join([
             "table_begin ScriptUserMods_DPScope",
             " table_begin data",
-            '  aou_evt_schema=l"v2"',
+            '  aou_evt_schema=l"v3"',
             "  aou_evt_count=2",
             f'  aou_evt_1=l"{row(1)}"',
             f'  aou_evt_2=l"{row(2)}"',
@@ -51,6 +65,27 @@ class UserCfgExtractorTests(unittest.TestCase):
         self.assertEqual(summary["stored_events"], 2)
         self.assertEqual(summary["source_schema"], "v2")
         self.assertEqual(rows[1].split("|")[2], "2")
+
+    def test_upgrades_v2_rows_without_inventing_entity_descriptors(self):
+        text = "\n".join([
+            "table_begin ScriptUserMods_DPScope",
+            " table_begin data",
+            '  aou_evt_schema=l"v2"',
+            "  aou_evt_count=1",
+            f'  aou_evt_1=l"{v2_row(7)}"',
+            " table_end data",
+            "table_end ScriptUserMods_DPScope",
+        ])
+        rows, summary = parse_dpscope_config(text)
+        fields = dict(zip(EVENT_COLUMNS.split("|"), rows[0].split("|")))
+        self.assertEqual(summary["v2_rows_upgraded"], 1)
+        self.assertEqual(summary["legacy_rows_upgraded"], 0)
+        self.assertEqual(summary["normalized_schema"], "v3")
+        self.assertEqual(fields["actor_id"], "player-1")
+        self.assertEqual(fields["target_id"], "target-1")
+        self.assertEqual(fields["stat_sample_age"], "0")
+        self.assertEqual(fields["target_name"], "")
+        self.assertEqual(fields["target_is_mob"], "")
 
     def test_ignores_other_addon_tables(self):
         text = "\n".join([
