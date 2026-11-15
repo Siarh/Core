@@ -12,7 +12,7 @@ def event(kind, fight, second, mastery, amount):
         "observed_amount": str(amount), "target_hp_before": "100",
         "hp_quality": "measured_pre", "resolve_pool": "50", "critical": "0",
         "runes_absorb": "0", "ability": "Test", "element": "physical",
-        "recipient": "self", "target_max_hp": "100000",
+        "recipient": "self", "target_max_hp": "100000", "stat_sample_second": str(second), "stat_sample_age": "0",
     }
 
 
@@ -191,6 +191,21 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(luck[0]["marginal_efficiency_per_100"], 100.0)
         self.assertEqual(luck[0]["baseline"]["mean_event_amount"], 1200.0)
         self.assertEqual(luck[0]["test"]["mean_event_amount"], 1300.0)
+
+
+
+    def test_stale_stat_snapshots_are_excluded_from_controlled_analysis(self):
+        rows = []
+        for prefix, mastery, amount in (("base", 1000, 1000), ("test", 1100, 1050)):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
+                    row["stat_sample_age"] = "6"
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        self.assertEqual(analysis["status"], "insufficient_data")
+        self.assertEqual(analysis["comparisons"], [])
+        self.assertEqual(analysis["excluded_or_unusable"]["stat_snapshot_stale"], 30)
 
 
 
