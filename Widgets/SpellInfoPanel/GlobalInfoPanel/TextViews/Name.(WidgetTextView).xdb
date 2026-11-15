@@ -4,9 +4,9 @@
 	<Name>SpellDetailTextViewName</Name>
 	<Placement>
 		<X>
-			<Align>WIDGET_ALIGN_BOTH</Align>
+			<Align>WIDGET_ALIGN_LOW</Align>
 			<Pos>5</Pos>
-			<HighPos>200</HighPos>
+			<Size>77</Size>
 		</X>
 		<Y>
 			<Align>WIDGET_ALIGN_BOTH</Align>
