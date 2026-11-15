@@ -597,21 +597,28 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             continue
 
         snapshot_age = number(row.get("stat_sample_age"))
-        if snapshot_age is None:
-            skipped["stat_snapshot_age_missing"] += 1
-            continue
-        if snapshot_age < 0 or snapshot_age > MAX_STAT_SNAPSHOT_AGE_SECONDS:
+        if snapshot_age is not None and (
+            snapshot_age < 0 or snapshot_age > MAX_STAT_SNAPSHOT_AGE_SECONDS
+        ):
             skipped["stat_snapshot_stale"] += 1
             continue
+        snapshot_quality = "fresh" if snapshot_age is not None else "legacy_age_unverified"
 
         actor_id = (row.get("actor_id") or "").strip()
         target_id = (row.get("target_id") or "").strip()
-        if not actor_id or actor_id.lower() in {"unknown", "none"}:
-            skipped["actor_id_unknown"] += 1
-            continue
-        if not target_id or target_id.lower() in {"unknown", "none"}:
-            skipped["target_id_unknown"] += 1
-            continue
+        identity_is_known = bool(
+            actor_id and target_id
+            and actor_id.lower() not in {"unknown", "none"}
+            and target_id.lower() not in {"unknown", "none"}
+        )
+        if identity_is_known:
+            identity_quality = "measured_instance_ids"
+        else:
+            # Legacy schema v1 did not persist object instance IDs. Keep these
+            # events in a separate exploratory stratum; never mix with strict IDs.
+            identity_quality = "legacy_identity_unverified"
+            actor_id = "legacy_unknown_actor"
+            target_id = "legacy_unknown_target"
 
         signature = _fight_stat_signature(row)
         if signature is None:
@@ -646,6 +653,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         fight_valid_event_counts[fight] += 1
         base_stratum = (
             kind, profile, duration, actor_id, target_id,
+            identity_quality, snapshot_quality,
             ability.lower(), element, damage_source.lower(),
             hp_band_start, hp_quality, target_hp_scale, resolve_band,
         )
@@ -681,7 +689,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     def process_context_map(context_map: ContextMap, all_hits_for_luck: bool = False) -> None:
         nonlocal insufficient_pairs, comparison_id
         for stratum, builds in context_map.items():
-            kind, profile, duration, actor_id, target_id, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
+            kind, profile, duration, actor_id, target_id, identity_quality, snapshot_quality, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
             if all_hits_for_luck:
                 stat_names = ("luck",)
             elif kind in {"damage", "healing"}:
@@ -760,12 +768,16 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                         )
                         quality_label = "measured_pre" if hp_quality == "measured_pre" else "estimated_pre"
                         ci_excludes_zero = bool(ci and (ci[0] > 0 or ci[1] < 0))
-                        # Unlogged target identity and combat modifiers prevent HIGH causal
-                        # confidence, even when the bootstrap interval is narrow.
-                        confidence = (
-                            "MEDIUM" if ci_excludes_zero and quality_label == "measured_pre"
-                            and min(len(baseline_rates), len(test_rates)) >= 5 else "LOW"
-                        )
+                        # Legacy rows have no instance IDs/snapshot-age metadata.
+                        # Keep their ME for exploratory review, but never promote it
+                        # above VERY_LOW confidence, regardless of a narrow bootstrap CI.
+                        if identity_quality != "measured_instance_ids" or snapshot_quality != "fresh":
+                            confidence = "VERY_LOW"
+                        else:
+                            confidence = (
+                                "MEDIUM" if ci_excludes_zero and quality_label == "measured_pre"
+                                and min(len(baseline_rates), len(test_rates)) >= 5 else "LOW"
+                            )
                         comparisons.append({
                             "status": "derived_controlled_observation",
                             "classification": "DERIVED",
@@ -775,6 +787,12 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "duration_band": duration,
                             "actor_id": actor_id,
                             "target_id": target_id,
+                            "identity_quality": identity_quality,
+                            "snapshot_quality": snapshot_quality,
+                            "evidence_tier": (
+                                "strict" if identity_quality == "measured_instance_ids" and snapshot_quality == "fresh"
+                                else "legacy_exploratory"
+                            ),
                             "ability": ability,
                             "element": element or "unknown",
                             "damage_source": damage_source or "unknown",
@@ -833,6 +851,12 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         for fights in builds.values()
         for values in fights.values()
     )
+    strict_comparison_count = sum(
+        1 for item in comparisons if item.get("evidence_tier") == "strict"
+    )
+    legacy_exploratory_comparison_count = sum(
+        1 for item in comparisons if item.get("evidence_tier") == "legacy_exploratory"
+    )
 
     contaminated_event_rows = sum(
         fight_valid_event_counts.get(fight, 0) for fight in contaminated_fights
@@ -867,6 +891,9 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "included_events": included_events,
         "included_luck_all_hit_events": included_luck_all_hit_events,
         "total_comparisons": len(comparisons),
+        "strict_comparison_count": strict_comparison_count,
+        "legacy_exploratory_comparison_count": legacy_exploratory_comparison_count,
+        "legacy_policy": "v1 rows with missing target identity or snapshot age are retained only as legacy_exploratory and forced to VERY_LOW confidence; never merge with strict results",
         "excluded_or_unusable": dict(sorted(skipped.items())),
         "contaminated_fights_excluded": len(contaminated_fights),
         "insufficient_repeated_pairs": insufficient_pairs,
@@ -877,6 +904,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             "ME учитывает rate matched ability context по таймеру боя; это не DPS всего персонажа и зависит от использования способности/ротации.",
             "Для лечения сравнивается reported healing rate, не Effective HPS: callback не содержит достоверный overheal для всех событий.",
             "Снимок статов обновляется не чаще одного раза в 3 секунды. Переключение статов и возврат к исходным значениям между двумя снимками может остаться незамеченным.",
+            "Legacy v1 rows without actor_id/target_id or stat_sample_age form a separate exploratory comparison tier with VERY_LOW confidence; it is not strict target-matched evidence.",
             "Строгое сравнение использует только строки со stat_sample_age не старше 3 секунд.",
             "ME рассчитана только при изменении одной характеристики; остальные сохранённые характеристики должны оставаться в допуске.",
             "Результат DERIVED и controlled-observational, но не доказывает причинность."
