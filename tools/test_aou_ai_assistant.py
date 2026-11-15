@@ -82,6 +82,27 @@ class AIAssistantTests(unittest.TestCase):
                 "raid_fight_1_dps": {
                     "simulation": {"events": 2, "total_damage": 3000, "per_second_damage": 1500},
                     "recommendation": {"status": "calculated", "added_points": {"mastery": 2}},
+                    "model_marginal_efficiency": {
+                        "status": "partial_estimates",
+                        "classification": "ESTIMATED",
+                        "metric": "total_damage",
+                        "metric_per_second": True,
+                        "baseline_model_result": 1500,
+                        "event_count": 2,
+                        "duration_seconds": 2,
+                        "method": "finite differences",
+                        "resolve_policy": "fixed observed pool",
+                        "critical_policy": "expected Luck x2 baseline",
+                        "unavailable_stats": {"ruthlessness": "target HP incomplete"},
+                        "confidence_interval": None,
+                        "note": "Formula estimate only",
+                        "curves": {"mastery": {"classification": "ESTIMATED", "points": [
+                            {"stat_value": 100, "marginal_efficiency_per_100": 150}
+                        ]}},
+                        "interactions": [{"classification": "ESTIMATED", "first_stat": "mastery",
+                                          "second_stat": "luck", "interaction_effect": 5,
+                                          "direction": "synergy"}]
+                    }
                 }
             },
             "warnings": ["Small sample"],
@@ -95,6 +116,11 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("12345", rendered)
         self.assertIn("Small sample", rendered)
         self.assertIn("estimated_gain_percent", rendered)
+        model = payload["activities"]["raid_fight_1_dps"]["model_marginal_efficiency"]
+        self.assertEqual(model["classification"], "ESTIMATED")
+        self.assertEqual(model["curves"]["mastery"]["points"][0]["marginal_efficiency_per_100"], 150)
+        self.assertEqual(model["interactions"][0]["direction"], "synergy")
+        self.assertNotIn("raw", model)
         self.assertEqual(payload["controlled_stat_efficiency"]["status"], "comparisons_available")
         self.assertEqual(payload["controlled_stat_efficiency"]["comparisons"][0]["marginal_efficiency_per_100"], 25)
         self.assertNotIn("not_selected", rendered)
@@ -128,6 +154,9 @@ class AIAssistantTests(unittest.TestCase):
     def test_system_instructions_forbid_invented_formulas(self):
         self.assertIn("Не пересчитывай формулы", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("Не выдумывай", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("model_marginal_efficiency", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("ESTIMATED", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("не являются измеренным игровым эффектом", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
 
