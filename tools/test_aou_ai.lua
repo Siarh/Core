@@ -97,9 +97,11 @@ local defenseRows = DPScopeAI.BuildLines({
 expect(defenseRows[2][3], "IN", "defense quality uses incoming samples")
 expect(defenseRows[2][4], "HP/RES -", "defense quality does not reuse attack sample ratios")
 
+local beforeStatus = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
-assert(string.find(output[#output], "ON", 1, true), "AI status should report ON")
-assert(string.find(output[#output], "Ollama", 1, true), "AI status should describe the local desktop companion")
+local statusOutput = table.concat(output, "\\n", beforeStatus + 1)
+assert(string.find(statusOutput, "ON", 1, true), "AI status should report ON")
+assert(string.find(statusOutput, "Ollama", 1, true), "AI status should describe the local desktop companion")
 local beforeAdvice = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "advice" })
 local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
