@@ -337,6 +337,10 @@ class AIAssistantTests(unittest.TestCase):
             "controlled_stat_efficiency": {
                 "status": "comparisons_available",
                 "input_event_rows": 1000,
+                "validated_event_rows_before_contamination": 1000,
+                "strict_valid_event_rows": 300,
+                "legacy_exploratory_event_rows": 600,
+                "contaminated_event_rows_excluded": 100,
                 "included_events": 900,
                 "total_comparisons": 30,
                 "strict_comparison_count": 15,
@@ -348,6 +352,9 @@ class AIAssistantTests(unittest.TestCase):
         me_data = payload["controlled_stat_efficiency"]
         self.assertEqual(payload["input_data_coverage"]["export_records_reconstructed"], 1000)
         self.assertEqual(me_data["input_event_rows"], 1000)
+        self.assertEqual(me_data["strict_valid_event_rows"], 300)
+        self.assertEqual(me_data["legacy_exploratory_event_rows"], 600)
+        self.assertEqual(me_data["contaminated_event_rows_excluded"], 100)
         self.assertEqual(me_data["total_comparisons"], 30)
         self.assertEqual(me_data["comparisons_included_in_ai_payload"], 30)
         self.assertEqual(len(me_data["comparisons"]), 30)
