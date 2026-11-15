@@ -144,7 +144,7 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         if not match:
             continue
         key = match.group(1) or match.group(2)
-        if key == "aou_evt_count" or re.fullmatch(r"aou_evt_\d+", key):
+        if key in {"aou_evt_count", "aou_evt_schema"} or re.fullmatch(r"aou_evt_\d+", key):
             if key in values:
                 raise ValueError(f"Ключ {key} повторяется в user.cfg.")
             values[key] = parse_config_value(match.group(3))
