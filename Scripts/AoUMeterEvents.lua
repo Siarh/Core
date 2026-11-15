@@ -98,11 +98,13 @@ onReaction["SpellPanelOnPointing"] = function (reaction)
 
 	if reaction.active then
 		DPSMeterGUI.Hovering = true
+		DPSMeterGUI.HoveringSpellIndex = GetSpellPanelIndex(reaction)
 		pcall(DPSMeterGUI.UpdateOptim, DPSMeterGUI) -- hide the optimizer block while the spell details are shown
 		DPSMeterGUI.DetailsPanel.SpellDetailsHeaderPanel:Show()
-		DPSMeterGUI:UpdateSpellDetailsList(GetSpellPanelIndex(reaction))
+		DPSMeterGUI:UpdateSpellDetailsList(DPSMeterGUI.HoveringSpellIndex)
 	else
 		DPSMeterGUI.Hovering = false
+		DPSMeterGUI.HoveringSpellIndex = nil
 		DPSMeterGUI.DetailsPanel.SpellDetailsHeaderPanel:Hide()
 		pcall(DPSMeterGUI.UpdateOptim, DPSMeterGUI) -- show the optimizer block again
 	end
