@@ -80,13 +80,18 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(len(mastery), 1)
         self.assertEqual(len(critical), 1)
         self.assertEqual(mastery[0]["duration_band"], "0-10 sec")
+        self.assertEqual(mastery[0]["critical_scope"], "normal_only")
+        self.assertEqual(mastery[0]["baseline"]["mean_event_amount"], 1000.0)
+        self.assertEqual(mastery[0]["baseline"]["mean_context_rate_per_second"], 625.0)
         self.assertEqual(mastery[0]["target_hp_band"], "60-80%")
         self.assertEqual(mastery[0]["resolve_pool_band"], "50-60%")
         self.assertEqual(mastery[0]["baseline"]["fights"], 3)
         self.assertEqual(mastery[0]["test"]["fights"], 3)
-        self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 50.0)
-        self.assertEqual(mastery[0]["confidence_interval_95_per_100"], [50.0, 50.0])
-        self.assertEqual(critical[0]["marginal_efficiency_per_100"], 100.0)
+        self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)
+        self.assertEqual(mastery[0]["confidence_interval_95_per_100"], [31.25, 31.25])
+        self.assertEqual(critical[0]["marginal_efficiency_per_100"], 62.5)
+        self.assertEqual(critical[0]["critical_scope"], "critical_only")
+        self.assertEqual(mastery[0]["marginal_efficiency_unit"], "reported amount per second per +100 stat points")
         self.assertEqual(mastery[0]["classification"], "DERIVED")
         self.assertIn("not_proven", mastery[0]["causal_status"])
 
@@ -111,7 +116,7 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(len(fortitude), 1)
         self.assertEqual(fortitude[0]["mode"], "incoming")
         self.assertEqual(fortitude[0]["profile"], "pvp")
-        self.assertEqual(fortitude[0]["marginal_efficiency_per_100"], -100.0)
+        self.assertEqual(fortitude[0]["marginal_efficiency_per_100"], -62.5)
 
     def test_other_stat_change_rejects_marginal_comparison(self):
         rows = []
@@ -152,6 +157,41 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(analysis["contaminated_fights_excluded"], 1)
         self.assertEqual(analysis["status"], "insufficient_data")
         self.assertEqual(analysis["comparisons"], [])
+
+
+    def test_luck_uses_all_hits_so_critical_frequency_is_included(self):
+        rows = []
+        for prefix, luck, critical_positions in (
+            ("base", 100, {8, 9}),
+            ("test", 200, {7, 8, 9}),
+        ):
+            for fight_number in range(1, 4):
+                fight = f"{prefix}{fight_number}"
+                for event_index in range(10):
+                    is_critical = event_index in critical_positions
+                    amount = 2000 if is_critical else 1000
+                    row = event("damage", fight, event_index, 500, amount)
+                    row.update({
+                        "profile": "pve",
+                        "M": "500", "R": "200", "U": "300", "L": str(luck),
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "1" if is_critical else "0",
+                        "ability": "Holy Wrath", "damage_source": "spell",
+                        "element": "light", "target_max_hp": "1000000",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        luck = [item for item in analysis["comparisons"] if item["stat"] == "luck"]
+        self.assertEqual(len(luck), 1)
+        self.assertEqual(luck[0]["critical_scope"], "all_hits")
+        self.assertIsNone(luck[0]["critical"])
+        self.assertEqual(luck[0]["baseline"]["events"], 30)
+        self.assertEqual(luck[0]["test"]["events"], 30)
+        self.assertEqual(luck[0]["marginal_efficiency_per_100"], 100.0)
+        self.assertEqual(luck[0]["baseline"]["mean_event_amount"], 1200.0)
+        self.assertEqual(luck[0]["test"]["mean_event_amount"], 1300.0)
+
 
 
 if __name__ == "__main__":
