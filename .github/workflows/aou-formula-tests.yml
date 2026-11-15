@@ -10,6 +10,7 @@ on:
       - "tools/test_aou_formula_calculator.py"
       - "tools/test_aou_analytics_journal.lua"
       - "tools/test_aou_ai.lua"
+      - "tools/test_aou_critical_model.lua"
       - "tools/aou_ai_assistant.py"
       - "tools/README_ollama_ai.txt"
       - "tools/test_aou_ai_assistant.py"
@@ -63,11 +64,13 @@ jobs:
           luac -p Scripts/AoUMeterInit.lua
           luac -p Scripts/AoUMeterData.lua
           luac -p tools/test_aou_analytics_journal.lua
+          luac -p tools/test_aou_critical_model.lua
       - name: Run analytics journal regression tests
         working-directory: tools
         run: |
           lua test_aou_analytics_journal.lua
           lua test_aou_ai.lua
+          lua test_aou_critical_model.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
