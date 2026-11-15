@@ -29,7 +29,8 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Для каждого допустимого сравнения явно используй формулу ME = ΔResult / ΔStat = (Result_test - Result_base) / (Stat_test - Stat_base).
 - Дополнительно показывай ME на +100 очков: ME_100 = ME * 100. Не подменяй эту величину абсолютным DPS/HPS, разницей процентов или величиной одного удара.
 - В ответе называй Result, единицы Result, Stat, ΔStat, Result_base, Result_test, ΔResult, ME за +1 и ME за +100. Используй уже переданные baseline/test и проверяй арифметику; не придумывай отсутствующие значения.
-- Считай ME только при сопоставимых условиях и изменении одной характеристики. Указывай режим, PvE/PvP, длительность, способность, цель/HP, Resolve, Normal/Critical, получателя лечения, число событий и независимых боёв.
+- Считай ME только при сопоставимых условиях и изменении одной характеристики. Указывай режим, профиль, environment_classification, длительность, способность, цель/HP, Resolve, Normal/Critical, получателя лечения, число событий и независимых боёв.
+- Профили pve и raid относятся к PvE (raid — отдельный рейдовый контекст); pvp относится к PvP. Профили heal и tank обозначают роль/набор режима, а не доказанную игровую среду: не называй их автоматически PvE или PvP.
 - Для damage/healing положительная ME означает рост результата. Для incoming отрицательная ME означает снижение входящего урона и является благоприятным защитным эффектом; не называй отрицательное значение плохим автоматически.
 - Не объединяй единицы и контексты разных способностей в одну среднюю ME и не строй абсолютный рейтинг по несовместимым сценариям. Показывай распределение сравнений по контекстам; при смешанных условиях пиши INSUFFICIENT DATA.
 - Проанализируй все переданные controlled_stat_efficiency.comparisons. Не ограничивайся первыми 25, не выбирай только удобные положительные результаты и не игнорируй отрицательные/нулевые результаты. Сверяй total_comparisons, strict_comparison_count, legacy_exploratory_comparison_count и included_events.
@@ -200,7 +201,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             for key in (
                 "classification", "causal_status", "evidence_tier",
                 "identity_quality", "snapshot_quality", "mode", "profile",
-                "duration_band", "ability", "element", "target_hp_band",
+                "environment_classification", "duration_band", "ability", "element", "target_hp_band",
                 "target_hp_quality", "resolve_pool_band", "critical", "critical_scope", "recipient",
                 "stat", "from", "to", "delta_stat", "delta_result", "result_unit",
                 "me_formula", "marginal_efficiency_per_stat", "marginal_efficiency_unit_per_stat",
