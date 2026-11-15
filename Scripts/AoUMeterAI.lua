@@ -282,8 +282,8 @@ function DPScopeAI.Analyze(context)
     if critSamples > 0 then
         local rateText = critRateObserved and string.format("%.0f%%", critRateObserved * 100) or "?"
         local multText = (critMultiplier and critPairedCount > 0)
-            and string.format("x%.2f", critMultiplier) or "x2.00 (база)"
-        critSummary = string.format(" Криты=%d, обычные=%d (%s), крит. множитель по способностям=%s.",
+            and string.format("набл. x%.2f", critMultiplier) or "x2.00 (база)"
+        critSummary = string.format(" Криты=%d, обычные=%d (%s), сырое отношение средних по способностям=%s; в формулу оптимизатора не входит.",
             critCount, normalCount, rateText, multText)
     end
     local summary = string.format(
@@ -366,7 +366,7 @@ function DPScopeAI.BuildLines(context)
     local critRateText = (result.critRateObserved and result.critSamples > 0) and
         string.format("%.0f%%", result.critRateObserved * 100) or "доля n/a"
     local critMultText = (result.critMultiplier and result.critPairedCount > 0) and
-        string.format("x%.2f", result.critMultiplier) or "x2.00 база"
+        string.format("набл x%.2f", result.critMultiplier) or "x2.00 база"
     return {
         { "OptAITitle", "LOCAL", confidence, tostring(result.confidenceScore) .. "/100" },
         { "OptAIQuality", tostring(result.eventCount),
