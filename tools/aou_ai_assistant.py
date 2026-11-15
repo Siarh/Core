@@ -31,7 +31,10 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Отдельно анализируй УВС (DPS), лечение себя, лечение союзников и защиту (TANK); не складывай разные режимы в одну метрику.
 - Учитывай размер выборки, HP coverage, Resolve pool coverage и warnings. При низкой полноте данных предпочитай следующий тест, а не уверенный совет.
 - Сравнивай активности только с оглядкой на их собственные условия; не объявляй победителем бой только из-за большего абсолютного урона.
-- Изменение характеристик между боями — полезный экспериментальный фактор, а не ошибка и не повод прекращать анализ. Используй stat_comparison: сравни наблюдаемые DPS/HPS и объёмы по наборам статов, указывай число боёв/событий и диапазон выборки.
+- Изменение характеристик между боями — полезный экспериментальный фактор, а не ошибка и не повод прекращать анализ. stat_comparison является только описательной сводкой и не доказывает эффект характеристики.
+- При наличии controlled_stat_efficiency используй только сравнения, где менялась одна характеристика, остальные характеристики были в допуске, контекст события совпадал, а на каждом наборе статов было не менее трёх независимых боёв. Обязательно указывай ME на +100, 95% CI, число боёв и событий.
+- controlled_stat_efficiency имеет статус DERIVED / controlled-observational, а не доказанная причинность: target_id, баффы/дебаффы, таланты и ротация пока не записываются. Не называй сравнение чистым экспериментом.
+- Если controlled_stat_efficiency.status = insufficient_data или доверительный интервал включает ноль, не ранжируй характеристики по этому сравнению; напиши INSUFFICIENT DATA и предложи повторный контролируемый тест.
 - Не делай причинный вывод только по корреляции: учитывай различия целей, длительности, состава группы, ротации, бафов, HP цели и Resolve. Если условия несопоставимы, называй результат предварительным и предложи повторить тест на одинаковой цели/условиях.
 - Разделяй исходящий урон, лечение себя и союзников; абсолютные суммы не сравнивай без нормализации по времени и объёму событий. Для эффективного лечения учитывай, что overheal/ограничение недостающим HP может искажать callback.
 - Не выдумывай игровые механики, способности, свойства класса или значения характеристик, которых нет во входных данных.
@@ -140,6 +143,33 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         for key in ("crit_chance_percent", "ruthlessness_m", "bloodthirst_fraction", "max_hp_model")
         if key in character
     }
+    experimental = profile.get("controlled_stat_efficiency", {}) or {}
+    compact_experimental = {
+        key: experimental.get(key)
+        for key in (
+            "status", "method", "outcome_unit", "minimum_stat_step",
+            "minimum_fights_per_build", "included_events",
+            "excluded_or_unusable", "contaminated_fights_excluded",
+            "insufficient_repeated_pairs", "limitations",
+        )
+        if key in experimental
+    }
+    compact_experimental["comparisons"] = [
+        {
+            key: item.get(key)
+            for key in (
+                "classification", "causal_status", "mode", "profile",
+                "duration_band", "ability", "element", "target_hp_band",
+                "target_hp_quality", "resolve_pool_band", "critical", "recipient",
+                "stat", "from", "to", "delta_stat", "baseline", "test",
+                "marginal_efficiency_per_100", "relative_change_per_100_percent",
+                "confidence_interval_95_per_100", "confidence",
+            )
+            if key in item
+        }
+        for item in (experimental.get("comparisons", []) or [])[:25]
+    ]
+
     payload = {
         "product": "DPScope",
         "game_version": "Allods Sunshine 6.0",
@@ -154,6 +184,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         "cross_activity_recommendations": report.get("cross_activity_recommendations", {}),
         "import_summary": profile.get("import_summary", {}),
         "stat_comparison": profile.get("stat_comparison", {}),
+        "controlled_stat_efficiency": compact_experimental,
         "warnings": list(dict.fromkeys(
             list(profile.get("import_warnings", []) or []) +
             list(report.get("warnings", []) or [])
