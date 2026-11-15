@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import sys
+from statistics import median
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -238,9 +239,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             "profile": profile_name,
             "critical_scope": critical_scope,
             "context_comparison_count": len(items),
-            "me_per_100_context_median": (
-                sorted(values)[len(values) // 2] if values else None
-            ),
+            "me_per_100_context_median": median(values) if values else None,
             "me_per_100_context_min": min(values) if values else None,
             "me_per_100_context_max": max(values) if values else None,
             "positive_contexts": sum(1 for value in values if value > 0),
