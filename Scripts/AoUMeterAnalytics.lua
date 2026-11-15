@@ -91,7 +91,8 @@ local function freshSession()
         },
         targetHealth = { samples = 0, estimated = 0, unknown = 0, changedEvents = 0 },
         eventSamples = {}, eventSamplesDropped = 0, eventSampleCount = 0, eventSampleNext = 1,
-        elapsedSeconds = 0, fightId = 0, statSnapshot = nil, started = false
+        elapsedSeconds = 0, fightId = 0, statSnapshot = nil,
+        statSnapshotSecond = nil, statSnapshotAttemptSecond = nil, started = false
     }
 end
 
@@ -442,7 +443,7 @@ local function abilityLabel(params, fallbackName)
 end
 
 local isLocalObject
-local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax"
+local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
 
 local function sampleNumber(value)
     local n = tonumber(value)
@@ -450,28 +451,66 @@ local function sampleNumber(value)
     return string.format("%.4f", n)
 end
 
+-- Refresh innate stats at most once per elapsed fight second interval.
+-- Re-reading the API for every hit would add avoidable work to the combat hot path.
+local STAT_SNAPSHOT_INTERVAL = 3
+local SNAPSHOT_STAT_KEYS = { "M", "R", "U", "L", "S", "W", "B", "C" }
+
 local function captureStatSnapshot()
-    if AOUA.Session.statSnapshot then return AOUA.Session.statSnapshot end
-    local snapshot = {}
+    local session = AOUA.Session
+    local currentSecond = math.max(0, math.floor(tonumber(session.elapsedSeconds) or 0))
+    local previous = session.statSnapshot
+
+    if session.statSnapshotAttemptSecond == currentSecond then
+        return previous or {}
+    end
+    local previousSecond = tonumber(session.statSnapshotSecond)
+    if previous and previousSecond and (currentSecond - previousSecond) < STAT_SNAPSHOT_INTERVAL then
+        return previous
+    end
+
+    -- One attempt per elapsed second, even when the API temporarily fails.
+    session.statSnapshotAttemptSecond = currentSecond
+    local values
     if Optim and type(Optim.ReadStats) == "function" then
-        local ok, values = pcall(Optim.ReadStats)
-        if ok and type(values) == "table" then
-            for _, key in ipairs({ "M", "R", "U", "L", "S", "W", "B", "C" }) do
-                local row = values[key]
-                snapshot[key] = row and tonumber(row.total) or nil
-            end
+        local ok, result = pcall(Optim.ReadStats)
+        if ok and type(result) == "table" then values = result end
+    end
+    if not values then return previous or {} end
+
+    local snapshot = {}
+    local changed = previous == nil
+    for i = 1, #SNAPSHOT_STAT_KEYS do
+        local key = SNAPSHOT_STAT_KEYS[i]
+        local row = values[key]
+        local value = row and tonumber(row.total) or nil
+        snapshot[key] = value
+        local oldValue = previous and tonumber(previous[key]) or nil
+        if value ~= nil and oldValue ~= nil and math.abs(value - oldValue) > 0.01 then
+            changed = true
+        elseif (value == nil) ~= (oldValue == nil) then
+            changed = true
         end
     end
-    if avatar and type(avatar.GetId) == "function" and Optim and type(Optim.GetHealth) == "function" then
-        local okId, id = pcall(avatar.GetId)
-        if okId then
-            local okHp, _, maximum, real = pcall(Optim.GetHealth, id)
-            if okHp and real and tonumber(maximum) and maximum > 0 then
-                snapshot.HPmax = tonumber(maximum)
+
+    -- Max HP is stable for a stat snapshot. Re-read it only when a stat changed
+    -- or when no valid value has ever been captured.
+    if changed or not (previous and tonumber(previous.HPmax) and previous.HPmax > 0) then
+        if avatar and type(avatar.GetId) == "function" and Optim and type(Optim.GetHealth) == "function" then
+            local okId, id = pcall(avatar.GetId)
+            if okId then
+                local okHp, _, maximum, real = pcall(Optim.GetHealth, id)
+                if okHp and real and tonumber(maximum) and maximum > 0 then
+                    snapshot.HPmax = tonumber(maximum)
+                end
             end
         end
+    else
+        snapshot.HPmax = previous.HPmax
     end
-    AOUA.Session.statSnapshot = snapshot
+
+    session.statSnapshot = snapshot
+    session.statSnapshotSecond = currentSecond
     return snapshot
 end
 
@@ -495,6 +534,9 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         recipient = isLocalObject(targetId) and "self" or "ally"
     end
     local stats = captureStatSnapshot()
+    local currentSecond = math.max(0, math.floor(tonumber(AOUA.Session.elapsedSeconds) or 0))
+    local snapshotSecond = tonumber(AOUA.Session.statSnapshotSecond)
+    local snapshotAge = snapshotSecond and math.max(0, currentSecond - snapshotSecond) or nil
     local ability = eventText(resolvedAbilityName) or abilityLabel(params, nil) or "unknown"
     local element = eventText(params.sysSubElement or params.subElement or params.element) or ""
     element = string.gsub(element, "^ENUM_SubElement_", "")
@@ -513,7 +555,7 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         recipient, ability,
         sampleNumber(stats.M), sampleNumber(stats.R), sampleNumber(stats.U), sampleNumber(stats.L),
         sampleNumber(stats.S), sampleNumber(stats.W), sampleNumber(stats.B), sampleNumber(stats.C),
-        sampleNumber(stats.HPmax)
+        sampleNumber(stats.HPmax), sampleNumber(snapshotSecond), sampleNumber(snapshotAge)
     }
     samples[sampleIndex] = table.concat(values, "|")
     AOUA.Session.eventSampleCount = sampleCount
