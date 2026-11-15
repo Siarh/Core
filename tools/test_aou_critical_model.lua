@@ -134,4 +134,13 @@ local partialLines = Optim.BuildLines(noFightSamples, 0, enumMode.Dps)
 local partialMastery = findRow(partialLines, "OptM")
 expect(partialMastery and partialMastery[2], "321", "partial live stat reaches optimizer panel")
 
+-- Turning the optimizer off must stop recommendation calculations, not hide live characteristics.
+Optim.Cfg.on = 0
+avatar.GetInnateStats = function() return statRows end
+local offLines = Optim.BuildLines(noFightSamples, 0, enumMode.Dps)
+local offMastery = findRow(offLines, "OptM")
+expect(offMastery and offMastery[2], "310", "live stat remains visible when optimizer is off")
+expect(findRow(offLines, "OptNoData") ~= nil, true, "disabled optimizer keeps the status row")
+Optim.Cfg.on = 1
+
 print("DPScope critical model regression tests passed.")
