@@ -1918,8 +1918,12 @@ function Optim.OnSlash(text)
 			if object and type(object.GetName) == "function" then
 				local ok, value = pcall(object.GetName, id)
 				if ok and value ~= nil then
-					local okText, plain = pcall(userMods.FromWString, value)
-					fields[#fields + 1] = "name=" .. tostring(okText and plain or value)
+					local plain = value
+					if userMods and type(userMods.FromWString) == "function" then
+						local okText, converted = pcall(userMods.FromWString, value)
+						if okText and converted ~= nil then plain = converted end
+					end
+					fields[#fields + 1] = "name=" .. tostring(plain)
 				end
 			end
 			if unit and type(unit.GetLevel) == "function" then
