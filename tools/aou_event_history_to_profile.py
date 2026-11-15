@@ -740,7 +740,7 @@ def build_profile(
         "Для лечения исходная величина callback рассматривается как номинальная базовая величина; если исходное лечение уже было ограничено недостающим HP, рекомендация будет консервативной.",
     ]
     stat_ranges = {}
-    for key, label in STAT_COLUMNS.items():
+    for key, label in ALL_STAT_COLUMNS.items():
         values = [number(row.get(key)) for row in combat_rows]
         values = [value for value in values if value is not None]
         if values and max(values) - min(values) > 0.5:
