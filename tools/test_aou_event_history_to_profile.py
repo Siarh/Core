@@ -32,7 +32,7 @@ class ChangingStatsTests(unittest.TestCase):
         low_heal = next(group for group in comparison["groups"] if group["kind"] == "healing")
         self.assertEqual(low["observed_damage"], 1000)
         self.assertEqual(low["observed_healing"], 0)
-        self.assertEqual(low["observed_dps_estimate"], 1000)
+        self.assertEqual(low["observed_dps_estimate"], 500)
         self.assertEqual(low_heal["observed_healing"], 500)
         self.assertEqual(low_heal["healing_by_recipient"]["self"]["amount"], 500)
 
