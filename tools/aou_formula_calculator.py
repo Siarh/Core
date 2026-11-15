@@ -28,89 +28,109 @@ STAT_MODEL_REGISTRY = {
               "affected_events": ["damage", "healing"], "formula": "might_level_multiplier",
               "soft_caps": [], "hard_caps": [], "dependencies": ["level", "power_scale"],
               "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-              "formula_supported": True, "snapshot_available": False},
+              "formula_supported": True, "snapshot_available": False, "allocation_modes": []},
     "mastery": {"name": "Мастерство", "type": "offensive", "scope": ["dps", "hps"],
                 "affected_events": ["damage", "healing"], "formula": "mastery_multiplier",
                 "soft_caps": [], "hard_caps": [], "dependencies": [],
                 "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                "formula_supported": True, "snapshot_available": True},
+                "formula_supported": True, "snapshot_available": True, "allocation_modes": ["dps", "hps"]},
     "resolve": {"name": "Решимость", "type": "offensive", "scope": ["dps", "hps"],
                 "affected_events": ["damage", "healing"], "formula": "resolve_multiplier",
                 "soft_caps": [], "hard_caps": [], "dependencies": ["resolve_pool", "resolve_coefficient"],
                 "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                "formula_supported": True, "snapshot_available": True},
+                "formula_supported": True, "snapshot_available": True, "allocation_modes": ["dps", "hps"]},
     "ruthlessness": {"name": "Беспощадность", "type": "offensive", "scope": ["dps", "hps"],
                      "affected_events": ["damage", "healing"], "formula": "ruthlessness_multiplier",
                      "soft_caps": ["implicit_from_m_over_log1pm"], "hard_caps": [],
                      "dependencies": ["target_hp_before"],
                      "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                     "formula_supported": True, "snapshot_available": True},
+                     "formula_supported": True, "snapshot_available": True, "allocation_modes": ["dps", "hps"]},
     "luck": {"name": "Удача", "type": "offensive", "scope": ["dps", "hps"],
              "affected_events": ["damage", "healing"], "formula": "crit_chance",
              "soft_caps": ["softened_stat_after_500"], "hard_caps": [850],
              "dependencies": ["critical_multiplier_assumed_x2"],
              "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-             "formula_supported": True, "snapshot_available": True},
+             "formula_supported": True, "snapshot_available": True, "allocation_modes": []},
     "fortitude": {"name": "Стойкость", "type": "defensive", "scope": ["tank"],
                   "affected_events": ["incoming"], "formula": "fortitude_health",
                   "soft_caps": [], "hard_caps": [], "dependencies": ["max_hp"],
                   "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                  "formula_supported": True, "snapshot_available": True},
+                  "formula_supported": True, "snapshot_available": True, "allocation_modes": ["tank"]},
     "endurance": {"name": "Выносливость", "type": "defensive", "scope": ["tank"],
                   "affected_events": ["incoming"], "formula": "endurance_health",
                   "soft_caps": [], "hard_caps": [], "dependencies": ["class_k", "level"],
                   "pve_relevance": "requires_class_k", "pvp_relevance": "requires_class_k",
-                  "formula_supported": True, "snapshot_available": False},
+                  "formula_supported": True, "snapshot_available": False, "allocation_modes": ["tank"]},
     "bloodthirst": {"name": "Кровожадность", "type": "defensive_sustain", "scope": ["dps", "hps", "tank"],
                     "affected_events": ["damage", "healing", "incoming"], "formula": "bloodthirst_fraction",
                     "soft_caps": ["asymptotic_x_over_x_plus_1_8"], "hard_caps": [],
                     "dependencies": ["outgoing_damage", "healing_wound_fraction"],
                     "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                    "formula_supported": True, "snapshot_available": True},
+                    "formula_supported": True, "snapshot_available": True, "allocation_modes": ["tank"]},
     "caution": {"name": "Осторожность", "type": "defensive", "scope": ["tank"],
                 "affected_events": ["incoming"], "formula": "caution_multiplier",
                 "soft_caps": [], "hard_caps": [350], "dependencies": ["actor_hp_before"],
                 "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                "formula_supported": True, "snapshot_available": True},
+                "formula_supported": True, "snapshot_available": True, "allocation_modes": ["tank"]},
     "will": {"name": "Воля", "type": "defensive_control", "scope": ["tank"],
              "affected_events": ["control"], "formula": "will_result",
              "soft_caps": ["threshold_steps"], "hard_caps": [], "dependencies": ["control_windows", "control_weight"],
              "pve_relevance": "not_enabled_without_control_weight",
              "pvp_relevance": "formula_supported_with_control_weight",
-             "formula_supported": True, "snapshot_available": True},
+             "formula_supported": True, "snapshot_available": True, "allocation_modes": ["tank"]},
     "fury": {"name": "Ярость", "type": "anti_heal", "scope": ["dps"],
              "affected_events": ["damage_to_player"], "formula": "fury_healing_absorption",
              "soft_caps": ["softened_stat_after_500"], "hard_caps": [850],
              "dependencies": ["target_is_player", "in_combat"],
              "pve_relevance": "not_applicable_to_current_profile",
              "pvp_relevance": "event_context_not_exported",
-             "formula_supported": True, "snapshot_available": False},
+             "formula_supported": True, "snapshot_available": False, "allocation_modes": []},
     "armor": {"name": "Броня", "type": "defensive_resistance", "scope": ["tank"],
               "affected_events": ["incoming_physical"], "formula": "resistance_multiplier",
               "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
               "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-              "formula_supported": True, "snapshot_available": False},
+              "formula_supported": True, "snapshot_available": False, "allocation_modes": ["tank"]},
     "elements": {"name": "Стихии", "type": "defensive_resistance", "scope": ["tank"],
                  "affected_events": ["incoming_fire_cold_lightning"], "formula": "resistance_multiplier",
                  "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
                  "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-                 "formula_supported": True, "snapshot_available": False},
+                 "formula_supported": True, "snapshot_available": False, "allocation_modes": ["tank"]},
     "divine": {"name": "Свет/Тьма/Астрал", "type": "defensive_resistance", "scope": ["tank"],
                "affected_events": ["incoming_holy_shadow_astral"], "formula": "resistance_multiplier",
                "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
                "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-               "formula_supported": True, "snapshot_available": False},
+               "formula_supported": True, "snapshot_available": False, "allocation_modes": ["tank"]},
     "nature": {"name": "Природа", "type": "defensive_resistance", "scope": ["tank"],
                "affected_events": ["incoming_poison_disease_acid"], "formula": "resistance_multiplier",
                "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
                "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
-               "formula_supported": True, "snapshot_available": False},
+               "formula_supported": True, "snapshot_available": False, "allocation_modes": ["tank"]},
     "haste": {"name": "Стремительность", "type": "offensive", "scope": ["dps", "hps"],
               "affected_events": ["cast_time", "cooldown", "dot_ticks"],
               "formula": None, "soft_caps": [], "hard_caps": [],
               "dependencies": ["cast_timing", "cooldown_events"],
               "pve_relevance": "unsupported", "pvp_relevance": "unsupported",
-              "formula_supported": False, "snapshot_available": False},
+              "formula_supported": False, "snapshot_available": False, "allocation_modes": []},
+    "dominance": {"name": "Господство", "type": "offensive", "scope": ["dps", "hps"],
+                  "affected_events": [], "formula": None, "soft_caps": [], "hard_caps": [],
+                  "dependencies": ["server_formula", "event_snapshot"],
+                  "pve_relevance": "not_verified", "pvp_relevance": "not_verified",
+                  "formula_supported": False, "snapshot_available": False, "allocation_modes": []},
+    "vitality": {"name": "Живучесть", "type": "defensive", "scope": ["tank"],
+                 "affected_events": [], "formula": None, "soft_caps": [], "hard_caps": [],
+                 "dependencies": ["server_formula", "event_snapshot"],
+                 "pve_relevance": "not_verified", "pvp_relevance": "not_verified",
+                 "formula_supported": False, "snapshot_available": False, "allocation_modes": []},
+    "steadfastness": {"name": "Незыблемость", "type": "defensive", "scope": ["tank"],
+                      "affected_events": [], "formula": None, "soft_caps": [], "hard_caps": [],
+                      "dependencies": ["server_formula", "event_snapshot"],
+                      "pve_relevance": "not_verified", "pvp_relevance": "not_verified",
+                      "formula_supported": False, "snapshot_available": False, "allocation_modes": []},
+    "instinct": {"name": "Инстинкт", "type": "defensive", "scope": ["tank"],
+                 "affected_events": [], "formula": None, "soft_caps": [], "hard_caps": [],
+                 "dependencies": ["server_formula", "event_snapshot"],
+                 "pve_relevance": "not_verified", "pvp_relevance": "not_verified",
+                 "formula_supported": False, "snapshot_available": False, "allocation_modes": []},
 }
 
 
@@ -669,17 +689,22 @@ def simulate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any
 
 
 def _optimizable_stats(mode: str, cfg: dict[str, Any]) -> list[str]:
-    if mode == "dps":
-        keys = ["mastery", "resolve", "ruthlessness"]
-    elif mode == "hps":
-        keys = ["mastery", "resolve", "ruthlessness"]
-        # Bloodthirst is a separate self-sustain benefit, not effective group HPS.
+    """Read allocation eligibility from the declarative stat registry."""
+    keys = [
+        key for key, spec in STAT_MODEL_REGISTRY.items()
+        if mode in spec.get("allocation_modes", []) and spec.get("formula_supported", False)
+    ]
+    # Bloodthirst is a separate self-sustain benefit, not effective group HPS.
+    if mode == "hps":
         if num(cfg.get("healer_bloodthirst_weight", 0.0)) > 0:
             keys.append("bloodthirst")
-    else:
-        keys = ["fortitude", "endurance", "bloodthirst", "caution", "armor", "elements", "divine", "nature"]
-        if str(cfg.get("mode", "pve")).lower() == "pvp" and num(cfg.get("control_weight", 0.0)) > 0:
-            keys.append("will")
+        else:
+            keys = [key for key in keys if key != "bloodthirst"]
+    if "will" in keys and not (
+        str(cfg.get("mode", "pve")).lower() == "pvp"
+        and num(cfg.get("control_weight", 0.0)) > 0
+    ):
+        keys.remove("will")
     return keys
 
 
@@ -712,12 +737,23 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
             "reason": basis, "curves": {}, "interactions": [],
         }
 
-    candidates = list(_optimizable_stats(mode, cfg))
-    if mode in ("dps", "hps") and "luck" not in candidates:
-        candidates.append("luck")  # sensitivity only; the in-game allocator keeps Luck fixed
-    if mode in ("dps", "hps") and "might" not in candidates:
-        candidates.append("might")
-    candidates = [key for key in candidates if key in STAT_MODEL_REGISTRY and STAT_MODEL_REGISTRY[key]["formula_supported"]]
+    allocation_candidates = _optimizable_stats(mode, cfg)
+    candidates = [
+        key for key, spec in STAT_MODEL_REGISTRY.items()
+        if mode in spec.get("scope", []) and spec.get("formula_supported", False)
+        and (
+            key in allocation_candidates
+            or key in {"luck", "might"}
+            or (mode == "hps" and key == "bloodthirst" and num(cfg.get("healer_bloodthirst_weight", 0.0)) > 0)
+        )
+    ]
+    missing_hp = mode in ("dps", "hps") and any(
+        event.get("target_hp") is None for event in (activity.get("samples", []) or [])
+    )
+    unavailable_stats = {}
+    if missing_hp and "ruthlessness" in candidates:
+        candidates.remove("ruthlessness")
+        unavailable_stats["ruthlessness"] = "INSUFFICIENT DATA: target HP is missing for at least one event"
     increments = (0, 100, 200, 300, 400)
     curves: dict[str, Any] = {}
 
@@ -762,8 +798,9 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
                 soft_knee = points[index]["stat_value"]
                 break
         curves[stat] = {
+            "status": "calculated",
             "classification": "ESTIMATED",
-            "allocation_eligible": stat in _optimizable_stats(mode, cfg),
+            "allocation_eligible": stat in allocation_candidates,
             "current_value": round(current, 4),
             "formula_supported": True,
             "soft_knee_candidate": soft_knee,
@@ -812,6 +849,7 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
         "resolve_policy": "measured per-event Resolve pool is held fixed; its build-dependent growth is not re-simulated",
         "critical_policy": "expected Luck chance with the calculator's x2 critical baseline; raw cross-ability ratios are not treated as a causal multiplier",
         "curves": curves,
+        "unavailable_stats": unavailable_stats,
         "interactions": interactions,
         "confidence_interval": None,
         "note": "Расчётная чувствительность формулы, не ME, измеренная в игре; точность ограничена неполными модификаторами callback.",
