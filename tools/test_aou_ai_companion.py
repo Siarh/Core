@@ -116,5 +116,27 @@ class AOUCSVParserTests(unittest.TestCase):
             parse_aoucsv_text(text)
 
 
+    def test_reconstructs_all_one_thousand_exported_event_records(self):
+        header = "kind|M|R|U|L|observed_amount"
+        rows = [
+            f"AOUCSV|BEGIN|3|1000|events",
+            f"AOUCSV|H|1|1|{header}",
+        ]
+        rows.extend(
+            f"AOUCSV|R{index}|1|1|damage|100|200|300|40|{1000 + index}"
+            for index in range(1, 1001)
+        )
+        rows.append("AOUCSV|END")
+        parsed_header, parsed_rows, info = parse_aoucsv_text("\n".join(rows))
+        self.assertEqual(parsed_header, header.split("|"))
+        self.assertEqual(len(parsed_rows), 1000)
+        self.assertEqual(info["data_records"], 1000)
+        self.assertEqual(info["expected_event_records"], 1000)
+        self.assertTrue(info["record_ids_complete"])
+        self.assertEqual(parsed_rows[0][-1], "1001")
+        self.assertEqual(parsed_rows[-1][-1], "2000")
+
+
+
 if __name__ == "__main__":
     unittest.main()
