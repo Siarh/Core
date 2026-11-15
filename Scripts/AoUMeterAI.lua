@@ -177,6 +177,15 @@ function DPScopeAI.Analyze(context)
     local avgTargetHpPct = tonumber(context.avgTargetHpPct)
     local avgResolve = tonumber(context.avgResolve)
     local hpSampleLabel = context.hpSampleLabel or "цели"
+    local critCount = math.max(0, math.floor(n(context.critCount)))
+    local normalCount = math.max(0, math.floor(n(context.normalCount)))
+    local critSamples = critCount + normalCount
+    local critRateObserved = tonumber(context.critRateObserved)
+    if critRateObserved == nil and critSamples > 0 then
+        critRateObserved = critCount / critSamples
+    end
+    local critMultiplier = tonumber(context.critMultiplier)
+    local critPairedCount = math.max(0, math.floor(n(context.critPairedCount)))
 
     local insight, nextStep
     if mode == "hps" then
@@ -267,15 +276,21 @@ function DPScopeAI.Analyze(context)
     elseif mode == "tank" then
         detail = string.format(" Входящий урон=%.0f/с.", incoming)
     end
-    local meanHpText = avgTargetHpPct and string.format("%.1f%%", avgTargetHpPct) or "нет данных"
     local meanResolveText = avgResolve and string.format("%.1f", avgResolve) or "нет данных"
-    local meansSummary = string.format("Средние для модели (взвешено по величине событий): HP %s=%s; Решимость=%s.",
-        hpSampleLabel, meanHpText, meanResolveText)
+    local meansSummary = "Средняя Решимость=" .. meanResolveText .. "."
+    local critSummary = ""
+    if critSamples > 0 then
+        local rateText = critRateObserved and string.format("%.0f%%", critRateObserved * 100) or "?"
+        local multText = (critMultiplier and critPairedCount > 0)
+            and string.format("x%.2f", critMultiplier) or "x2.00 (база)"
+        critSummary = string.format(" Криты=%d, обычные=%d (%s), крит. множитель по способностям=%s.",
+            critCount, normalCount, rateText, multText)
+    end
     local summary = string.format(
-        "AI %s (%d/100): %s. Режим=%s, событий=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%).%s %s Следующий шаг: %s",
+        "AI %s (%d/100): %s. Режим=%s, событий=%d, HP-сэмплы=%d/%d (%.0f%%), Решимость-сэмплы=%d/%d (%.0f%%).%s %s %s Следующий шаг: %s",
         confidence, confidenceScore, insight, modeName, eventCount,
         hpSamples, eventCount, hpCoverage * 100,
-        poolSamples, eventCount, poolCoverage * 100, detail, meansSummary,
+        poolSamples, eventCount, poolCoverage * 100, detail, meansSummary, critSummary,
         nextStep or "Собери ещё один сопоставимый бой."
     )
 
@@ -290,6 +305,12 @@ function DPScopeAI.Analyze(context)
         avgTargetHpPct = avgTargetHpPct,
         avgResolve = avgResolve,
         hpSampleLabel = hpSampleLabel,
+        critCount = critCount,
+        normalCount = normalCount,
+        critSamples = critSamples,
+        critRateObserved = critRateObserved,
+        critMultiplier = critMultiplier,
+        critPairedCount = critPairedCount,
         nextStep = nextStep or "Собери ещё один сопоставимый бой.",
         summary = summary
     }
@@ -340,12 +361,19 @@ function DPScopeAI.BuildLines(context)
         string.format("HP %s %.1f%%", hpLabel, result.avgTargetHpPct) or "HP n/a"
     local resolveMean = result.avgResolve and
         string.format("RES %.1f", result.avgResolve) or "RES n/a"
+    local critText = (result.critSamples > 0) and
+        string.format("Крит %d / Норм %d", result.critCount, result.normalCount) or "Криты n/a"
+    local critRateText = (result.critRateObserved and result.critSamples > 0) and
+        string.format("%.0f%%", result.critRateObserved * 100) or "доля n/a"
+    local critMultText = (result.critMultiplier and result.critPairedCount > 0) and
+        string.format("x%.2f", result.critMultiplier) or "x2.00 база"
     return {
         { "OptAITitle", "LOCAL", confidence, tostring(result.confidenceScore) .. "/100" },
         { "OptAIQuality", tostring(result.eventCount),
             result.mode == "tank" and "IN" or string.format("HP %.0f%%", result.hpCoverage * 100),
             result.mode == "tank" and "HP/RES -" or string.format("RES %.0f%%", result.poolCoverage * 100) },
         { "OptAIMeans", hpMean, resolveMean, "" },
+        { "OptAICrit", critText, critRateText, critMultText },
         { "OptAIInsight", i1, i2, i3 },
         { "OptAIFocus", n1, n2, n3 }
     }
