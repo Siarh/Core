@@ -264,5 +264,54 @@ class ChangingStatsTests(unittest.TestCase):
 
 
 
+    def test_effective_damage_and_healing_are_separate_estimates(self):
+        damage = event("damage", "fight-1", 4, 100, 300)
+        damage.update({"target_hp_before": "10", "target_max_hp": "1000"})
+        heal = event("healing", "fight-1", 4, 100, 300)
+        heal.update({"target_hp_before": "80", "target_max_hp": "1000", "recipient": "self"})
+        unknown = event("healing", "fight-1", 4, 100, 150)
+        unknown.update({"target_hp_before": "", "hp_quality": "unknown", "target_max_hp": ""})
+
+        report = importer.build_event_effectiveness([damage, heal, unknown])
+        damage_row = next(item for item in report["fights"] if item["kind"] == "damage")
+        heal_row = next(item for item in report["fights"] if item["kind"] == "healing")
+
+        self.assertEqual(damage_row["reported_amount"], 300)
+        self.assertEqual(damage_row["estimated_effective_amount"], 100)
+        self.assertEqual(damage_row["estimated_excess_amount"], 200)
+        self.assertEqual(damage_row["excess_label"], "overkill_estimated")
+        self.assertEqual(heal_row["reported_amount"], 450)
+        self.assertEqual(heal_row["estimated_effective_amount"], 200)
+        self.assertEqual(heal_row["estimated_excess_amount"], 100)
+        self.assertEqual(heal_row["hp_eligible_events"], 1)
+        self.assertEqual(heal_row["unknown_hp_events"], 1)
+        self.assertEqual(heal_row["excess_label"], "overheal_estimated")
+        self.assertEqual(heal_row["classification"], "ESTIMATED")
+
+    def test_critical_analysis_reports_observed_rate_share_and_ratio(self):
+        rows = []
+        for index, critical, amount in (
+            (1, "0", 100), (2, "0", 100),
+            (3, "1", 300), (4, "1", 300), (5, "1", 300)
+        ):
+            row = event("damage", "fight-1", index, 100, amount)
+            row["critical"] = critical
+            row["ability"] = "Holy Wrath"
+            rows.append(row)
+        report = importer.build_critical_analysis(rows)
+        self.assertEqual(len(report["groups"]), 1)
+        row = report["groups"][0]
+        self.assertEqual(row["normal_events"], 2)
+        self.assertEqual(row["critical_events"], 3)
+        self.assertEqual(row["observed_critical_rate_percent"], 60.0)
+        self.assertAlmostEqual(row["observed_critical_amount_share_percent"], 81.8182, places=3)
+        self.assertEqual(row["normal_average_amount"], 100.0)
+        self.assertEqual(row["critical_average_amount"], 300.0)
+        self.assertEqual(row["observed_critical_to_normal_average_ratio"], 3.0)
+        self.assertEqual(row["classification"], "DERIVED")
+        self.assertIn("descriptive_only", row["causal_status"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
