@@ -163,7 +163,7 @@ Optim.RU = {
 	OptAICrit = "Крит / обычные удары",
 	OptAIInsight = "AI: вывод",
 	OptAIFocus = "AI: следующий шаг",
-	OptHelp3 = "/aou ai on|off|status|advice|export, caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
+	OptHelp3 = "/aou ai on|off|status|advice|export, caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, statdiag, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
 }
 
 -- UTF-8 (Cyrillic) -> Windows-1251 bytes
