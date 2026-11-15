@@ -58,6 +58,9 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("pcall(Optim.GetTarget)", block)
         self.assertIn('hpText = (russian and "HP " or "HP ") .. "~"', block)
         self.assertNotIn("if #rows == 0 and Optim and Optim.LastEv", block)
+        self.assertIn('key = string.gsub(key, "^ENUM_SubElement_", "")', gui)
+        self.assertIn("local numeric = tonumber(key)", gui)
+        self.assertIn("row.qualityName = tostring(value)", block)
 
     def test_opponent_section_collapses_to_visible_row_count(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
