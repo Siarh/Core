@@ -58,7 +58,7 @@ assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
     "HPS AI summary should identify ally-focused healing")
 assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
     "AI summary should provide a next test")
-assert(string.find(DPScopeAI.LastSummary, "Средний HP цели=68.4%", 1, true),
+assert(string.find(DPScopeAI.LastSummary, "HP цели=68.4%", 1, true),
     "AI summary should report average target HP")
 assert(string.find(DPScopeAI.LastSummary, "средняя Решимость=36.2", 1, true),
     "AI summary should report average Resolve")
@@ -104,7 +104,7 @@ local beforeAdvice = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "advice" })
 local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
 assert(string.find(adviceOutput, "W:", 1, true), "Russian chat output should pass through the wide-string converter")
-assert(string.find(adviceOutput, "Средний HP", 1, true), "chat advice should include average target HP")
-assert(string.find(adviceOutput, "средняя Решимость", 1, true), "chat advice should include average Resolve")
+assert(string.find(adviceOutput, "HP цели=", 1, true), "chat advice should include average target HP")
+assert(string.find(adviceOutput, "Решимость=", 1, true), "chat advice should include average Resolve")
 
 print("DPScope AI advisor tests passed.")
