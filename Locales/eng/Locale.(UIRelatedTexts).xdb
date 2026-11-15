@@ -374,6 +374,10 @@
       <resource href="OptAIQuality.txt" />
     </Item>
     <Item>
+      <name>OptAIMeans</name>
+      <resource href="OptAIMeans.txt" />
+    </Item>
+    <Item>
       <name>OptAIInsight</name>
       <resource href="OptAIInsight.txt" />
     </Item>
