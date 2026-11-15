@@ -461,15 +461,19 @@ local function captureStatSnapshot()
     local currentSecond = math.max(0, math.floor(tonumber(session.elapsedSeconds) or 0))
     local previous = session.statSnapshot
 
-    if session.statSnapshotAttemptSecond == currentSecond then
+    local previousSecond = tonumber(session.statSnapshotSecond)
+    local lastAttemptSecond = tonumber(session.statSnapshotAttemptSecond)
+    if lastAttemptSecond == currentSecond then
         return previous or {}
     end
-    local previousSecond = tonumber(session.statSnapshotSecond)
     if previous and previousSecond and (currentSecond - previousSecond) < STAT_SNAPSHOT_INTERVAL then
         return previous
     end
+    if lastAttemptSecond and (currentSecond - lastAttemptSecond) < STAT_SNAPSHOT_INTERVAL then
+        return previous or {}
+    end
 
-    -- One attempt per elapsed second, even when the API temporarily fails.
+    -- One attempt per interval, even when the API temporarily fails.
     session.statSnapshotAttemptSecond = currentSecond
     local values
     if Optim and type(Optim.ReadStats) == "function" then
