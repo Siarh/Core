@@ -47,6 +47,18 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<HighPos>0</HighPos>", line)
         self.assertIn("<Pos>5</Pos>", line)
 
+    def test_opponent_fallback_reads_current_target_without_last_event(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
+        end = gui.index("\nend", start)
+        block = gui[start:end]
+        self.assertIn("if #rows == 0 then", block)
+        self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
+        self.assertIn("local targetId = ev and ev.target or nil", block)
+        self.assertIn("pcall(Optim.GetTarget)", block)
+        self.assertIn('hpText = (russian and "HP " or "HP ") .. "~"', block)
+        self.assertNotIn("if #rows == 0 and Optim and Optim.LastEv", block)
+
     def test_opponent_section_collapses_to_visible_row_count(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         self.assertIn("local function updateOpponentSectionLayout(dp, displayedRows)", gui)
