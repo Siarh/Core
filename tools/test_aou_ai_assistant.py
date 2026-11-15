@@ -129,7 +129,7 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("Не пересчитывай формулы", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("Не выдумывай", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
-        self.assertIn("not доказывает", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
 
 
     def test_normalizes_ollama_host_variants(self):
