@@ -558,6 +558,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     fight_signatures: dict[str, set[tuple[float, ...]]] = defaultdict(set)
     fight_valid_event_counts: Counter[str] = Counter()
     validated_event_rows = 0
+    strict_valid_event_rows = 0
+    legacy_exploratory_event_rows = 0
     skipped: Counter[str] = Counter()
 
     for row in rows:
@@ -624,6 +626,11 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             identity_quality = "legacy_identity_unverified"
             actor_id = "legacy_unknown_actor"
             target_id = "legacy_unknown_target"
+
+        if identity_quality == "measured_instance_ids" and snapshot_quality == "fresh":
+            strict_valid_event_rows += 1
+        else:
+            legacy_exploratory_event_rows += 1
 
         signature = _fight_stat_signature(row)
         if signature is None:
@@ -893,6 +900,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "bootstrap_replicates": BOOTSTRAP_REPLICATES,
         "input_event_rows": len(rows),
         "validated_event_rows_before_contamination": validated_event_rows,
+        "strict_valid_event_rows": strict_valid_event_rows,
+        "legacy_exploratory_event_rows": legacy_exploratory_event_rows,
         "contaminated_event_rows_excluded": contaminated_event_rows,
         "included_events": included_events,
         "included_luck_all_hit_events": included_luck_all_hit_events,
