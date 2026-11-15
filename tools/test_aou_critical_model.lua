@@ -143,4 +143,12 @@ expect(offMastery and offMastery[2], "310", "live stat remains visible when opti
 expect(findRow(offLines, "OptNoData") ~= nil, true, "disabled optimizer keeps the status row")
 Optim.Cfg.on = 1
 
+-- An empty innate-stat table must not block the documented special-stat fallback.
+avatar.GetInnateStats = function() return {} end
+avatar.GetSpecialStats = function() return statRows end
+local specialFallback = Optim.ReadStats(true)
+expect(specialFallback and specialFallback.M.total, 310, "special-stat fallback read")
+expect(Optim.LastStatsRead.source, "avatar.GetSpecialStats", "special-stat fallback source")
+expect(Optim.LastStatsRead.found, 7, "special-stat fallback recognized entries")
+
 print("DPScope critical model regression tests passed.")
