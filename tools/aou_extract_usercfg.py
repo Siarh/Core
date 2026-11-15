@@ -16,11 +16,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-EVENT_COLUMNS = (
+LEGACY_EVENT_COLUMNS = (
     "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|"
     "target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|"
     "block|parry|barrier|mount|multiplier_absorb|overall_absorbed|"
     "overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax"
+)
+EVENT_COLUMNS = (
+    "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|"
+    "target_max_hp|actor_id|target_id|critical|element|damage_source|resist|"
+    "absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|"
+    "overall_absorbed|overall_prevented|resolve_pool|recipient|ability|"
+    "M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
 )
 SECTION_NAME = "ScriptUserMods_DPScope"
 MAX_EVENTS = 1000
@@ -156,8 +163,11 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
         raise ValueError("В user.cfg сохранено 0 событий.")
 
     header = EVENT_COLUMNS.split("|")
+    legacy_header = LEGACY_EVENT_COLUMNS.split("|")
     rows: list[str] = []
     missing: list[int] = []
+    legacy_rows_upgraded = 0
+    new_rows = 0
     for number in range(1, count + 1):
         key = f"aou_evt_{number}"
         value = values.get(key)
@@ -165,12 +175,23 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
             missing.append(number)
             continue
         fields = value.split("|")
-        if len(fields) != len(header):
+        if len(fields) == len(header):
+            new_rows += 1
+            rows.append(value)
+        elif len(fields) == len(legacy_header):
+            # Upgrade legacy v1 rows in memory only. Old rows have no instance IDs
+            # or stat-snapshot age; leave those fields blank so analysis can label
+            # the resulting ME as exploratory, not strict.
+            old = dict(zip(legacy_header, fields))
+            normalized = [old.get(column, "") for column in header]
+            rows.append("|".join(normalized))
+            legacy_rows_upgraded += 1
+        else:
             raise ValueError(
-                f"{key}: найдено {len(fields)} полей вместо {len(header)}. "
+                f"{key}: найдено {len(fields)} полей; ожидается {len(header)} "
+                f"(актуальная схема) или {len(legacy_header)} (legacy v1). "
                 "Конфиг может иметь другую схему или быть повреждён."
             )
-        rows.append(value)
     if missing:
         preview = ", ".join(map(str, missing[:20]))
         suffix = " ..." if len(missing) > 20 else ""
@@ -178,7 +199,14 @@ def parse_dpscope_config(text: str) -> tuple[list[str], dict[str, int]]:
             f"В конфиге отсутствуют записи {preview}{suffix}. "
             "Неполный журнал не будет передан AI."
         )
-    return rows, {"stored_events": count, "rows_read": len(rows)}
+    return rows, {
+        "stored_events": count,
+        "rows_read": len(rows),
+        "current_schema_rows": new_rows,
+        "legacy_rows_upgraded": legacy_rows_upgraded,
+        "normalized_schema": "v2",
+        "source_schema": values.get("aou_evt_schema", "inferred_from_row_length"),
+    }
 
 
 def chunk_line(kind: str, value: str) -> list[str]:
@@ -191,7 +219,7 @@ def chunk_line(kind: str, value: str) -> list[str]:
 
 
 def write_aoucsv(path: Path, rows: list[str]) -> None:
-    lines = [f"AOUCSV|BEGIN|2|{len(rows)}|events"]
+    lines = [f"AOUCSV|BEGIN|3|{len(rows)}|events"]
     lines.extend(chunk_line("H", EVENT_COLUMNS))
     for index, row in enumerate(rows, 1):
         lines.extend(chunk_line(f"R{index}", row))
