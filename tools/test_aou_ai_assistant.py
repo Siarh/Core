@@ -49,6 +49,31 @@ class AIAssistantTests(unittest.TestCase):
                 }
             },
             "import_warnings": ["HP values partly estimated"],
+            "controlled_stat_efficiency": {
+                "status": "comparisons_available",
+                "method": "matched contexts",
+                "outcome_unit": "observed damage per event",
+                "minimum_fights_per_build": 3,
+                "included_events": 100,
+                "excluded_or_unusable": {},
+                "contaminated_fights_excluded": 1,
+                "insufficient_repeated_pairs": 2,
+                "limitations": ["Target ID not recorded"],
+                "comparisons": [{
+                    "classification": "DERIVED",
+                    "causal_status": "not_proven",
+                    "mode": "damage", "profile": "pve",
+                    "duration_band": "30-60 sec", "ability": "Test",
+                    "element": "light", "target_hp_band": "60-80%",
+                    "target_hp_quality": "measured_pre", "resolve_pool_band": "50-60%",
+                    "critical": True, "stat": "mastery", "from": 500, "to": 600,
+                    "delta_stat": 100, "baseline": {"fights": 3, "events": 30},
+                    "test": {"fights": 3, "events": 30},
+                    "marginal_efficiency_per_100": 25,
+                    "relative_change_per_100_percent": 2.5,
+                    "confidence_interval_95_per_100": [10, 40], "confidence": "MEDIUM"
+                }]
+            }
         }
         report = {
             "character": {"crit_chance_percent": 12.0, "max_hp_model": 50000},
@@ -70,6 +95,9 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("12345", rendered)
         self.assertIn("Small sample", rendered)
         self.assertIn("estimated_gain_percent", rendered)
+        self.assertEqual(payload["controlled_stat_efficiency"]["status"], "comparisons_available")
+        self.assertEqual(payload["controlled_stat_efficiency"]["comparisons"][0]["marginal_efficiency_per_100"], 25)
+        self.assertNotIn("not_selected", rendered)
 
     def test_compact_payload_keeps_heal_recipient_split(self):
         profile = {
@@ -100,6 +128,8 @@ class AIAssistantTests(unittest.TestCase):
     def test_system_instructions_forbid_invented_formulas(self):
         self.assertIn("Не пересчитывай формулы", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("Не выдумывай", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("not доказывает", ai.SYSTEM_INSTRUCTIONS)
 
 
     def test_normalizes_ollama_host_variants(self):
