@@ -230,5 +230,39 @@ class ChangingStatsTests(unittest.TestCase):
 
 
 
+    def test_burst_sustained_and_resolve_sample_windows(self):
+        rows = []
+        for second in range(40):
+            amount = 100 if second in {10, 11, 12} else 10
+            row = event("damage", "burst-fight", second, 1000, amount)
+            row.update({
+                "profile": "pve",
+                "resolve_pool": str(second * 2.5),
+                "target_id": "boss-1",
+                "actor_id": "player-1",
+            })
+            rows.append(row)
+
+        temporal = importer.build_temporal_performance(rows)
+        self.assertEqual(temporal["status"], "calculated")
+        self.assertEqual(temporal["burst_windows_seconds"], [1, 3, 5, 10, 15, 30])
+        self.assertEqual(temporal["sustained_windows_seconds"], [30, 60, 120, 180, 300])
+        fight = temporal["fights"][0]
+        self.assertEqual(fight["duration_seconds_estimate"], 40)
+        self.assertEqual(fight["duration_band"], "30-60 sec")
+        self.assertEqual(fight["target_count"], 1)
+        self.assertEqual(fight["target_type"], "single_target")
+        self.assertEqual(fight["burst_windows"]["3s"]["mean_rate_per_second"], 100.0)
+        self.assertEqual(fight["sustained_windows"]["30s"]["mean_rate_per_second"], 19.0)
+        self.assertEqual(fight["sustained_windows"]["60s"]["status"], "insufficient_duration")
+        resolve = fight["resolve_sample_summary"]
+        self.assertEqual(resolve["samples"], 40)
+        self.assertEqual(resolve["mean_sampled_pool"], 48.75)
+        self.assertEqual(resolve["peak_sampled_pool"], 97.5)
+        self.assertEqual(resolve["sampled_second_share_above"]["50"], 0.475)
+        self.assertIn("not time uptime", resolve["method"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
