@@ -234,59 +234,19 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 
 	local GlobalInfoData = self.SelectedCombatant:GetGlobalInfoByIndex(GlobalInfoIndex, self.ActiveMode)
 	local GlobalInfoPanel = self.DetailsPanel.GlobalInfoList[GlobalInfoIndex]
-	if not GlobalInfoData or not GlobalInfoPanel then return end
 
-	local isResolve = GlobalInfoData.ID == enumGlobalInfo.Determination
-	local hasSamples = (GlobalInfoData.Count or 0) > 0
-	local currentResolve = nil
-	if isResolve and unit and type(unit.GetRage) == "function" then
-		-- The row belongs to the selected combatant; for the local player this
-		-- is also the live current pool shown beside the title.
-		local resolveUnitId = self.SelectedCombatant.ID
-		if resolveUnitId == nil and avatar and type(avatar.GetId) == "function" then
-			local okId, playerId = pcall(avatar.GetId)
-			if okId then resolveUnitId = playerId end
-		end
-		if resolveUnitId ~= nil then
-			local okRage, value = pcall(unit.GetRage, resolveUnitId)
-			if okRage and type(value) == "number" then currentResolve = value end
-		end
-	end
-
-	-- Resolve stays visible even before the first combat sample. In that case
-	-- Avg is the live pool and Min/Max are marked unavailable, not fabricated.
-	if hasSamples or (isResolve and currentResolve ~= nil) then
+	if GlobalInfoData and GlobalInfoData.Count > 0 then
 		GlobalInfoPanel:Show()
+
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
-		GlobalInfoPanel.Bar:SetPosition(0, 15)
-		local averagePool = hasSamples and GlobalInfoData.Avg or currentResolve
-		local currentPool = currentResolve ~= nil and currentResolve or averagePool
-		local panelWidth = GlobalInfoPanel:GetWidth()
-		if type(panelWidth) ~= "number" or panelWidth <= 0 then panelWidth = 356 end
-		local percentage = isResolve and currentPool or GlobalInfoData.Percentage
-		percentage = math.max(0, math.min(100, tonumber(percentage) or 0))
-		GlobalInfoPanel.Bar:SetWidth(panelWidth * (percentage / 100))
+		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
-		if isResolve then
-			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d"))
-			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
-			if hasSamples then
-				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
-			else
-				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
-			end
-		else
-			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
-			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
-		end
+		GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))
+		GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min , "%f3K5"))
+		GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg , "%f3K5"))
+		GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max , "%f3K5"))
+		GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage , "%d"))
 	end
 end
 --------------------------------------------------------------------------------
@@ -331,47 +291,12 @@ function TUMeterGUI:UpdateOptim()
 	end
 	local height = 826
 
-	local selected = self.SelectedCombatant
+	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
-	local optimizerCombatant = nil
-	local layoutCombatant = selected
 	local lines = nil
-	local playerId = nil
-	if avatar and type(avatar.GetId) == "function" then
-		local ok, id = pcall(avatar.GetId)
-		if ok then playerId = id end
-	end
-
-	if fight and playerId ~= nil then
-		-- The optimizer always uses the local player's combatant, even when the
-		-- user clicked another party member in the meter.
-		if selected and selected.ID == playerId then
-			optimizerCombatant = selected
-		else
-			local okOwn, own = pcall(fight.GetCombatant, fight, { id = playerId })
-			if okOwn then optimizerCombatant = own end
-		end
-		layoutCombatant = selected or optimizerCombatant
-
-		-- No own hit has been recorded yet: still build the live-stat-only
-		-- optimizer block from an empty data shell instead of hiding the panel.
-		if not optimizerCombatant then
-			local function emptyMode()
-				return { Amount = 0, AmountPerSec = 0, SpellsList = {} }
-			end
-			optimizerCombatant = {
-				Data = {
-					[enumMode.Dps] = emptyMode(),
-					[enumMode.Hps] = emptyMode(),
-					[enumMode.Def] = emptyMode(),
-					[enumMode.IHps] = emptyMode()
-				}
-			}
-		end
-	end
-
-	if fight and optimizerCombatant and not self.Hovering then
-		local ok, res = pcall(Optim.BuildLines, optimizerCombatant, fight.Timer:GetElapsedTime(), self.ActiveMode)
+	-- only for the player, and not while a spell is pointed (its details use the lower part of the panel)
+	if c and fight and not self.Hovering and avatar.IsExist() and c.ID == avatar.GetId() then
+		local ok, res = pcall(Optim.BuildLines, c, fight.Timer:GetElapsedTime(), self.ActiveMode)
 		if ok then
 			lines = res
 		else
@@ -381,12 +306,10 @@ function TUMeterGUI:UpdateOptim()
 	end
 
 	if lines then
-		-- Put the block after the currently displayed player's spell list.
+		-- put the block right after the last displayed spell
 		local n = 0
-		if layoutCombatant and type(layoutCombatant.GetSpellByIndex) == "function" then
-			for i = 1, MAXSPELLS do
-				if layoutCombatant:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
-			end
+		for i = 1, MAXSPELLS do
+			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
 		end
 		local gap = Settings.OptGap or 36
 		local y = dp.OptSpellTop + n * 18 + gap
@@ -396,9 +319,8 @@ function TUMeterGUI:UpdateOptim()
 		local W = Optim.ToWString or userMods.ToWString
 		-- a cell starting with "@" is the key of a localized text
 		local function cell(v)
-			local value = tostring(v or "")
-			if string.sub(value, 1, 1) == "@" then return Optim.Text(string.sub(value, 2)) end
-			return W(value)
+			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
+			return W(v)
 		end
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
@@ -675,7 +597,6 @@ function TUMeterGUI:Init()
 	local totalPanelDesc = self.MainPanel.TotalPanel:GetDesc()
 	local playerPanelDesc = self.MainPanel:GetChildByName("PlayerInfoPanel"):GetDesc()
 	local spellPanelDesc = self.DetailsPanel:GetChildByName("SpellPanel"):GetDesc()
-	local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()
 	local spellInfoPanelDesc = self.DetailsPanel:GetChildByName("SpellDetailPanel"):GetDesc()
 
 	-------------------------------------------------------------------------------
@@ -710,9 +631,7 @@ function TUMeterGUI:Init()
 	local GlobalInfoOffset = GlobalInfoHeaderOffset + 18
 	for extraIndex = 1, EXTRATYPES do
 		local wtName = "GlobalInfoPanel" .. extraIndex
-		-- Use the dedicated 356px global-info row: its Count and Min/Avg/Max
-		-- fields have their own non-overlapping positions.
-		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, spellInfoPanelDesc, self.DetailsPanel)
 		self.DetailsPanel.GlobalInfoList[extraIndex]:SetPosition(22, GlobalInfoOffset + (extraIndex-1) * 18)
 	end
 

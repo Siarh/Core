@@ -163,7 +163,7 @@ Optim.RU = {
 	OptAICrit = "Крит / обычные удары",
 	OptAIInsight = "AI: вывод",
 	OptAIFocus = "AI: следующий шаг",
-	OptHelp3 = "/aou ai on|off|status|advice|export, caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, statdiag, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
+	OptHelp3 = "/aou ai on|off|status|advice|export, caut N, resolvecoef 0.015|0.0015, mark имя, rec list|export [N], eq on|off, bal 0-3, auto, probe, hptest, mode pve|pvp, role dd|heal|auto, flag on|off, hp N, tw 1-10, font 1-3, show, reset",
 }
 
 -- UTF-8 (Cyrillic) -> Windows-1251 bytes
@@ -842,47 +842,16 @@ end
 --------------------------------------------------------------------------------
 -- Character stats read by the addon (best effort: the API names are not verified for 7.0)
 --------------------------------------------------------------------------------
-local function hasEntries(value)
-	if type(value) ~= "table" then return false end
-	local ok, key = pcall(next, value)
-	return ok and key ~= nil
-end
-
 local function getStatList()
-	-- The normal Allods API is avatar.GetInnateStats(). Some client forks
-	-- expose the same stat records through GetSpecialStats or the fairy-bonus
-	-- stat list. An empty table is not a successful read: continue to fallbacks.
-	local getters = {
-		{ "avatar.GetInnateStats", avatar, "GetInnateStats" },
-		{ "avatar.GetSpecialStats", avatar, "GetSpecialStats" },
-	}
-	for i = 1, #getters do
-		local entry = getters[i]
-		local fn = entry[2] and entry[2][entry[3]]
-		if type(fn) == "function" then
-			local ok, list = pcall(fn)
-			if ok and hasEntries(list) then return list, entry[1] end
+	local list = nil
+	pcall(function()
+		if avatar and avatar.GetInnateStats then
+			list = avatar.GetInnateStats()
+		elseif unit and unit.GetInnateStats then
+			list = unit.GetInnateStats(avatar.GetId())
 		end
-	end
-
-	-- GetStatsBonusesPart exposes the character-stat entries used by the
-	-- patron/fairy bonus selector. Use it only if the full stat getters failed.
-	if avatar and type(avatar.GetStatsBonusesPart) == "function" then
-		local ok, bonuses = pcall(avatar.GetStatsBonusesPart)
-		local list = ok and type(bonuses) == "table"
-			and bonuses.fairyBonus and bonuses.fairyBonus.stats or nil
-		if hasEntries(list) then return list, "avatar.GetStatsBonusesPart().fairyBonus.stats" end
-	end
-
-	-- Retain support for clients that provide this non-standard getter.
-	if unit and type(unit.GetInnateStats) == "function" and avatar and type(avatar.GetId) == "function" then
-		local okId, id = pcall(avatar.GetId)
-		if okId and id ~= nil then
-			local ok, list = pcall(unit.GetInnateStats, id)
-			if ok and hasEntries(list) then return list, "unit.GetInnateStats" end
-		end
-	end
-	return nil, "no-stat-list"
+	end)
+	return list
 end
 
 local function toText(v)
@@ -893,92 +862,37 @@ local function toText(v)
 		if common.IsWString and common.IsWString(v) then return userMods.FromWString(v) end
 		return nil
 	end)
-	if ok and type(r) == "string" then return r end
-	-- Some client builds return a wide-string wrapper without exposing it
-	-- through common.IsWString; safely try the matching converter as fallback.
-	if userMods and type(userMods.FromWString) == "function" then
-		local okWide, wideText = pcall(userMods.FromWString, v)
-		if okWide and type(wideText) == "string" then return wideText end
-	end
+	if ok then return r end
 	return nil
 end
 
 -- avatar.GetInnateStats() entries (keys start at 0): { sysName = "ENUM_InnateStats_Plain", base, talents, equipment,
 -- buffs, enchants, fairyBonus, effective, ... }.  base = free points placed by the player, talents = development milestones;
 -- fixed = talents + fairy + buffs (effects) + enchants, equipment = what insignias can switch inside a group
-local SYSNAMES = {
-	Plain = "M", Mastery = "M", plain = "M", mastery = "M",
-	Rage = "R", Determination = "R", rage = "R", determination = "R",
-	Finisher = "U", Ruthlessness = "U", finisher = "U", ruthlessness = "U",
-	CritChance = "L", Luck = "L", critchance = "L", luck = "L",
-	Vitality = "S", Fortitude = "S", vitality = "S", fortitude = "S",
-	Will = "W", will = "W",
-	Lifesteal = "B", Bloodthirst = "B", lifesteal = "B", bloodthirst = "B",
-	Endurance = "C", Caution = "C", endurance = "C", caution = "C"
-}
+local SYSNAMES = { Plain = "M", Rage = "R", Finisher = "U", CritChance = "L", Vitality = "S", Will = "W", Lifesteal = "B", Endurance = "C" }
 
-local function statNumber(value)
-	if value == nil then return nil end
-	local number = tonumber(value)
-	if number ~= nil then return number end
-	local failedBefore = Optim.NumConversionFailed or 0
-	number = N(value)
-	if (Optim.NumConversionFailed or 0) > failedBefore then return nil end
-	return number
-end
-
-function Optim.ReadStats(allowPartial)
-	local list, source = getStatList()
-	if type(list) ~= "table" then
-		Optim.LastStatsRaw = {}
-		Optim.LastStatsRead = { listType = type(list), source = source, found = 0, entries = 0 }
-		return nil
-	end
-	local out, found, entries = {}, 0, 0
-	local rawRows = {}
-	for _, e in pairs(list) do
-		entries = entries + 1
-		-- The documented API returns tables; keep field reads protected so a
-		-- client-side wrapper cannot abort the entire optimizer refresh.
-		local ok, systemName, effective, baseValue, talentsValue, fairyValue, buffsValue, enchantsValue = pcall(function()
-			return e.sysName, e.effective, e.base, e.talents, e.fairyBonus, e.buffs, e.enchants
-		end)
-		if ok then
-			systemName = toText(systemName)
-			local rawValue = statNumber(effective)
-			if #rawRows < 16 then
-				rawRows[#rawRows + 1] = {
-					name = systemName or ("<" .. type(e.sysName) .. ">"),
-					value = rawValue,
-					nameType = type(e.sysName)
-				}
-			end
-			if type(systemName) == "string" then
-				local nm = string.match(systemName, "([^_]+)$") or systemName
-				local code = SYSNAMES[nm] or SYSNAMES[string.lower(nm)]
-				local eff = rawValue
-				if code and eff ~= nil then
-					local base = statNumber(baseValue) or 0
-					local talents = statNumber(talentsValue) or 0
-					local fairy = statNumber(fairyValue) or 0
-					local buffs = statNumber(buffsValue) or 0
-					local enchants = statNumber(enchantsValue) or 0
+function Optim.ReadStats()
+	local list = getStatList()
+	if not list then return nil end
+	local out, found = {}, 0
+	pcall(function()
+		for _, e in pairs(list) do
+			if type(e) == "table" and type(e.sysName) == "string" then
+				local nm = (string.gsub(e.sysName, "^ENUM_InnateStats_", ""))
+				local code = SYSNAMES[nm]
+				local eff = tonumber(e.effective)
+				if code and eff then
 					out[code] = {
 						total = eff,
-						base = base,
-						fixed = talents + fairy + buffs + enchants,
+						base = tonumber(e.base) or 0,
+						fixed = (tonumber(e.talents) or 0) + (tonumber(e.fairyBonus) or 0) + (tonumber(e.buffs) or 0) + (tonumber(e.enchants) or 0),
 					}
 					found = found + 1
 				end
 			end
 		end
-	end
-	Optim.LastStatsRaw = rawRows
-	Optim.LastStatsRead = { listType = "table", source = source, found = found, entries = entries }
-	-- The normal calculation path still requires at least three mapped stats.
-	-- The GUI can request a partial snapshot to avoid hiding valid live values.
-	if found < 3 and not allowPartial then return nil end
-	if found == 0 then return nil end
+	end)
+	if found < 3 then return nil end
 	return out
 end
 
@@ -1006,32 +920,6 @@ local function fmtTable(tbl, maxFields)
 	if n > maxFields then parts[#parts + 1] = "...(" .. n .. ")" end
 	return "{" .. table.concat(parts, " ") .. "}"
 end
--- /aou statdiag: report the live stat API source and raw enum names.
--- This is deliberately read-only and does not change optimizer settings.
-function Optim.StatsDiag()
-	local values = Optim.ReadStats(true)
-	local state = Optim.LastStatsRead or {}
-	say("statdiag: source=" .. tostring(state.source) ..
-		" entries=" .. tostring(state.entries or 0) ..
-		" recognized=" .. tostring(state.found or 0) ..
-		" auto=" .. tostring(Optim.Cfg.auto) ..
-		" optimizer=" .. tostring(Optim.Cfg.on))
-	say("API: innate=" .. type(avatar and avatar.GetInnateStats) ..
-		" special=" .. type(avatar and avatar.GetSpecialStats) ..
-		" bonuses=" .. type(avatar and avatar.GetStatsBonusesPart) ..
-		" rage=" .. type(unit and unit.GetRage))
-	for i, row in ipairs(Optim.LastStatsRaw or {}) do
-		sayLong("  " .. tostring(row.name) .. "=" .. tostring(row.value) ..
-			" (" .. tostring(row.nameType) .. ")")
-	end
-	if values then
-		for _, code in ipairs({ "M", "R", "U", "L", "S", "W", "B", "C" }) do
-			local item = values[code]
-			if item then say(code .. "=" .. I(item.total) .. " base=" .. I(item.base)) end
-		end
-	end
-end
-
 
 local function summarize(label, ok, r)
 	if not ok then
@@ -1156,34 +1044,6 @@ function Optim.Probe()
 				local ok, r = pcall(fn, avatar.GetId())
 				if not ok or r == nil then ok, r = pcall(fn) end
 				summarize(label .. "." .. found[j], ok, r)
-			end
-		end
-	end
-
-	-- Entity metadata diagnostics: verify the exact object/unit API contract used by the analytics journal.
-	-- This is deliberately read-only and runs only when /aou probe is invoked.
-	local probeIds = {}
-	local okAvatarId, avatarId = pcall(function() return avatar.GetId() end)
-	if okAvatarId and avatarId ~= nil then probeIds[#probeIds + 1] = { "avatar", avatarId } end
-	local okTarget, targetId = pcall(function() return Optim.GetTarget() end)
-	if okTarget and targetId ~= nil then probeIds[#probeIds + 1] = { "target", targetId } end
-	local entityChecks = {
-		{ "object", object, "GetName" }, { "object", object, "IsUnit" }, { "object", object, "IsMob" },
-		{ "unit", unit, "GetLevel" }, { "unit", unit, "GetQuality" }
-	}
-	for i = 1, #probeIds do
-		local idLabel, id = probeIds[i][1], probeIds[i][2]
-		say("entity probe " .. idLabel .. " id=" .. tostring(id))
-		for j = 1, #entityChecks do
-			local check = entityChecks[j]
-			local okFn, fn = pcall(function() return check[2] and check[2][check[3]] end)
-			if not okFn then
-				say(check[1] .. "." .. check[3] .. " lookup error")
-			elseif type(fn) ~= "function" then
-				say(check[1] .. "." .. check[3] .. " unavailable (" .. type(fn) .. ")")
-			else
-				local okResult, result = pcall(fn, id)
-				summarize(idLabel .. " " .. check[1] .. "." .. check[3], okResult, result)
 			end
 		end
 	end
@@ -1374,6 +1234,7 @@ end
 
 function Optim.BuildLines(c, fightTime, activeMode)
 	local cfg = Optim.Cfg
+	if cfg.on ~= 1 then return nil end
 
 	local dd, hl, df = c.Data[enumMode.Dps], c.Data[enumMode.Hps], c.Data[enumMode.Def]
 	if not dd or not hl then return nil end
@@ -1441,44 +1302,10 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		end
 	end
 
-	-- Always read the character snapshot for display. The auto switch controls
-	-- whether the optimizer uses these values for its calculation, not whether
-	-- the user's current characteristics are visible in the panel.
-	local liveStats = Optim.ReadStats(true)
-	local totalStats = (cfg.on == 1 and cfg.auto == 1 and Optim.LastStatsRead and Optim.LastStatsRead.found >= 3) and liveStats or nil
+	local totalStats = cfg.auto == 1 and Optim.ReadStats() or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
-	local manualOffense = N(cfg.fM) + N(cfg.fR) + N(cfg.fU) + N(cfg.L) +
-		N(cfg.bM) + N(cfg.bR) + N(cfg.bU) + N(cfg.eM) + N(cfg.eR) + N(cfg.eU)
-	local manualDefense = N(cfg.fS) + N(cfg.fW) + N(cfg.fB) +
-		N(cfg.bS) + N(cfg.bW) + N(cfg.bB) + N(cfg.eS) + N(cfg.eW) + N(cfg.eB)
-	local hasManualStats = manualOffense + manualDefense > 0
-	local missingAutomaticStats = not totalStats and not hasManualStats
-	if cfg.on ~= 1 or not o or N(o.pw) <= 0 or missingAutomaticStats then
-		-- Current character stats are useful even before this fight has enough
-		-- Resolve/HP samples for a recommendation, or when the API only provides
-		-- a partial snapshot. Never replace valid live rows with a blank panel.
-		if o and N(o.pw) > 0 and missingAutomaticStats then
-			add("OptSet")
-		else
-			add("OptNoData")
-		end
-		local shown = 0
-		local function addCurrentOnly(key, stat, manualValue)
-			local value = stat and stat.total
-			if value == nil and manualValue > 0 then value = manualValue end
-			if value ~= nil then
-				add(key, I(value), "-", "-")
-				shown = shown + 1
-			end
-		end
-		addCurrentOnly("OptM", liveStats and liveStats.M, N(cfg.fM) + N(cfg.bM) + N(cfg.eM))
-		addCurrentOnly("OptR", liveStats and liveStats.R, N(cfg.fR) + N(cfg.bR) + N(cfg.eR))
-		addCurrentOnly("OptU", liveStats and liveStats.U, N(cfg.fU) + N(cfg.bU) + N(cfg.eU))
-		addCurrentOnly("OptL", liveStats and liveStats.L, N(cfg.L))
-		addCurrentOnly("OptS", liveStats and liveStats.S, N(cfg.fS) + N(cfg.bS) + N(cfg.eS))
-		addCurrentOnly("OptW", liveStats and liveStats.W, N(cfg.fW) + N(cfg.bW) + N(cfg.eW))
-		addCurrentOnly("OptB", liveStats and liveStats.B, N(cfg.fB) + N(cfg.bB) + N(cfg.eB))
-		if shown == 0 then add("OptSet") end
+	if not o or o.pw <= 0 then
+		add("OptNoData")
 		add("OptHelpRow")
 		appendAI(lines, makeAIContext())
 		return lines
@@ -2096,8 +1923,6 @@ function Optim.OnSlash(text)
 		else
 			Optim.RecList(tonumber(args[4]) or 10)
 		end
-	elseif cmd == "statdiag" then
-		Optim.StatsDiag()
 	elseif cmd == "probe" then
 		Optim.Probe()
 	elseif cmd == "scan" then
