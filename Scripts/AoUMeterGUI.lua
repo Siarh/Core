@@ -489,14 +489,14 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
-	-- Runtime fallback: some Sunshine event callbacks do not expose a target
-	-- object to the analytics journal even though the legacy meter/optimizer
-	-- already captured the last outgoing damage event. Build one display row
-	-- directly from that event so the opponent block is not silently absent.
-	if #rows == 0 and Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] then
-		local ev = Optim.LastEv[enumMode.Dps]
-		local targetId = ev.target
-		if not targetId and type(Optim.GetTarget) == "function" then
+	-- Runtime fallback: always try the current target when the analytics journal
+	-- has no profile. The previous version nested this entire read under LastEv,
+	-- so no target was displayed whenever the optimizer had not captured a raw
+	-- event (for example, when its optional tracking switch was off).
+	if #rows == 0 then
+		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
+		local targetId = ev and ev.target or nil
+		if not targetId and Optim and type(Optim.GetTarget) == "function" then
 			local okTarget, currentTarget = pcall(Optim.GetTarget)
 			if okTarget then targetId = currentTarget end
 		end
@@ -531,15 +531,18 @@ function TUMeterGUI:UpdateOpponentInfo()
 				if okHp and real == true and tonumber(current) and tonumber(maximum) and maximum > 0 then
 					row.hpCurrent, row.hpLimit = tonumber(current), tonumber(maximum)
 					row.hpPercent = row.hpCurrent / row.hpLimit * 100
+				elseif okHp and real == false and tonumber(current) and tonumber(current) >= 0 and tonumber(current) <= 100 then
+					-- Sunshine may expose only the target's current HP percentage.
+					row.hpCurrentPercent = tonumber(current)
 				end
 			end
-			local element = targetSchoolLabel(ev.sysSubElement or ev.subElement or ev.element)
-			local resisted = targetCompactNumber(ev.resist)
-			if element ~= "" and resisted ~= "" and tonumber(ev.resist) and tonumber(ev.resist) > 0 then
+			local element = ev and targetSchoolLabel(ev.sysSubElement or ev.subElement or ev.element) or ""
+			local resisted = ev and targetCompactNumber(ev.resist) or ""
+			if ev and element ~= "" and resisted ~= "" and tonumber(ev.resist) and tonumber(ev.resist) > 0 then
 				row.resistSchools[1] = { element = ev.sysSubElement or ev.subElement or ev.element, amount = tonumber(ev.resist), samples = 1 }
 			end
 			if targetReadableName(row.name) ~= "" or row.kind ~= "unknown" or tonumber(row.level)
-				or row.hpCurrent or #row.resistSchools > 0 then
+				or row.hpCurrent or row.hpCurrentPercent or #row.resistSchools > 0 then
 				rows[1], total = row, 1
 			end
 		end
@@ -585,6 +588,9 @@ function TUMeterGUI:UpdateOpponentInfo()
 			local marker = data.hpBeforeQuality == "measured_pre" and "" or "~"
 			hpText = (russian and "HP до удара " or "HP pre-hit ") .. marker
 				.. string.format("%.0f", tonumber(data.hpBeforePercent)) .. "%"
+		elseif tonumber(data.hpCurrentPercent) then
+			hpText = (russian and "HP " or "HP ") .. "~"
+				.. string.format("%.0f", tonumber(data.hpCurrentPercent)) .. "%"
 		end
 		if hpText ~= "" then parts[#parts + 1] = hpText end
 
