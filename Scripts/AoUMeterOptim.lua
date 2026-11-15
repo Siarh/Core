@@ -1048,6 +1048,34 @@ function Optim.Probe()
 		end
 	end
 
+	-- Entity metadata diagnostics: verify the exact object/unit API contract used by the analytics journal.
+	-- This is deliberately read-only and runs only when /aou probe is invoked.
+	local probeIds = {}
+	local okAvatarId, avatarId = pcall(function() return avatar.GetId() end)
+	if okAvatarId and avatarId ~= nil then probeIds[#probeIds + 1] = { "avatar", avatarId } end
+	local okTarget, targetId = pcall(function() return Optim.GetTarget() end)
+	if okTarget and targetId ~= nil then probeIds[#probeIds + 1] = { "target", targetId } end
+	local entityChecks = {
+		{ "object", object, "GetName" }, { "object", object, "IsUnit" }, { "object", object, "IsMob" },
+		{ "unit", unit, "GetLevel" }, { "unit", unit, "GetQuality" }
+	}
+	for i = 1, #probeIds do
+		local idLabel, id = probeIds[i][1], probeIds[i][2]
+		say("entity probe " .. idLabel .. " id=" .. tostring(id))
+		for j = 1, #entityChecks do
+			local check = entityChecks[j]
+			local okFn, fn = pcall(function() return check[2] and check[2][check[3]] end)
+			if not okFn then
+				say(check[1] .. "." .. check[3] .. " lookup error")
+			elseif type(fn) ~= "function" then
+				say(check[1] .. "." .. check[3] .. " unavailable (" .. type(fn) .. ")")
+			else
+				local okResult, result = pcall(fn, id)
+				summarize(idLabel .. " " .. check[1] .. "." .. check[3], okResult, result)
+			end
+		end
+	end
+
 	-- global tables that may hold stat functions
 	local gnames = { "stats", "stat", "innateStats", "avatarStats", "charStats", "statistics", "characteristics" }
 	local gfound = {}
