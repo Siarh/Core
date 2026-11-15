@@ -3,6 +3,7 @@ import unittest
 
 from aou_extract_usercfg import (
     EVENT_COLUMNS,
+    LEGACY_EVENT_COLUMNS,
     extract_named_table,
     parse_config_value,
     parse_dpscope_config,
@@ -12,12 +13,24 @@ from aou_extract_usercfg import (
 def row(number: int) -> str:
     fields = [
         "fight1", "pve", str(number), "damage", "1000", "0.5",
+        "measured_pre", "50000", "player-1", "target-1", "0",
+        "physical", "test", "0", "0", "0", "0", "0", "0", "0",
+        "0", "0", "0", "50", "self", "Ability name", "100", "200",
+        "300", "40", "10", "20", "30", "40", "50000", str(number), "0",
+    ]
+    assert len(fields) == len(EVENT_COLUMNS.split("|"))
+    return "|".join(fields)
+
+
+def legacy_row(number: int) -> str:
+    fields = [
+        "fight1", "pve", str(number), "damage", "1000", "0.5",
         "measured_pre", "50000", "0", "physical", "test", "0",
         "0", "0", "0", "0", "0", "0", "0", "0", "0", "50",
         "self", "Ability name", "100", "200", "300", "40", "10",
         "20", "30", "40", "50000",
     ]
-    assert len(fields) == len(EVENT_COLUMNS.split("|"))
+    assert len(fields) == len(LEGACY_EVENT_COLUMNS.split("|"))
     return "|".join(fields)
 
 
@@ -26,7 +39,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         text = "\n".join([
             "table_begin ScriptUserMods_DPScope",
             " table_begin data",
-            '  aou_evt_schema=l"v1"',
+            '  aou_evt_schema=l"v2"',
             "  aou_evt_count=2",
             f'  aou_evt_1=l"{row(1)}"',
             f'  aou_evt_2=l"{row(2)}"',
@@ -90,6 +103,46 @@ class UserCfgExtractorTests(unittest.TestCase):
         )
         self.assertIn("table_begin child", block)
         self.assertIn("x=1", block)
+
+
+    def test_upgrades_legacy_v1_rows_without_inventing_ids_or_snapshot_age(self):
+        text = "\n".join([
+            "table_begin ScriptUserMods_DPScope",
+            " table_begin data",
+            '  aou_evt_schema=l"v1"',
+            "  aou_evt_count=1",
+            f'  aou_evt_1=l"{legacy_row(7)}"',
+            " table_end data",
+            "table_end ScriptUserMods_DPScope",
+        ])
+        rows, summary = parse_dpscope_config(text)
+        fields = dict(zip(EVENT_COLUMNS.split("|"), rows[0].split("|")))
+        self.assertEqual(summary["legacy_rows_upgraded"], 1)
+        self.assertEqual(summary["current_schema_rows"], 0)
+        self.assertEqual(fields["actor_id"], "")
+        self.assertEqual(fields["target_id"], "")
+        self.assertEqual(fields["stat_sample_age"], "")
+        self.assertEqual(fields["M"], "100")
+        self.assertEqual(fields["kind"], "damage")
+
+    def test_reads_all_one_thousand_saved_event_rows(self):
+        lines = [
+            "table_begin ScriptUserMods_DPScope",
+            " table_begin data",
+            '  aou_evt_schema=l"v1"',
+            "  aou_evt_count=1000",
+        ]
+        lines.extend(
+            f'  aou_evt_{index}=l"{legacy_row(index)}"'
+            for index in range(1, 1001)
+        )
+        lines.extend([" table_end data", "table_end ScriptUserMods_DPScope"])
+        rows, summary = parse_dpscope_config("\n".join(lines))
+        self.assertEqual(len(rows), 1000)
+        self.assertEqual(summary["stored_events"], 1000)
+        self.assertEqual(summary["rows_read"], 1000)
+        self.assertEqual(summary["legacy_rows_upgraded"], 1000)
+
 
 
 if __name__ == "__main__":
