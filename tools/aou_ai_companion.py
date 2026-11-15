@@ -242,10 +242,16 @@ def run_pipeline(args: argparse.Namespace) -> int:
     )
     me = profile["controlled_stat_efficiency"]
     print(
-        f"ME: strict={me['strict_comparison_count']}, "
+        f"ME event rows: input={me['input_event_rows']}, "
+        f"strict_valid={me['strict_valid_event_rows']}, "
+        f"legacy_exploratory={me['legacy_exploratory_event_rows']}, "
+        f"contaminated={me['contaminated_event_rows_excluded']}."
+    )
+    print(
+        f"ME comparisons: strict={me['strict_comparison_count']}, "
         f"legacy exploratory={me['legacy_exploratory_comparison_count']}, "
         f"total={me['total_comparisons']}; "
-        "формула ME = delta_result / delta_stat."
+        "formula ME = delta_result / delta_stat."
     )
     print(f"Выходная папка: {out_dir}")
     print(f"Профиль: {profile_path}")
