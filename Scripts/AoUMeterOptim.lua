@@ -842,21 +842,47 @@ end
 --------------------------------------------------------------------------------
 -- Character stats read by the addon (best effort: the API names are not verified for 7.0)
 --------------------------------------------------------------------------------
+local function hasEntries(value)
+	if type(value) ~= "table" then return false end
+	local ok, key = pcall(next, value)
+	return ok and key ~= nil
+end
+
 local function getStatList()
-	-- Try the avatar API first, then the unit API if the first getter is
-	-- missing, errors, or returns no table.
-	if avatar and type(avatar.GetInnateStats) == "function" then
-		local ok, list = pcall(avatar.GetInnateStats)
-		if ok and type(list) == "table" then return list end
+	-- The normal Allods API is avatar.GetInnateStats(). Some client forks
+	-- expose the same stat records through GetSpecialStats or the fairy-bonus
+	-- stat list. An empty table is not a successful read: continue to fallbacks.
+	local getters = {
+		{ "avatar.GetInnateStats", avatar, "GetInnateStats" },
+		{ "avatar.GetSpecialStats", avatar, "GetSpecialStats" },
+	}
+	for i = 1, #getters do
+		local entry = getters[i]
+		local fn = entry[2] and entry[2][entry[3]]
+		if type(fn) == "function" then
+			local ok, list = pcall(fn)
+			if ok and hasEntries(list) then return list, entry[1] end
+		end
 	end
+
+	-- GetStatsBonusesPart exposes the character-stat entries used by the
+	-- patron/fairy bonus selector. Use it only if the full stat getters failed.
+	if avatar and type(avatar.GetStatsBonusesPart) == "function" then
+		local ok, bonuses = pcall(avatar.GetStatsBonusesPart)
+		local list = ok and type(bonuses) == "table"
+			and bonuses.fairyBonus and bonuses.fairyBonus.stats or nil
+		if hasEntries(list) then return list, "avatar.GetStatsBonusesPart().fairyBonus.stats" end
+	end
+
+	-- Retain support for clients that provide this non-standard getter.
 	if unit and type(unit.GetInnateStats) == "function" and avatar and type(avatar.GetId) == "function" then
 		local okId, id = pcall(avatar.GetId)
 		if okId and id ~= nil then
 			local ok, list = pcall(unit.GetInnateStats, id)
-			if ok and type(list) == "table" then return list end
+			if ok and hasEntries(list) then return list, "unit.GetInnateStats" end
 		end
 	end
-	return nil
+	return nil, "no-stat-list"
 end
 
 local function toText(v)
@@ -902,12 +928,14 @@ local function statNumber(value)
 end
 
 function Optim.ReadStats(allowPartial)
-	local list = getStatList()
+	local list, source = getStatList()
 	if type(list) ~= "table" then
-		Optim.LastStatsRead = { listType = type(list), found = 0, entries = 0 }
+		Optim.LastStatsRaw = {}
+		Optim.LastStatsRead = { listType = type(list), source = source, found = 0, entries = 0 }
 		return nil
 	end
 	local out, found, entries = {}, 0, 0
+	local rawRows = {}
 	for _, e in pairs(list) do
 		entries = entries + 1
 		-- The documented API returns tables; keep field reads protected so a
@@ -917,10 +945,18 @@ function Optim.ReadStats(allowPartial)
 		end)
 		if ok then
 			systemName = toText(systemName)
+			local rawValue = statNumber(effective)
+			if #rawRows < 16 then
+				rawRows[#rawRows + 1] = {
+					name = systemName or ("<" .. type(e.sysName) .. ">"),
+					value = rawValue,
+					nameType = type(e.sysName)
+				}
+			end
 			if type(systemName) == "string" then
 				local nm = string.match(systemName, "([^_]+)$") or systemName
 				local code = SYSNAMES[nm] or SYSNAMES[string.lower(nm)]
-				local eff = statNumber(effective)
+				local eff = rawValue
 				if code and eff ~= nil then
 					local base = statNumber(baseValue) or 0
 					local talents = statNumber(talentsValue) or 0
@@ -937,7 +973,8 @@ function Optim.ReadStats(allowPartial)
 			end
 		end
 	end
-	Optim.LastStatsRead = { listType = "table", found = found, entries = entries }
+	Optim.LastStatsRaw = rawRows
+	Optim.LastStatsRead = { listType = "table", source = source, found = found, entries = entries }
 	-- The normal calculation path still requires at least three mapped stats.
 	-- The GUI can request a partial snapshot to avoid hiding valid live values.
 	if found < 3 and not allowPartial then return nil end
@@ -969,6 +1006,32 @@ local function fmtTable(tbl, maxFields)
 	if n > maxFields then parts[#parts + 1] = "...(" .. n .. ")" end
 	return "{" .. table.concat(parts, " ") .. "}"
 end
+-- /aou statdiag: report the live stat API source and raw enum names.
+-- This is deliberately read-only and does not change optimizer settings.
+function Optim.StatsDiag()
+	local values = Optim.ReadStats(true)
+	local state = Optim.LastStatsRead or {}
+	say("statdiag: source=" .. tostring(state.source) ..
+		" entries=" .. tostring(state.entries or 0) ..
+		" recognized=" .. tostring(state.found or 0) ..
+		" auto=" .. tostring(Optim.Cfg.auto) ..
+		" optimizer=" .. tostring(Optim.Cfg.on))
+	say("API: innate=" .. type(avatar and avatar.GetInnateStats) ..
+		" special=" .. type(avatar and avatar.GetSpecialStats) ..
+		" bonuses=" .. type(avatar and avatar.GetStatsBonusesPart) ..
+		" rage=" .. type(unit and unit.GetRage))
+	for i, row in ipairs(Optim.LastStatsRaw or {}) do
+		sayLong("  " .. tostring(row.name) .. "=" .. tostring(row.value) ..
+			" (" .. tostring(row.nameType) .. ")")
+	end
+	if values then
+		for _, code in ipairs({ "M", "R", "U", "L", "S", "W", "B", "C" }) do
+			local item = values[code]
+			if item then say(code .. "=" .. I(item.total) .. " base=" .. I(item.base)) end
+		end
+	end
+end
+
 
 local function summarize(label, ok, r)
 	if not ok then
@@ -2023,6 +2086,8 @@ function Optim.OnSlash(text)
 		else
 			Optim.RecList(tonumber(args[4]) or 10)
 		end
+	elseif cmd == "statdiag" then
+		Optim.StatsDiag()
 	elseif cmd == "probe" then
 		Optim.Probe()
 	elseif cmd == "scan" then
