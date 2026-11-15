@@ -122,6 +122,46 @@ families. Will is available in PvP only with an explicit control_weight.
 The allocation is a greedy marginal search, not an exhaustive global optimum.
 Recommendations are model outputs, not proof of a best in-game build.
 
+Estimated marginal-efficiency model
+-----------------------------------
+Each activity report now includes model_marginal_efficiency (classification=ESTIMATED).
+It evaluates the deterministic formula at the current stat values and at +100,
++200, +300 and +400 points for formula-supported stats. Each point includes
+model result, marginal result per +100 and relative percent change per +100.
+A soft_knee_candidate is only a heuristic where marginal efficiency falls by
+at least 10% in two consecutive steps; it is not a server-verified soft cap.
+
+Pairwise interactions are also estimated from:
+    Score(X+100,Y+100) - Score(X+100) - Score(Y+100) + Score(base)
+Positive values are labelled synergy; negative values competition. They are
+interactions of this formula model under the supplied fixed event mix, not
+empirical proof that the stats interact this way on the live server.
+
+Assumptions and exclusions:
+- DPS/HPS use a per-second objective. Tank uses modelled survival seconds.
+- Event sequence, ability mix, HP phase and recorded per-event Resolve pools
+  are held fixed. Resolve growth is not recalculated for the alternative build.
+- Luck uses the formula's expected crit chance and x2 baseline. Raw critical/
+  normal averages across abilities are descriptive and are not inserted as
+  counterfactual crit coefficients.
+- Ruthlessness curves are omitted if any event lacks target HP.
+- Endurance sensitivity requires settings.class_k. Will requires PvP,
+  settings.control_weight and activity.control_windows.
+- Effective HPS is not produced unless the existing effective-heal evidence
+  requirements are met; nominal HPS is not silently substituted.
+- Stats without a supplied formula (e.g. Haste, Dominance, Vitality,
+  Steadfastness and Instinct placeholders) remain in stat_model_registry as
+  unsupported. No formula or ME is invented for them.
+- The model provides no confidence interval: these curves are ESTIMATED from
+  the formula, not measured experiments. Use controlled_stat_efficiency
+  (DERIVED) separately for one-stat comparisons across repeated, matched fights.
+
+The declarative stat_model_registry describes each known stat's scope,
+affected events, formula, caps, dependencies, PvE/PvP relevance, whether a
+formula is supported, whether the event callback snapshots it, and which
+allocation modes currently allow it. New stats should not become optimizable
+until their game formula and required event evidence are implemented.
+
 Reports also contain event amounts by target-HP phase (when target_hp is known)
 and first-half / second-half activity rates. Critical percentages are shown only
 for events where the actual critical flag is known. During counterfactual stat
