@@ -10,6 +10,7 @@
 		<Item href="SpellHeaderPanel/SpellHeaderPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="SpellDetailPanel/SpellDetailPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="SpellDetailHeaderPanel/SpellDetailHeaderPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
+		<Item href="OpponentPanel/OpponentPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="TextViews/SpellPlayerName.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 	</Children>
 	<BackLayer href="SpellInfoPanel.(WidgetLayerTiledTexture).xdb#xpointer(/WidgetLayerTiledTexture)" />
