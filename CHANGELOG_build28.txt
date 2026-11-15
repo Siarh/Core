@@ -227,3 +227,13 @@ Optimizer live-stat display and Resolve bar placement:
 - When a fight has no Resolve/HP samples yet, show all available current character stats with dashes for recommendation columns instead of leaving the analyzer parameters empty.
 - Lower only the global Resolve bar to the bottom of its row, below the text values; spell damage bars are unchanged.
 - Added runtime regression coverage for wide-string stat names, no-sample current-stat display, and the Resolve bar placement.
+
+
+Optimizer and Resolve display repair (follow-up):
+- The character snapshot is now read for display even when automatic optimization is disabled; manual/automatic selection still controls which values feed the optimization model.
+- A partial innate-stat response is retained for the visible current-stat rows instead of being discarded as if the API returned no data. The optimizer calculation still requires at least three recognized stats before using its automatic input.
+- Innate-stat enum parsing handles lower-case variants and extracts the enum suffix independently of its prefix.
+- The Resolve row now places the average pool value beside the localized label and no longer appends a misleading percent sign; Min / Avg / Max retain a separate, non-overlapping column.
+- Moved the count/value text widget out of the Min / Avg / Max column, lowered the Resolve bar by another 2 px, and tightened separators to fit the stats column.
+- Added regression coverage for automatic mode disabled, partial stat responses, Resolve value placement and the runtime-cloned detail-row template.
+- No combat records, saved legacy data, user.cfg or analytics thresholds were changed.
