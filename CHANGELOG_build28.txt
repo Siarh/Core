@@ -192,3 +192,11 @@ Target identity and resistance telemetry:
 - Resistance fields are reported as observed event components (resist, rune absorb, absorb, barrier, block, parry, etc.), not as a target's numeric resistance rating. The API does not document a general target-resistance-rating getter.
 - Target signature matching is an archetype match only; it does not prove the target's full encounter state, buffs, debuffs, equipment or resistance state.
 - Legacy v2 persisted rows remain aligned: v3 columns are appended, so legacy rows receive blank trailing metadata rather than shifted values.
+
+
+In-game opponent statistics panel:
+- Added a "Противники" / "Opponents" block to the selected player's current-fight details panel, listing the four highest-damage targets.
+- Displays target name, unit category (mob/player/NPC/unknown), level, quality, and available HP information.
+- Exact current/max HP and percentage are shown only from a recent exact health snapshot; otherwise the UI labels pre-hit HP percentage as an estimate or shows unavailable.
+- Displays API-reported resisted damage amounts by school and sample count when present. These are event mitigation amounts, not a character resistance rating.
+- Unknown target types remain separated by ObjectId; no cross-object merging is done in the live panel.
