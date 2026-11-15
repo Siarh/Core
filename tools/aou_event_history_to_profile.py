@@ -400,6 +400,9 @@ def build_event_effectiveness(rows: list[dict[str, str]]) -> dict[str, Any]:
         is_heal = bucket["kind"] in {"healing", "receivedheal"}
         results.append({
             **bucket,
+            "reported_amount": round(reported, 4),
+            "estimated_effective_amount": round(effective, 4),
+            "estimated_excess_amount": round(excess, 4),
             "classification": "ESTIMATED",
             "duration_seconds_estimate": duration,
             "reported_rate_per_second": round(reported / duration, 4),
