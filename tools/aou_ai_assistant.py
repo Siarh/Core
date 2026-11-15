@@ -31,6 +31,8 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Отдельно анализируй УВС (DPS), лечение себя, лечение союзников и защиту (TANK); не складывай разные режимы в одну метрику.
 - Учитывай размер выборки, HP coverage, Resolve pool coverage и warnings. При низкой полноте данных предпочитай следующий тест, а не уверенный совет.
 - Сравнивай активности только с оглядкой на их собственные условия; не объявляй победителем бой только из-за большего абсолютного урона.
+- temporal_performance содержит наблюдаемые burst/sustained окна, рассчитанные по полному таймеру боя с нулевыми тихими секундами. Называй их reported/raw DPS/HPS rate; не называй Effective DPS/HPS.
+- resolve_sample_summary даёт среднюю/пиковую Решимость и долю секунд с замерами выше порога. Это sample share по секундам с событиями, не реальный временной uptime; не переименовывай его в uptime.
 - Изменение характеристик между боями — полезный экспериментальный фактор, а не ошибка и не повод прекращать анализ. stat_comparison является только описательной сводкой и не доказывает причинность.
 - При наличии controlled_stat_efficiency используй только сравнения, где менялась одна характеристика, остальные характеристики были в допуске, контекст события совпадал, а на каждом наборе статов было не менее трёх независимых боёв. ME на +100 теперь основана на объёме совпавшего контекста способности за секунду полного таймера боя; дополнительно показывай средний размер события, 95% CI, число боёв и событий.
 - Для Удачи используй только critical_scope=all_hits: это сравнение Normal+Critical вместе, чтобы учитывать изменение доли критов. Не сравнивай Luck только внутри Normal или только внутри Critical.
@@ -189,6 +191,14 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         for item in (experimental.get("comparisons", []) or [])[:25]
     ]
 
+    temporal = profile.get("temporal_performance", {}) or {}
+    compact_temporal = {
+        key: temporal.get(key)
+        for key in ("status", "classification", "method", "burst_windows_seconds", "sustained_windows_seconds")
+        if key in temporal
+    }
+    compact_temporal["fights"] = (temporal.get("fights", []) or [])[:50]
+
     payload = {
         "product": "DPScope",
         "game_version": "Allods Sunshine 6.0",
@@ -205,6 +215,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         "import_summary": profile.get("import_summary", {}),
         "stat_comparison": profile.get("stat_comparison", {}),
         "controlled_stat_efficiency": compact_experimental,
+        "temporal_performance": compact_temporal,
         "warnings": list(dict.fromkeys(
             list(profile.get("import_warnings", []) or []) +
             list(report.get("warnings", []) or [])
