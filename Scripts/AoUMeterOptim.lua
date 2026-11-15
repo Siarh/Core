@@ -615,7 +615,11 @@ end
 
 local function lnF(M, R, U, L, pool, h, mm)
 	local c = math.min(1, fcrit(L) / 1000)
-	local critFactor = (Optim.CritModel and Optim.CritModel.factor) or (1 + c)
+	-- The per-ability Normal/Critical ratio shown by the advisor is observational:
+	-- without matching target, HP phase, Resolve, buffs and rotation, it is not a
+	-- valid counterfactual modifier. Keep the verified Luck prior (2x crit baseline)
+	-- in the optimizer until controlled event-level calibration has enough samples.
+	local critFactor = 1 + c
 	local m = masteryMult(M)
 	local r = 1 + R / 1000 * pool * N(Optim.Cfg.resolveCoef or 0.015)
 	local u = 1 + mm(U) * (1 - h)
