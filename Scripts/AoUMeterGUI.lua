@@ -57,7 +57,7 @@ local function targetReadableName(value)
 	if name == "" or string.match(name, "^userdata:") or string.match(name, "^table:") then return "" end
 	local visible = string.gsub(name, "[%s%?%p]", "")
 	local _, questionCount = string.gsub(name, "%?", "")
-	if visible == "" or (questionCount >= 2 and questionCount * 2 >= #name) then return "" end
+	if visible == "" or string.find(name, "%?%?") or (questionCount >= 2 and questionCount * 2 >= #name) then return "" end
 	return name
 end
 
