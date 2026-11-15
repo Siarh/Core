@@ -32,7 +32,8 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Считай ME только при сопоставимых условиях и изменении одной характеристики. Указывай режим, PvE/PvP, длительность, способность, цель/HP, Resolve, Normal/Critical, получателя лечения, число событий и независимых боёв.
 - Для damage/healing положительная ME означает рост результата. Для incoming отрицательная ME означает снижение входящего урона и является благоприятным защитным эффектом; не называй отрицательное значение плохим автоматически.
 - Не объединяй единицы и контексты разных способностей в одну среднюю ME и не строй абсолютный рейтинг по несовместимым сценариям. Показывай распределение сравнений по контекстам; при смешанных условиях пиши INSUFFICIENT DATA.
-- Проанализируй все переданные controlled_stat_efficiency.comparisons. Не ограничивайся первыми 25, не выбирай только удобные положительные результаты и не игнорируй отрицательные/нулевые результаты. Сверяй total_comparisons и included_events.
+- Проанализируй все переданные controlled_stat_efficiency.comparisons. Не ограничивайся первыми 25, не выбирай только удобные положительные результаты и не игнорируй отрицательные/нулевые результаты. Сверяй total_comparisons, strict_comparison_count, legacy_exploratory_comparison_count и included_events.
+- Разделяй evidence_tier=strict и evidence_tier=legacy_exploratory. Legacy сравнения без instance IDs или свежести снимка разрешено обсуждать только как гипотезы с VERY_LOW confidence; запрещено объединять их со strict ME или называть экспериментально подтверждёнными.
 - Если ожидается 1000 экспортных записей, сначала проверь input_data_coverage/import_summary: reconstructed/export_records, source_rows, combat_rows, skipped/included. Если число не совпадает или экспорт неполный, не утверждай, что все 1000 проанализированы.
 - При отсутствии валидных повторных сравнений ME не вычисляй по простому сравнению общего DPS двух разных боёв. Сообщай INSUFFICIENT DATA и предлагай тест, где меняется один стат.
 
@@ -181,7 +182,11 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
     compact_experimental = {
         key: experimental.get(key)
         for key in (
-            "status", "method", "outcome_unit", "luck_method",
+            "status", "method", "outcome_unit", "luck_method", "legacy_policy",
+            "total_comparisons", "strict_comparison_count",
+            "legacy_exploratory_comparison_count",
+            "input_event_rows", "validated_event_rows_before_contamination",
+            "contaminated_event_rows_excluded",
             "minimum_stat_step", "minimum_fights_per_build",
             "max_stat_snapshot_age_seconds", "included_events",
             "excluded_or_unusable", "contaminated_fights_excluded",
@@ -216,11 +221,12 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             str(item.get("mode", "unknown")),
             str(item.get("profile", "unknown")),
             str(item.get("critical_scope", "unknown")),
+            str(item.get("evidence_tier", "unknown")),
         )
         me_groups.setdefault(group_key, []).append(item)
 
     me_summary = []
-    for (stat, mode, profile_name, critical_scope), items in sorted(me_groups.items()):
+    for (stat, mode, profile_name, critical_scope, evidence_tier), items in sorted(me_groups.items()):
         values = [
             float(item["marginal_efficiency_per_100"])
             for item in items if item.get("marginal_efficiency_per_100") is not None
@@ -238,6 +244,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             "mode": mode,
             "profile": profile_name,
             "critical_scope": critical_scope,
+            "evidence_tier": evidence_tier,
             "context_comparison_count": len(items),
             "me_per_100_context_median": median(values) if values else None,
             "me_per_100_context_min": min(values) if values else None,
