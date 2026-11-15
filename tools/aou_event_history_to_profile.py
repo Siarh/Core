@@ -627,11 +627,6 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             actor_id = "legacy_unknown_actor"
             target_id = "legacy_unknown_target"
 
-        if identity_quality == "measured_instance_ids" and snapshot_quality == "fresh":
-            strict_valid_event_rows += 1
-        else:
-            legacy_exploratory_event_rows += 1
-
         signature = _fight_stat_signature(row)
         if signature is None:
             skipped["full_stat_snapshot_missing"] += 1
@@ -663,6 +658,10 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         duration = _duration_band(duration_seconds)
         validated_event_rows += 1
         fight_valid_event_counts[fight] += 1
+        if identity_quality == "measured_instance_ids" and snapshot_quality == "fresh":
+            strict_valid_event_rows += 1
+        else:
+            legacy_exploratory_event_rows += 1
         base_stratum = (
             kind, profile, profile_environment, duration, actor_id, target_id,
             identity_quality, snapshot_quality,
