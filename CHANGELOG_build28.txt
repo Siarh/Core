@@ -2,6 +2,8 @@ DPScope build 28 - Allods Sunshine 6.0
 ======================================
 
 Changes
+- Opponent summary space now collapses when no readable target rows exist and expands only for rows actually displayed.
+- Spell, detail, and optimizer panels reflow with the visible opponent section height.
 - Analytics runs from the resolved DPScope combatant pipeline, once per event in the current fight.
 - Personal analytics are filtered to the local player; party member events are not mixed into personal totals.
 - Damage and healing phase reports use target HP snapshots where the game API exposes them.

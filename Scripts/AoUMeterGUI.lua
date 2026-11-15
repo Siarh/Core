@@ -435,6 +435,36 @@ function TUMeterGUI:DisplaySpell(spellIndex)
 	end
 end
 --------------------------------------------------------------------------------
+-- Collapse or expand the opponent block to the number of readable rows.
+-- All panels below it move together, and the optimizer uses the new top offset.
+--------------------------------------------------------------------------------
+local function movePanelVertically(panel, delta)
+	if not panel or delta == 0 then return end
+	local x, y = panel:GetPosition()
+	panel:SetPosition(x, y + delta)
+end
+
+local function updateOpponentSectionLayout(dp, displayedRows)
+	local sectionHeight = displayedRows > 0 and (18 + displayedRows * 18 + 7) or 0
+	local previousHeight = tonumber(dp.OpponentSectionHeight) or TARGET_INFO_HEIGHT
+	local delta = sectionHeight - previousHeight
+	if delta ~= 0 then
+		movePanelVertically(dp.SpellHeaderPanel, delta)
+		movePanelVertically(dp.SpellDetailsHeaderPanel, delta)
+		movePanelVertically(dp.OptHeader, delta)
+		for _, list in ipairs({
+			dp.SpellList, dp.SpellInfoList, dp.SpellMissList, dp.SpellBlockList, dp.OptList
+		}) do
+			for _, panel in ipairs(list or {}) do
+				movePanelVertically(panel, delta)
+			end
+		end
+		if dp.OptSpellTop then dp.OptSpellTop = dp.OptSpellTop + delta end
+	end
+	dp.OpponentSectionHeight = sectionHeight
+end
+
+--------------------------------------------------------------------------------
 -- Show current-fight opponents for the local player's damage events.
 -- All available facts are placed in one full-width, labelled line per target.
 -- An unavailable/unreadable name or stat is omitted rather than fabricated.
@@ -446,7 +476,12 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local isCurrentPlayerFight = self.ActiveFight == self.DPSMeter.Fight.Current
 		and self.SelectedCombatant and avatar and avatar.IsExist and avatar.IsExist()
 		and self.SelectedCombatant.ID == avatar.GetId()
-	if not isCurrentPlayerFight then return end
+	if not isCurrentPlayerFight then
+		dp.OpponentHeader:Hide()
+		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+		updateOpponentSectionLayout(dp, 0)
+		return
+	end
 
 	local rows, total = {}, 0
 	if AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
@@ -457,6 +492,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	if total <= 0 or #rows == 0 then
 		dp.OpponentHeader:Hide()
 		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+		updateOpponentSectionLayout(dp, 0)
 		return
 	end
 
@@ -521,6 +557,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	end
 	for i = displayedRows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
 	if displayedRows == 0 then dp.OpponentHeader:Hide() end
+	updateOpponentSectionLayout(dp, displayedRows)
 end
 
 --------------------------------------------------------------------------------
@@ -535,7 +572,7 @@ function TUMeterGUI:UpdateOptim()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
-	local height = 826 + TARGET_INFO_HEIGHT
+	local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)
 
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
@@ -893,6 +930,7 @@ function TUMeterGUI:Init()
 		Line = headerWidget:GetChildByName("OpponentLineTextViewName").Widget
 	}, { __index = headerWidget })
 	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
+	self.DetailsPanel.OpponentSectionHeight = TARGET_INFO_HEIGHT
 	local opponentRowsOffset = opponentHeaderOffset + 18
 	for opponentIndex = 1, TARGET_INFO_ROWS do
 		local wtName = "OpponentPanel" .. opponentIndex

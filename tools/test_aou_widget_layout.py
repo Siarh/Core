@@ -47,6 +47,24 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<HighPos>0</HighPos>", line)
         self.assertIn("<Pos>5</Pos>", line)
 
+    def test_opponent_section_collapses_to_visible_row_count(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        self.assertIn("local function updateOpponentSectionLayout(dp, displayedRows)", gui)
+        self.assertIn("local sectionHeight = displayedRows > 0 and (18 + displayedRows * 18 + 7) or 0", gui)
+        self.assertIn("updateOpponentSectionLayout(dp, 0)", gui)
+        self.assertIn("dp.OpponentSectionHeight = sectionHeight", gui)
+        self.assertIn("dp.OptSpellTop = dp.OptSpellTop + delta", gui)
+        self.assertIn("local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)", gui)
+        self.assertIn("movePanelVertically(dp.SpellHeaderPanel, delta)", gui)
+        self.assertIn("movePanelVertically(dp.SpellDetailsHeaderPanel, delta)", gui)
+
+        full_height = 18 + 4 * 18 + 7
+        self.assertEqual(full_height, 97)
+        self.assertEqual(18 + 1 * 18 + 7, 43)
+        self.assertEqual(18 + 2 * 18 + 7, 61)
+        self.assertEqual(18 + 3 * 18 + 7, 79)
+        self.assertEqual(0, 0)
+
     def test_resolve_value_is_next_to_the_label_and_bar_is_bounded(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
