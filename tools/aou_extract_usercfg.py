@@ -305,7 +305,12 @@ def main() -> int:
         write_aoucsv(export_text, rows)
 
         print("Конфигурация прочитана (только чтение):", config_path)
-        print(f"Событий извлечено: {summary['rows_read']}")
+        print(f"Событий извлечено: {summary['rows_read']} / {summary['stored_events']}")
+        print(
+            f"Схема источника: {summary['source_schema']}; "
+            f"текущих строк: {summary['current_schema_rows']}; "
+            f"legacy v1 нормализовано: {summary['legacy_rows_upgraded']}."
+        )
         print("AOUCSV сохранён:", export_text)
 
         companion = Path(__file__).resolve().with_name("aou_ai_companion.py")
