@@ -35,6 +35,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.assertIn(field, block)
+        self.assertIn("GlobalInfoPanel.Bar:SetPosition(0, 13)", block)
         self.assertIn("GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))", block)
 
 

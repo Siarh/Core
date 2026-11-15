@@ -843,15 +843,20 @@ end
 -- Character stats read by the addon (best effort: the API names are not verified for 7.0)
 --------------------------------------------------------------------------------
 local function getStatList()
-	local list = nil
-	pcall(function()
-		if avatar and avatar.GetInnateStats then
-			list = avatar.GetInnateStats()
-		elseif unit and unit.GetInnateStats then
-			list = unit.GetInnateStats(avatar.GetId())
+	-- Try the avatar API first, then the unit API if the first getter is
+	-- missing, errors, or returns no table.
+	if avatar and type(avatar.GetInnateStats) == "function" then
+		local ok, list = pcall(avatar.GetInnateStats)
+		if ok and type(list) == "table" then return list end
+	end
+	if unit and type(unit.GetInnateStats) == "function" and avatar and type(avatar.GetId) == "function" then
+		local okId, id = pcall(avatar.GetId)
+		if okId and id ~= nil then
+			local ok, list = pcall(unit.GetInnateStats, id)
+			if ok and type(list) == "table" then return list end
 		end
-	end)
-	return list
+	end
+	return nil
 end
 
 local function toText(v)
@@ -862,36 +867,72 @@ local function toText(v)
 		if common.IsWString and common.IsWString(v) then return userMods.FromWString(v) end
 		return nil
 	end)
-	if ok then return r end
+	if ok and type(r) == "string" then return r end
+	-- Some client builds return a wide-string wrapper without exposing it
+	-- through common.IsWString; safely try the matching converter as fallback.
+	if userMods and type(userMods.FromWString) == "function" then
+		local okWide, wideText = pcall(userMods.FromWString, v)
+		if okWide and type(wideText) == "string" then return wideText end
+	end
 	return nil
 end
 
 -- avatar.GetInnateStats() entries (keys start at 0): { sysName = "ENUM_InnateStats_Plain", base, talents, equipment,
 -- buffs, enchants, fairyBonus, effective, ... }.  base = free points placed by the player, talents = development milestones;
 -- fixed = talents + fairy + buffs (effects) + enchants, equipment = what insignias can switch inside a group
-local SYSNAMES = { Plain = "M", Rage = "R", Finisher = "U", CritChance = "L", Vitality = "S", Will = "W", Lifesteal = "B", Endurance = "C" }
+local SYSNAMES = {
+	Plain = "M", Mastery = "M",
+	Rage = "R", Determination = "R",
+	Finisher = "U", Ruthlessness = "U",
+	CritChance = "L", Luck = "L",
+	Vitality = "S", Fortitude = "S",
+	Will = "W",
+	Lifesteal = "B", Bloodthirst = "B",
+	Endurance = "C", Caution = "C"
+}
+
+local function statNumber(value)
+	if value == nil then return nil end
+	local number = tonumber(value)
+	if number ~= nil then return number end
+	local failedBefore = Optim.NumConversionFailed or 0
+	number = N(value)
+	if (Optim.NumConversionFailed or 0) > failedBefore then return nil end
+	return number
+end
 
 function Optim.ReadStats()
 	local list = getStatList()
-	if not list then return nil end
+	if type(list) ~= "table" then
+		Optim.LastStatsRead = { listType = type(list), found = 0 }
+		return nil
+	end
 	local out, found = {}, 0
-	pcall(function()
-		for _, e in pairs(list) do
-			if type(e) == "table" and type(e.sysName) == "string" then
-				local nm = (string.gsub(e.sysName, "^ENUM_InnateStats_", ""))
+	for _, e in pairs(list) do
+		if type(e) == "table" then
+			local systemName = toText(e.sysName)
+			if type(systemName) == "string" then
+				local nm = string.gsub(systemName, "^ENUM_InnateStats_", "")
+				nm = string.gsub(nm, "^ENUM_InnateStat_", "")
 				local code = SYSNAMES[nm]
-				local eff = tonumber(e.effective)
-				if code and eff then
+				local eff = statNumber(e.effective)
+				if code and eff ~= nil then
+					local base = statNumber(e.base) or 0
+					local talents = statNumber(e.talents) or 0
+					local fairy = statNumber(e.fairyBonus) or 0
+					local buffs = statNumber(e.buffs) or 0
+					local enchants = statNumber(e.enchants) or 0
 					out[code] = {
 						total = eff,
-						base = tonumber(e.base) or 0,
-						fixed = (tonumber(e.talents) or 0) + (tonumber(e.fairyBonus) or 0) + (tonumber(e.buffs) or 0) + (tonumber(e.enchants) or 0),
+						base = base,
+						fixed = talents + fairy + buffs + enchants,
 					}
 					found = found + 1
 				end
 			end
 		end
-	end)
+	end
+	Optim.LastStatsRead = { listType = "table", found = found }
 	if found < 3 then return nil end
 	return out
 end
@@ -1332,8 +1373,28 @@ function Optim.BuildLines(c, fightTime, activeMode)
 
 	local totalStats = cfg.auto == 1 and Optim.ReadStats() or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
-	if not o or o.pw <= 0 then
+	if not o or N(o.pw) <= 0 then
+		-- Current character stats are useful even before this fight has enough
+		-- Resolve/HP samples for a recommendation. Show measured values and
+		-- explicit dashes for the unavailable optimal/delta columns.
 		add("OptNoData")
+		local shown = 0
+		local function addCurrentOnly(key, stat, manualValue)
+			local value = stat and stat.total
+			if value == nil and manualValue > 0 then value = manualValue end
+			if value ~= nil then
+				add(key, I(value), "-", "-")
+				shown = shown + 1
+			end
+		end
+		addCurrentOnly("OptM", totalStats and totalStats.M, N(cfg.fM) + N(cfg.bM) + N(cfg.eM))
+		addCurrentOnly("OptR", totalStats and totalStats.R, N(cfg.fR) + N(cfg.bR) + N(cfg.eR))
+		addCurrentOnly("OptU", totalStats and totalStats.U, N(cfg.fU) + N(cfg.bU) + N(cfg.eU))
+		addCurrentOnly("OptL", totalStats and totalStats.L, N(cfg.L))
+		addCurrentOnly("OptS", totalStats and totalStats.S, N(cfg.fS) + N(cfg.bS) + N(cfg.eS))
+		addCurrentOnly("OptW", totalStats and totalStats.W, N(cfg.fW) + N(cfg.bW) + N(cfg.eW))
+		addCurrentOnly("OptB", totalStats and totalStats.B, N(cfg.fB) + N(cfg.bB) + N(cfg.eB))
+		if shown == 0 then add("OptSet") end
 		add("OptHelpRow")
 		appendAI(lines, makeAIContext())
 		return lines

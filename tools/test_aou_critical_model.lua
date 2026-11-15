@@ -10,7 +10,9 @@ userMods = {
     GetGlobalConfigSection = function() return section end,
     SetGlobalConfigSection = function(_, value) section = value end,
     ToWString = function(value) return value end,
+    FromWString = function(value) return value.value end,
 }
+common.IsWString = function(value) return type(value) == "table" and value.__wide == true end
 Settings = { Opt = {} }
 localization = "eng"
 
@@ -67,5 +69,52 @@ local empty = Optim.EstimateCritModel({}, 100)
 expect(empty.hitCount, 0, "empty hit count")
 expect(empty.observedChance, nil, "empty observed critical chance")
 near(empty.factor, 1.1, 1e-9, "fallback Luck-based multiplier")
+
+
+-- Innate-stat API regression: accept the client's wide-string sysName values
+-- and retain current stats in the panel even before Resolve/HP fight samples exist.
+local function wide(value)
+    return { __wide = true, value = value }
+end
+local statRows = {
+    { sysName = wide("ENUM_InnateStats_Plain"), effective = 310, base = 100, talents = 20, fairyBonus = 5, buffs = 10, enchants = 5 },
+    { sysName = "ENUM_InnateStats_Rage", effective = 420, base = 200 },
+    { sysName = "ENUM_InnateStats_Finisher", effective = 530, base = 300 },
+    { sysName = "ENUM_InnateStats_CritChance", effective = 210, base = 210 },
+    { sysName = "ENUM_InnateStats_Vitality", effective = 160, base = 100 },
+    { sysName = "ENUM_InnateStats_Will", effective = 120, base = 80 },
+    { sysName = "ENUM_InnateStats_Lifesteal", effective = 90, base = 90 },
+}
+avatar = { GetInnateStats = function() return statRows end }
+unit = {}
+local currentStats = Optim.ReadStats()
+expect(currentStats.M.total, 310, "automatic Mastery read")
+expect(currentStats.M.base, 100, "automatic Mastery base")
+expect(currentStats.M.fixed, 40, "automatic Mastery fixed sources")
+expect(currentStats.R.total, 420, "automatic Resolve read")
+expect(currentStats.U.total, 530, "automatic Ruthlessness read")
+expect(currentStats.L.total, 210, "automatic Luck read")
+expect(currentStats.S.total, 160, "automatic Fortitude read")
+expect(currentStats.W.total, 120, "automatic Will read")
+expect(currentStats.B.total, 90, "automatic Bloodthirst read")
+
+enumMode = { Dps = 1, Hps = 2, Def = 3, IHps = 4 }
+local noFightSamples = {
+    Data = {
+        [enumMode.Dps] = { Amount = 0, SpellsList = {} },
+        [enumMode.Hps] = { Amount = 0, SpellsList = {} },
+        [enumMode.Def] = { Amount = 0, SpellsList = {} },
+    }
+}
+local noDataLines = Optim.BuildLines(noFightSamples, 0, enumMode.Dps)
+local function findRow(rows, key)
+    for _, row in ipairs(rows) do
+        if row[1] == key then return row end
+    end
+end
+local masteryRow = findRow(noDataLines, "OptM")
+expect(masteryRow and masteryRow[2], "310", "current stat shown without fight samples")
+expect(masteryRow and masteryRow[3], "-", "optimal column marked unavailable without fight samples")
+expect(findRow(noDataLines, "OptNoData") ~= nil, true, "no-sample status remains visible")
 
 print("DPScope critical model regression tests passed.")

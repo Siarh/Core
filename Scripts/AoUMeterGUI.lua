@@ -239,6 +239,8 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		GlobalInfoPanel:Show()
 
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
+		-- Keep the Resolve fill below the numeric row so it cannot tint/cross the values.
+		GlobalInfoPanel.Bar:SetPosition(0, 13)
 		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])

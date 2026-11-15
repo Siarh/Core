@@ -219,3 +219,11 @@ Emergency UI recovery:
 - Restored the known working DisplayGlobalInfo implementation from the pre-layout-change revision.
 - Added regression tests that verify all global-info fields are populated and that wrapper-only methods are not called on raw child widgets.
 - No combat history, user.cfg, legacy records, or analytics calculations were changed.
+
+
+Optimizer live-stat display and Resolve bar placement:
+- Read innate stat names through the client wide-string converter when the Sunshine API does not identify them with common.IsWString.
+- Fall back to unit.GetInnateStats if avatar.GetInnateStats is missing, errors, or returns no table; support the documented English stat-name aliases and preserve numeric wrapper values.
+- When a fight has no Resolve/HP samples yet, show all available current character stats with dashes for recommendation columns instead of leaving the analyzer parameters empty.
+- Lower only the global Resolve bar to the bottom of its row, below the text values; spell damage bars are unchanged.
+- Added runtime regression coverage for wide-string stat names, no-sample current-stat display, and the Resolve bar placement.
