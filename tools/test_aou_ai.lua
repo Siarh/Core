@@ -40,11 +40,13 @@ local rows = DPScopeAI.BuildLines({
     selfHealPerSecond = 10, allyHealPerSecond = 90, incomingPerSecond = 40,
     survivalDeltaPct = 3.2, hpMax = 10000,
     avgTargetHpPct = 68.4, avgResolve = 36.2, hpSampleLabel = "цели",
+    critCount = 3, normalCount = 2, critSamples = 5,
+    critRateObserved = 0.60, critMultiplier = 3.09, critPairedCount = 2,
     measuredHealSamples = 60, estimatedHealSamples = 40,
     currentStats = { 100, 200, 300 },
     recommendedStats = { 120, 190, 290 }
 })
-expect(#rows, 5, "AI panel row count")
+expect(#rows, 6, "AI panel row count")
 expect(rows[1][1], "OptAITitle", "AI title row")
 expect(rows[1][2], "LOCAL", "AI row must use ASCII-safe payload")
 expect(rows[2][3], "HP 92%", "AI HP payload")
@@ -52,16 +54,22 @@ expect(rows[2][4], "RES 83%", "AI Resolve sample coverage")
 expect(rows[3][1], "OptAIMeans", "average metrics row")
 expect(rows[3][2], "HP цели 68.4%", "average target HP")
 expect(rows[3][3], "RES 36.2", "average Resolve")
-assert(rows[4][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
-assert(rows[5][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
+expect(rows[4][1], "OptAICrit", "critical profile row")
+expect(rows[4][2], "Крит 3 / Норм 2", "normal and critical counts")
+expect(rows[4][3], "60%", "observed critical share")
+expect(rows[4][4], "x3.09", "per-ability observed critical multiplier")
+assert(rows[5][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
+assert(rows[6][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
 assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
     "HPS AI summary should identify ally-focused healing")
 assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
     "AI summary should provide a next test")
-assert(string.find(DPScopeAI.LastSummary, "HP цели=68.4%", 1, true),
-    "AI summary should report average target HP")
-assert(string.find(DPScopeAI.LastSummary, "Решимость=36.2", 1, true),
+assert(not string.find(DPScopeAI.LastSummary, "HP цели=68.4%", 1, true),
+    "average target HP must stay in the analysis panel, not chat advice")
+assert(string.find(DPScopeAI.LastSummary, "Средняя Решимость=36.2", 1, true),
     "AI summary should report average Resolve")
+assert(string.find(DPScopeAI.LastSummary, "Криты=3, обычные=2", 1, true),
+    "AI summary should expose normal and critical counts")
 
 local weak = DPScopeAI.Analyze({ mode = "dps", eventCount = 5, hpSamples = 1, poolSamples = 0 })
 expect(weak.confidence, "низкая", "low sample confidence")
@@ -106,7 +114,8 @@ local beforeAdvice = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "advice" })
 local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
 assert(string.find(adviceOutput, "W:", 1, true), "Russian chat output should pass through the wide-string converter")
-assert(string.find(adviceOutput, "HP цели=", 1, true), "chat advice should include average target HP")
-assert(string.find(adviceOutput, "Решимость=", 1, true), "chat advice should include average Resolve")
+assert(not string.find(adviceOutput, "HP цели=", 1, true), "chat advice must not print average target HP")
+assert(string.find(adviceOutput, "Средняя Решимость=", 1, true), "chat advice should include average Resolve")
+assert(string.find(adviceOutput, "Криты=3", 1, true), "chat advice should include critical-hit counts")
 
 print("DPScope AI advisor tests passed.")
