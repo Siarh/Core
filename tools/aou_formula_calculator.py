@@ -858,7 +858,10 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
                 "metric": basis,
             })
 
-    might_is_supplied = "might" in base_stats or "might" in cfg
+    might_is_supplied = (
+        "might" in base_stats
+        or ("might" in cfg and str(cfg.get("might_source", "")).lower() != "assumed_default")
+    )
     return {
         "status": "partial_estimates" if unavailable_stats else ("calculated" if candidates else "insufficient_data"),
         "classification": "ESTIMATED",
