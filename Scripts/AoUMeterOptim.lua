@@ -881,14 +881,14 @@ end
 -- buffs, enchants, fairyBonus, effective, ... }.  base = free points placed by the player, talents = development milestones;
 -- fixed = talents + fairy + buffs (effects) + enchants, equipment = what insignias can switch inside a group
 local SYSNAMES = {
-	Plain = "M", Mastery = "M",
-	Rage = "R", Determination = "R",
-	Finisher = "U", Ruthlessness = "U",
-	CritChance = "L", Luck = "L",
-	Vitality = "S", Fortitude = "S",
-	Will = "W",
-	Lifesteal = "B", Bloodthirst = "B",
-	Endurance = "C", Caution = "C"
+	Plain = "M", Mastery = "M", plain = "M", mastery = "M",
+	Rage = "R", Determination = "R", rage = "R", determination = "R",
+	Finisher = "U", Ruthlessness = "U", finisher = "U", ruthlessness = "U",
+	CritChance = "L", Luck = "L", critchance = "L", luck = "L",
+	Vitality = "S", Fortitude = "S", vitality = "S", fortitude = "S",
+	Will = "W", will = "W",
+	Lifesteal = "B", Bloodthirst = "B", lifesteal = "B", bloodthirst = "B",
+	Endurance = "C", Caution = "C", endurance = "C", caution = "C"
 }
 
 local function statNumber(value)
@@ -901,27 +901,32 @@ local function statNumber(value)
 	return number
 end
 
-function Optim.ReadStats()
+function Optim.ReadStats(allowPartial)
 	local list = getStatList()
 	if type(list) ~= "table" then
-		Optim.LastStatsRead = { listType = type(list), found = 0 }
+		Optim.LastStatsRead = { listType = type(list), found = 0, entries = 0 }
 		return nil
 	end
-	local out, found = {}, 0
+	local out, found, entries = {}, 0, 0
 	for _, e in pairs(list) do
-		if type(e) == "table" then
-			local systemName = toText(e.sysName)
+		entries = entries + 1
+		-- The documented API returns tables; keep field reads protected so a
+		-- client-side wrapper cannot abort the entire optimizer refresh.
+		local ok, systemName, effective, baseValue, talentsValue, fairyValue, buffsValue, enchantsValue = pcall(function()
+			return e.sysName, e.effective, e.base, e.talents, e.fairyBonus, e.buffs, e.enchants
+		end)
+		if ok then
+			systemName = toText(systemName)
 			if type(systemName) == "string" then
-				local nm = string.gsub(systemName, "^ENUM_InnateStats_", "")
-				nm = string.gsub(nm, "^ENUM_InnateStat_", "")
-				local code = SYSNAMES[nm]
-				local eff = statNumber(e.effective)
+				local nm = string.match(systemName, "([^_]+)$") or systemName
+				local code = SYSNAMES[nm] or SYSNAMES[string.lower(nm)]
+				local eff = statNumber(effective)
 				if code and eff ~= nil then
-					local base = statNumber(e.base) or 0
-					local talents = statNumber(e.talents) or 0
-					local fairy = statNumber(e.fairyBonus) or 0
-					local buffs = statNumber(e.buffs) or 0
-					local enchants = statNumber(e.enchants) or 0
+					local base = statNumber(baseValue) or 0
+					local talents = statNumber(talentsValue) or 0
+					local fairy = statNumber(fairyValue) or 0
+					local buffs = statNumber(buffsValue) or 0
+					local enchants = statNumber(enchantsValue) or 0
 					out[code] = {
 						total = eff,
 						base = base,
@@ -932,8 +937,11 @@ function Optim.ReadStats()
 			end
 		end
 	end
-	Optim.LastStatsRead = { listType = "table", found = found }
-	if found < 3 then return nil end
+	Optim.LastStatsRead = { listType = "table", found = found, entries = entries }
+	-- The normal calculation path still requires at least three mapped stats.
+	-- The GUI can request a partial snapshot to avoid hiding valid live values.
+	if found < 3 and not allowPartial then return nil end
+	if found == 0 then return nil end
 	return out
 end
 
@@ -1371,7 +1379,11 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		end
 	end
 
-	local totalStats = cfg.auto == 1 and Optim.ReadStats() or nil
+	-- Always read the character snapshot for display. The auto switch controls
+	-- whether the optimizer uses these values for its calculation, not whether
+	-- the user's current characteristics are visible in the panel.
+	local liveStats = Optim.ReadStats(true)
+	local totalStats = (cfg.auto == 1 and Optim.LastStatsRead and Optim.LastStatsRead.found >= 3) and liveStats or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
 	if not o or N(o.pw) <= 0 then
 		-- Current character stats are useful even before this fight has enough
@@ -1387,13 +1399,13 @@ function Optim.BuildLines(c, fightTime, activeMode)
 				shown = shown + 1
 			end
 		end
-		addCurrentOnly("OptM", totalStats and totalStats.M, N(cfg.fM) + N(cfg.bM) + N(cfg.eM))
-		addCurrentOnly("OptR", totalStats and totalStats.R, N(cfg.fR) + N(cfg.bR) + N(cfg.eR))
-		addCurrentOnly("OptU", totalStats and totalStats.U, N(cfg.fU) + N(cfg.bU) + N(cfg.eU))
-		addCurrentOnly("OptL", totalStats and totalStats.L, N(cfg.L))
-		addCurrentOnly("OptS", totalStats and totalStats.S, N(cfg.fS) + N(cfg.bS) + N(cfg.eS))
-		addCurrentOnly("OptW", totalStats and totalStats.W, N(cfg.fW) + N(cfg.bW) + N(cfg.eW))
-		addCurrentOnly("OptB", totalStats and totalStats.B, N(cfg.fB) + N(cfg.bB) + N(cfg.eB))
+		addCurrentOnly("OptM", liveStats and liveStats.M, N(cfg.fM) + N(cfg.bM) + N(cfg.eM))
+		addCurrentOnly("OptR", liveStats and liveStats.R, N(cfg.fR) + N(cfg.bR) + N(cfg.eR))
+		addCurrentOnly("OptU", liveStats and liveStats.U, N(cfg.fU) + N(cfg.bU) + N(cfg.eU))
+		addCurrentOnly("OptL", liveStats and liveStats.L, N(cfg.L))
+		addCurrentOnly("OptS", liveStats and liveStats.S, N(cfg.fS) + N(cfg.bS) + N(cfg.eS))
+		addCurrentOnly("OptW", liveStats and liveStats.W, N(cfg.fW) + N(cfg.bW) + N(cfg.eW))
+		addCurrentOnly("OptB", liveStats and liveStats.B, N(cfg.fB) + N(cfg.bB) + N(cfg.eB))
 		if shown == 0 then add("OptSet") end
 		add("OptHelpRow")
 		appendAI(lines, makeAIContext())
