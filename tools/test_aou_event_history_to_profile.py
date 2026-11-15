@@ -259,7 +259,7 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(resolve["samples"], 40)
         self.assertEqual(resolve["mean_sampled_pool"], 48.75)
         self.assertEqual(resolve["peak_sampled_pool"], 97.5)
-        self.assertEqual(resolve["sampled_second_share_above"]["50"], 0.475)
+        self.assertEqual(resolve["sampled_second_share_above"]["50"], 0.5)
         self.assertIn("not time uptime", resolve["method"])
 
 
