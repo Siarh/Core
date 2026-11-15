@@ -49,6 +49,36 @@ class AIAssistantTests(unittest.TestCase):
                 }
             },
             "import_warnings": ["HP values partly estimated"],
+            "target_statistics": {
+                "status": "calculated", "classification": "DERIVED",
+                "target_profiles": 2, "unmatched_target_events": 1,
+                "unmatched_target_instances": 1,
+                "target_signature_fields": ["normalized_name", "level", "quality", "unit_kind"],
+                "limitations": ["Archetype is not full state identity"],
+                "targets": [
+                    {
+                        "target_signature": "[\"training creature\",90,4,\"mob\"]",
+                        "target_name": "Training Creature", "target_level": 90,
+                        "target_quality": 4, "target_quality_name": "BOSS",
+                        "target_kind": "mob", "events": 25, "fights": 3, "instances": 3,
+                        "hp": {"pre_event_average_percent": 47.5, "pre_event_measured": 20,
+                               "pre_event_estimated": 5, "current_hp_snapshot_average": 50000},
+                        "resistance_components": {"classification": "MEASURED_CALLBACK_COMPONENTS",
+                            "resist_amount": 12000, "resist_known_events": 20,
+                            "rune_absorb_amount": 3000, "note": "Callback components only"},
+                        "identity_note": "Archetype only",
+                    },
+                    {
+                        "target_signature": "[\"player name\",90,0,\"player\"]",
+                        "target_name": "Private Player Name", "target_level": 90,
+                        "target_quality": 0, "target_quality_name": "COMMON",
+                        "target_kind": "player", "events": 4, "fights": 1, "instances": 1,
+                        "hp": {"pre_event_average_percent": 66.0},
+                        "resistance_components": {"classification": "UNAVAILABLE"},
+                        "identity_note": "Archetype only",
+                    },
+                ],
+            },
             "event_effectiveness": {
                 "status": "calculated",
                 "classification": "ESTIMATED",
@@ -164,6 +194,15 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("actor_id", rendered)
         self.assertNotIn("target_id", rendered)
         self.assertNotIn("12345", rendered)
+        self.assertNotIn("Private Player Name", rendered)
+        target_stats = payload["target_statistics"]
+        self.assertEqual(target_stats["target_profiles"], 2)
+        self.assertEqual(target_stats["target_profiles_in_ai_payload"], 2)
+        self.assertEqual(target_stats["targets"][0]["target_quality_name"], "BOSS")
+        self.assertEqual(target_stats["targets"][0]["hp"]["pre_event_average_percent"], 47.5)
+        self.assertEqual(target_stats["targets"][0]["resistance_components"]["resist_amount"], 12000)
+        self.assertEqual(target_stats["targets"][1]["target_name"], "player target")
+        self.assertNotIn("target_signature", str(target_stats))
         self.assertIn("Small sample", rendered)
         self.assertIn("estimated_gain_percent", rendered)
         model = payload["activities"]["raid_fight_1_dps"]["model_marginal_efficiency"]
@@ -233,6 +272,8 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("overheal", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("target_hp_after", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("критический множитель", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("target_statistics", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("не числовой рейтинг сопротивления", ai.SYSTEM_INSTRUCTIONS)
 
 
     def test_normalizes_ollama_host_variants(self):
