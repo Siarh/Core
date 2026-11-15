@@ -3,7 +3,7 @@ DPScope build 28 - Allods Sunshine 6.0
 
 Changes
 - Opponent summary space now collapses when no readable target rows exist and expands only for rows actually displayed.
-- When the analytics journal has no target profile, the opponent panel now reads the current target even if the optional optimizer has no LastEv event; percent-only target HP is shown as an approximate current percentage.
+- When the analytics journal has no readable target profile, the opponent panel now reads the current target even if the optional optimizer has no LastEv event; percent-only target HP is shown as an approximate current percentage.
 - The current-target fallback resolves numeric unit-quality enums and strips the Sunshine SubElement enum prefix before rendering resistance schools.
 - Spell, detail, and optimizer panels reflow with the visible opponent section height.
 - Analytics runs from the resolved DPScope combatant pipeline, once per event in the current fight.
