@@ -14,8 +14,10 @@ import argparse
 import csv
 import json
 import math
+import random
 from collections import Counter, defaultdict
 from pathlib import Path
+from statistics import median, stdev
 from typing import Any
 
 import aou_formula_calculator as calc
@@ -72,18 +74,39 @@ def event_stats(row: dict[str, str], fallback: dict[str, float]) -> dict[str, fl
     return result
 
 
+ALL_STAT_COLUMNS = {
+    "M": "mastery", "R": "resolve", "U": "ruthlessness", "L": "luck",
+    "S": "fortitude", "W": "will", "B": "bloodthirst", "C": "caution",
+}
+OFFENSIVE_EXPERIMENT_STATS = ("mastery", "resolve", "ruthlessness", "luck")
+DEFENSIVE_EXPERIMENT_STATS = ("fortitude", "will", "bloodthirst", "caution")
+MIN_STAT_STEP = 25.0
+MIN_FIGHTS_PER_BUILD = 3
+MIN_EVENTS_PER_FIGHT_CONTEXT = 3
+BOOTSTRAP_REPLICATES = 500
+
+
 def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
-    """Descriptive comparison of observed DPS/HPS by exact recorded stat snapshot."""
-    columns = {"M": "mastery", "R": "resolve", "U": "ruthlessness", "L": "luck"}
-    buckets: dict[tuple[float | None, ...], dict[str, Any]] = {}
+    """Descriptive totals split by activity, profile and full stat snapshot.
+
+    This report is intentionally not a marginal-efficiency estimate.
+    """
+    columns = ALL_STAT_COLUMNS
+    buckets: dict[tuple[str, str, tuple[float | None, ...]], dict[str, Any]] = {}
     for row in rows:
         kind = (row.get("kind") or "").strip().lower()
-        if kind not in {"damage", "healing"}:
+        if kind not in {"damage", "healing", "incoming"}:
             continue
+        profile = (row.get("profile") or "unknown").strip().lower()
         signature = tuple(number(row.get(key)) for key in columns)
-        bucket = buckets.setdefault(signature, {
+        bucket_key = (kind, profile, signature)
+        bucket = buckets.setdefault(bucket_key, {
+            "kind": kind,
+            "profile": profile,
             "stats": {name: value for name, value in zip(columns.values(), signature)},
-            "damage": 0.0, "healing": 0.0, "damage_events": 0, "healing_events": 0,
+            "damage": 0.0, "healing": 0.0, "incoming": 0.0,
+            "damage_events": 0, "healing_events": 0, "incoming_events": 0,
+            "critical_events": 0, "normal_events": 0, "unknown_critical_events": 0,
             "fights": set(), "seconds": {}, "healing_by_recipient": {},
         })
         amount = number(row.get("observed_amount")) or 0.0
@@ -91,9 +114,20 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
         second = max(0, int(number(row.get("second")) or 0))
         bucket["fights"].add(fight)
         bucket["seconds"].setdefault(fight, set()).add(second)
+        critical = (row.get("critical") or "").strip()
+        if critical == "1":
+            bucket["critical_events"] += 1
+        elif critical == "0":
+            bucket["normal_events"] += 1
+        else:
+            bucket["unknown_critical_events"] += 1
+
         if kind == "damage":
             bucket["damage"] += amount
             bucket["damage_events"] += 1
+        elif kind == "incoming":
+            bucket["incoming"] += amount
+            bucket["incoming_events"] += 1
         else:
             bucket["healing"] += amount
             bucket["healing_events"] += 1
@@ -103,25 +137,349 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
             )
             segment["amount"] += amount
             segment["events"] += 1
+
     result = []
     for bucket in buckets.values():
-        active_seconds = sum(max(1, max(seconds) - min(seconds) + 1) for seconds in bucket["seconds"].values())
+        # This is the span covered by observed events, not guaranteed full fight time.
+        observed_seconds = sum(
+            max(1, max(seconds) - min(seconds) + 1)
+            for seconds in bucket["seconds"].values()
+        )
         result.append({
-            "stats": bucket["stats"], "fights": len(bucket["fights"]),
-            "damage_events": bucket["damage_events"], "healing_events": bucket["healing_events"],
+            "kind": bucket["kind"],
+            "profile": bucket["profile"],
+            "stats": bucket["stats"],
+            "fights": len(bucket["fights"]),
+            "damage_events": bucket["damage_events"],
+            "healing_events": bucket["healing_events"],
+            "incoming_events": bucket["incoming_events"],
+            "critical_events": bucket["critical_events"],
+            "normal_events": bucket["normal_events"],
+            "unknown_critical_events": bucket["unknown_critical_events"],
             "observed_damage": round(bucket["damage"], 2),
             "observed_healing": round(bucket["healing"], 2),
+            "observed_incoming": round(bucket["incoming"], 2),
             "healing_by_recipient": {
                 key: {"amount": round(value["amount"], 2), "events": value["events"]}
                 for key, value in sorted(bucket["healing_by_recipient"].items())
             },
-            "active_seconds_estimate": active_seconds,
-            "observed_dps_estimate": round(bucket["damage"] / active_seconds, 2) if active_seconds else None,
-            "observed_hps_estimate": round(bucket["healing"] / active_seconds, 2) if active_seconds else None,
+            "observed_event_seconds_span": observed_seconds,
+            "observed_dps_estimate": round(bucket["damage"] / observed_seconds, 2) if observed_seconds else None,
+            "observed_hps_estimate": round(bucket["healing"] / observed_seconds, 2) if observed_seconds else None,
+            "observed_incoming_rate_estimate": round(bucket["incoming"] / observed_seconds, 2) if observed_seconds else None,
         })
-    result.sort(key=lambda item: (item["stats"].get("mastery") or 0, item["stats"].get("resolve") or 0))
-    return {"method": "grouped_by_event_stat_snapshot; active duration estimated from event seconds",
-            "groups": result, "note": "Descriptive, not causal: target, rotation, buffs, encounter and fight duration may differ."}
+    result.sort(key=lambda item: (
+        item["profile"], item["kind"],
+        item["stats"].get("mastery") or 0,
+        item["stats"].get("resolve") or 0,
+    ))
+    return {
+        "method": "descriptive totals by activity, profile and complete stat snapshot",
+        "groups": result,
+        "note": "Описательная статистика, не причинный эффект и не Marginal Efficiency. Время — только диапазон секунд с наблюдавшимися событиями.",
+    }
+
+
+def _duration_band(seconds: int) -> str:
+    if seconds <= 10:
+        return "0-10 sec"
+    if seconds <= 30:
+        return "10-30 sec"
+    if seconds <= 60:
+        return "30-60 sec"
+    if seconds <= 120:
+        return "60-120 sec"
+    if seconds <= 300:
+        return "120-300 sec"
+    return "300+ sec"
+
+
+def _percentile(values: list[float], fraction: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return 0.0
+    position = (len(ordered) - 1) * fraction
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _bootstrap_effect_ci(
+    baseline_fights: list[float],
+    test_fights: list[float],
+    stat_delta: float,
+    seed: int,
+) -> list[float] | None:
+    if len(baseline_fights) < MIN_FIGHTS_PER_BUILD or len(test_fights) < MIN_FIGHTS_PER_BUILD:
+        return None
+    rng = random.Random(seed)
+    effects = []
+    for _ in range(BOOTSTRAP_REPLICATES):
+        baseline = sum(rng.choice(baseline_fights) for _ in baseline_fights) / len(baseline_fights)
+        test = sum(rng.choice(test_fights) for _ in test_fights) / len(test_fights)
+        effects.append((test - baseline) * 100.0 / stat_delta)
+    return [round(_percentile(effects, 0.025), 4), round(_percentile(effects, 0.975), 4)]
+
+
+def _fight_stat_signature(row: dict[str, str]) -> tuple[float, ...] | None:
+    values = [number(row.get(column)) for column in ALL_STAT_COLUMNS]
+    if any(value is None for value in values):
+        return None
+    return tuple(round(float(value), 2) for value in values)
+
+
+def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Estimate one-stat changes only inside matched event contexts and repeated fights.
+
+    Outcome is the mean observed amount per event, not DPS/HPS. The comparison is
+    controlled observational evidence; target identity, buffs, rotation and other
+    unlogged encounter conditions can still confound it.
+    """
+    fight_last_second: dict[str, int] = {}
+    for row in rows:
+        fight = (row.get("fight_id") or "unknown").strip()
+        second = number(row.get("second"))
+        if second is not None:
+            fight_last_second[fight] = max(fight_last_second.get(fight, 0), int(second))
+
+    # stratum -> complete stat snapshot -> fight -> observed per-event amounts
+    contexts: dict[tuple[Any, ...], dict[tuple[float, ...], dict[str, list[float]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
+    )
+    fight_signatures: dict[str, set[tuple[float, ...]]] = defaultdict(set)
+    skipped: Counter[str] = Counter()
+    included_events = 0
+
+    for row in rows:
+        kind = (row.get("kind") or "").strip().lower()
+        if kind not in {"damage", "healing", "incoming"}:
+            continue
+        profile = (row.get("profile") or "").strip().lower()
+        if profile not in {"pve", "pvp"}:
+            skipped["profile_unknown_or_not_classified"] += 1
+            continue
+        fight = (row.get("fight_id") or "unknown").strip()
+        if not fight or fight == "unknown":
+            skipped["fight_id_unknown"] += 1
+            continue
+        amount = number(row.get("observed_amount"))
+        if amount is None or amount <= 0:
+            skipped["amount_missing_or_non_positive"] += 1
+            continue
+        second_value = number(row.get("second"))
+        if second_value is None:
+            skipped["timestamp_missing"] += 1
+            continue
+        hp = number(row.get("target_hp_before"))
+        hp_quality = (row.get("hp_quality") or "").strip().lower()
+        if hp is None or hp_quality not in PRE_HP_QUALITIES:
+            skipped["pre_event_hp_unavailable"] += 1
+            continue
+        if hp < 0 or hp > 100:
+            skipped["pre_event_hp_out_of_range"] += 1
+            continue
+        critical_text = (row.get("critical") or "").strip()
+        if critical_text not in {"0", "1"}:
+            skipped["critical_flag_unknown"] += 1
+            continue
+        if kind in {"damage", "healing"} and number(row.get("resolve_pool")) is None:
+            skipped["resolve_pool_unknown"] += 1
+            continue
+
+        signature = _fight_stat_signature(row)
+        if signature is None:
+            skipped["full_stat_snapshot_missing"] += 1
+            continue
+        fight_signatures[fight].add(signature)
+
+        ability = (row.get("ability") or "").strip()
+        damage_source = (row.get("damage_source") or "").strip()
+        if not ability or ability.lower() == "unknown":
+            ability = damage_source
+        if not ability or ability.lower() in {"unknown", "none"}:
+            skipped["ability_or_damage_source_unknown"] += 1
+            continue
+
+        element = (row.get("element") or "").strip().lower()
+        target_max_hp = number(row.get("target_max_hp"))
+        target_hp_scale = (
+            int(math.floor(math.log10(target_max_hp)))
+            if target_max_hp is not None and target_max_hp > 0 else None
+        )
+        hp_band_start = min(80, int(hp // 20) * 20)
+        if kind == "incoming":
+            resolve_band = None
+        else:
+            pool = max(0.0, min(100.0, float(number(row.get("resolve_pool")))))
+            resolve_band = min(90, int(pool // 10) * 10)
+        recipient = (row.get("recipient") or "unknown").strip().lower() if kind == "healing" else ""
+        duration_seconds = max(1, fight_last_second.get(fight, int(second_value)) + 1)
+        duration = _duration_band(duration_seconds)
+        stratum = (
+            kind, profile, duration, ability.lower(), element, damage_source.lower(),
+            hp_band_start, hp_quality, target_hp_scale, resolve_band,
+            critical_text, recipient,
+        )
+        contexts[stratum][signature][fight].append(float(amount))
+        included_events += 1
+
+    # A build change inside one fight invalidates that fight as a controlled sample.
+    contaminated_fights = {
+        fight for fight, signatures in fight_signatures.items() if len(signatures) > 1
+    }
+    if contaminated_fights:
+        skipped["stats_changed_during_fight"] += len(contaminated_fights)
+        for stratum in list(contexts):
+            for signature in list(contexts[stratum]):
+                for fight in list(contexts[stratum][signature]):
+                    if fight in contaminated_fights:
+                        del contexts[stratum][signature][fight]
+                if not contexts[stratum][signature]:
+                    del contexts[stratum][signature]
+            if not contexts[stratum]:
+                del contexts[stratum]
+
+    comparisons: list[dict[str, Any]] = []
+    insufficient_pairs = 0
+    comparison_id = 0
+
+    for stratum, builds in contexts.items():
+        kind, profile, duration, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
+        stat_names = (OFFENSIVE_EXPERIMENT_STATS if kind in {"damage", "healing"}
+                      else DEFENSIVE_EXPERIMENT_STATS)
+        signatures = list(builds.keys())
+        for stat_name in stat_names:
+            column = next(column for column, name in ALL_STAT_COLUMNS.items() if name == stat_name)
+            index = list(ALL_STAT_COLUMNS).index(column)
+            for first_index in range(len(signatures)):
+                for second_index in range(first_index + 1, len(signatures)):
+                    first, second = signatures[first_index], signatures[second_index]
+                    first_value, second_value = first[index], second[index]
+                    if first_value == second_value:
+                        continue
+                    low_sig, high_sig = (first, second) if first_value < second_value else (second, first)
+                    low_value, high_value = low_sig[index], high_sig[index]
+                    delta = high_value - low_value
+                    if delta < max(MIN_STAT_STEP, abs(low_value) * 0.03):
+                        continue
+
+                    other_stats_match = True
+                    for other_index, (other_column, _) in enumerate(ALL_STAT_COLUMNS.items()):
+                        if other_index == index:
+                            continue
+                        baseline_value, test_value = low_sig[other_index], high_sig[other_index]
+                        tolerance = max(5.0, max(abs(baseline_value), abs(test_value)) * 0.005)
+                        if abs(test_value - baseline_value) > tolerance:
+                            other_stats_match = False
+                            break
+                    if not other_stats_match:
+                        continue
+
+                    def fight_values(signature: tuple[float, ...]) -> tuple[list[float], int]:
+                        selected = [
+                            values for values in builds[signature].values()
+                            if len(values) >= MIN_EVENTS_PER_FIGHT_CONTEXT
+                        ]
+                        means = [sum(values) / len(values) for values in selected]
+                        return means, sum(len(values) for values in builds[signature].values()
+                                          if len(values) >= MIN_EVENTS_PER_FIGHT_CONTEXT)
+
+                    baseline_values, baseline_events = fight_values(low_sig)
+                    test_values, test_events = fight_values(high_sig)
+                    if (len(baseline_values) < MIN_FIGHTS_PER_BUILD
+                            or len(test_values) < MIN_FIGHTS_PER_BUILD):
+                        insufficient_pairs += 1
+                        continue
+
+                    baseline_mean = sum(baseline_values) / len(baseline_values)
+                    test_mean = sum(test_values) / len(test_values)
+                    effect_per_100 = (test_mean - baseline_mean) * 100.0 / delta
+                    relative_per_100 = (
+                        ((test_mean / baseline_mean) ** (100.0 / delta) - 1.0) * 100.0
+                        if baseline_mean > 0 and test_mean > 0 else None
+                    )
+                    comparison_id += 1
+                    ci = _bootstrap_effect_ci(
+                        baseline_values, test_values, delta,
+                        seed=20261115 + comparison_id * 101,
+                    )
+                    quality_label = "measured_pre" if hp_quality == "measured_pre" else "estimated_pre"
+                    if ci and ci[0] > 0:
+                        confidence = "MEDIUM" if min(len(baseline_values), len(test_values)) < 5 else "HIGH"
+                    elif ci and ci[1] < 0:
+                        confidence = "MEDIUM" if min(len(baseline_values), len(test_values)) < 5 else "HIGH"
+                    else:
+                        confidence = "LOW"
+                    comparisons.append({
+                        "status": "derived_controlled_observation",
+                        "classification": "DERIVED",
+                        "causal_status": "not_proven_unobserved_confounders_remain",
+                        "mode": kind,
+                        "profile": profile,
+                        "duration_band": duration,
+                        "ability": ability,
+                        "element": element or "unknown",
+                        "damage_source": damage_source or "unknown",
+                        "target_hp_band": f"{hp_band}-{hp_band + 20}%",
+                        "target_hp_quality": quality_label,
+                        "target_max_hp_order": hp_scale,
+                        "resolve_pool_band": (f"{resolve_band}-{resolve_band + 10}%" if resolve_band is not None else None),
+                        "critical": (crit == "1"),
+                        "recipient": recipient or None,
+                        "stat": stat_name,
+                        "from": low_value,
+                        "to": high_value,
+                        "delta_stat": delta,
+                        "baseline": {
+                            "fights": len(baseline_values), "events": baseline_events,
+                            "mean_event_amount": round(baseline_mean, 4),
+                            "median_fight_mean": round(median(baseline_values), 4),
+                            "sd_between_fights": round(stdev(baseline_values), 4) if len(baseline_values) > 1 else 0.0,
+                        },
+                        "test": {
+                            "fights": len(test_values), "events": test_events,
+                            "mean_event_amount": round(test_mean, 4),
+                            "median_fight_mean": round(median(test_values), 4),
+                            "sd_between_fights": round(stdev(test_values), 4) if len(test_values) > 1 else 0.0,
+                        },
+                        "marginal_efficiency_per_100": round(effect_per_100, 4),
+                        "relative_change_per_100_percent": round(relative_per_100, 4) if relative_per_100 is not None else None,
+                        "confidence_interval_95_per_100": ci,
+                        "confidence": confidence,
+                        "n_independent_fights": len(baseline_values) + len(test_values),
+                    })
+
+    comparisons.sort(
+        key=lambda item: (
+            item["stat"], item["mode"], item["profile"], item["ability"],
+            item["target_hp_band"], item["resolve_pool_band"] or "",
+            -item["n_independent_fights"],
+        )
+    )
+    return {
+        "status": "comparisons_available" if comparisons else "insufficient_data",
+        "method": "one-stat-at-a-time matched event contexts; bootstrap over independent fight means",
+        "outcome_unit": "observed amount per event; not DPS/HPS and not effective healing",
+        "minimum_stat_step": MIN_STAT_STEP,
+        "minimum_fights_per_build": MIN_FIGHTS_PER_BUILD,
+        "minimum_events_per_fight_context": MIN_EVENTS_PER_FIGHT_CONTEXT,
+        "bootstrap_replicates": BOOTSTRAP_REPLICATES,
+        "included_events": included_events,
+        "excluded_or_unusable": dict(sorted(skipped.items())),
+        "contaminated_fights_excluded": len(contaminated_fights),
+        "insufficient_repeated_pairs": insufficient_pairs,
+        "comparisons": comparisons[:100],
+        "limitations": [
+            "Цели не имеют отдельного target_id в текущей версии журнала; одинаковое имя способности и HP-диапазон не гарантируют одну и ту же цель.",
+            "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
+            "Среднее количество урона/лечения на событие не равно DPS/HPS: частота применений и effective healing анализируются отдельно.",
+            "ME рассчитана только при изменении одной характеристики; остальные сохранённые характеристики должны оставаться в допуске.",
+            "Результат DERIVED и controlled-observational, но не доказывает причинность."
+        ],
+    }
 
 
 def resistance_family(element: str) -> str | None:
@@ -392,6 +750,8 @@ def build_profile(
     if skipped:
         warnings.append("Исключено событий по причине: " + ", ".join(f"{key}={value}" for key, value in sorted(skipped.items())))
 
+    controlled_efficiency = analyze_controlled_stat_efficiency(combat_rows)
+
     return {
         "settings": {
             "level": 1,
@@ -410,6 +770,7 @@ def build_profile(
         "allocation_budget": allocation_budget,
         "activities": activities,
         "stat_comparison": compare_stat_sets(combat_rows),
+        "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
             "source_rows": len(combat_rows),
@@ -421,6 +782,9 @@ def build_profile(
             "incoming_events": len(incoming_rows),
             "resistance_families": sorted(resistance_ratings),
             "stat_comparison": compare_stat_sets(combat_rows),
+            "controlled_stat_comparisons": len(controlled_efficiency["comparisons"]),
+            "controlled_stat_analysis_status": controlled_efficiency["status"],
+            "contaminated_fights_excluded": controlled_efficiency["contaminated_fights_excluded"],
         },
     }
 
