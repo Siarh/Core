@@ -22,7 +22,9 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         block = gui[start:end]
         self.assertIn("unit.GetRage", block)
         self.assertIn("GlobalInfoPanel.Bar:SetPosition(0, 15)", block)
-        self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(pool', block)
+        self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool', block)
+        self.assertIn('local averagePool = hasSamples and GlobalInfoData.Avg or currentResolve', block)
+        self.assertIn('GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool', block)
         self.assertIn('GlobalInfoPanel.Damage:SetVal("Min"', block)
         self.assertIn('GlobalInfoPanel.Damage:SetVal("Avg"', block)
         self.assertIn('GlobalInfoPanel.Damage:SetVal("Max"', block)
