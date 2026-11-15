@@ -609,6 +609,8 @@ def tank_event_to_sample(
 
     sample = {
         "second": int(number(row.get("second")) or 0),
+        "actor_id": row.get("actor_id") or "unknown",
+        "target_id": row.get("target_id") or "unknown",
         "incoming_raw": raw_before_resist,
         "player_hp": hp_fraction,
         "damage_school": (row.get("element") or "").replace("ENUM_SubElement_", ""),
@@ -674,6 +676,8 @@ def event_to_sample(
 
     sample: dict[str, Any] = {
         "second": int(number(row.get("second")) or 0),
+        "actor_id": row.get("actor_id") or "unknown",
+        "target_id": row.get("target_id") or "unknown",
         "raw": raw,
         "target_hp": hp_fraction,
         "resolve_pool": max(0.0, min(100.0, pool)),
