@@ -269,7 +269,7 @@ function DPScopeAI.Analyze(context)
     end
     local meanHpText = avgTargetHpPct and string.format("%.1f%%", avgTargetHpPct) or "нет данных"
     local meanResolveText = avgResolve and string.format("%.1f", avgResolve) or "нет данных"
-    local meansSummary = string.format("Средний HP %s=%s; средняя Решимость=%s.",
+    local meansSummary = string.format("Средние для модели (взвешено по величине событий): HP %s=%s; Решимость=%s.",
         hpSampleLabel, meanHpText, meanResolveText)
     local summary = string.format(
         "AI %s (%d/100): %s. Режим=%s, событий=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%).%s %s Следующий шаг: %s",
