@@ -1311,7 +1311,6 @@ end
 
 function Optim.BuildLines(c, fightTime, activeMode)
 	local cfg = Optim.Cfg
-	if cfg.on ~= 1 then return nil end
 
 	local dd, hl, df = c.Data[enumMode.Dps], c.Data[enumMode.Hps], c.Data[enumMode.Def]
 	if not dd or not hl then return nil end
@@ -1383,9 +1382,9 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	-- whether the optimizer uses these values for its calculation, not whether
 	-- the user's current characteristics are visible in the panel.
 	local liveStats = Optim.ReadStats(true)
-	local totalStats = (cfg.auto == 1 and Optim.LastStatsRead and Optim.LastStatsRead.found >= 3) and liveStats or nil
+	local totalStats = (cfg.on == 1 and cfg.auto == 1 and Optim.LastStatsRead and Optim.LastStatsRead.found >= 3) and liveStats or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
-	if not o or N(o.pw) <= 0 then
+	if cfg.on ~= 1 or not o or N(o.pw) <= 0 then
 		-- Current character stats are useful even before this fight has enough
 		-- Resolve/HP samples for a recommendation. Show measured values and
 		-- explicit dashes for the unavailable optimal/delta columns.
