@@ -34,14 +34,19 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn('local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()', init)
         self.assertIn('CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)', init)
 
+        name_xdb = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/Name.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        self.assertIn("<Pos>5</Pos>", name_xdb)
+        self.assertIn("<Size>77</Size>", name_xdb)
+
         count_xdb = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/Count.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", count_xdb)
-        self.assertIn("<Pos>76</Pos>", count_xdb)
-        self.assertIn("<Size>45</Size>", count_xdb)
+        self.assertIn("<Pos>85</Pos>", count_xdb)
+        self.assertIn("<Size>42</Size>", count_xdb)
 
         stats_xdb = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Pos>130</Pos>", stats_xdb)
+        self.assertIn("<Pos>132</Pos>", stats_xdb)
         self.assertIn("<Size>200</Size>", stats_xdb)
+        self.assertLess(82, 85)
+        self.assertLess(127, 132)
 
     def test_optimizer_uses_local_character_even_when_another_member_is_selected(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
