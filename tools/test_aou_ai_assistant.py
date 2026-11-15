@@ -130,6 +130,8 @@ class AIAssistantTests(unittest.TestCase):
         self.assertEqual(payload["activities"]["raid_fight_1_dps"]["sample_count"], 2)
         self.assertNotIn("Secret spell", rendered)
         self.assertNotIn("attacker_id", rendered)
+        self.assertNotIn("actor_id", rendered)
+        self.assertNotIn("target_id", rendered)
         self.assertNotIn("12345", rendered)
         self.assertIn("Small sample", rendered)
         self.assertIn("estimated_gain_percent", rendered)
