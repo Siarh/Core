@@ -141,8 +141,10 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
     result = []
     for bucket in buckets.values():
         # This is the span covered by observed events, not guaranteed full fight time.
+        # The addon timer is elapsed from fight start; use last observed second + 1.
+        # This includes quiet gaps before the first recorded hit, unlike max-min span.
         observed_seconds = sum(
-            max(1, max(seconds) - min(seconds) + 1)
+            max(1, max(seconds) + 1)
             for seconds in bucket["seconds"].values()
         )
         result.append({
@@ -163,7 +165,7 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
                 key: {"amount": round(value["amount"], 2), "events": value["events"]}
                 for key, value in sorted(bucket["healing_by_recipient"].items())
             },
-            "observed_event_seconds_span": observed_seconds,
+            "observed_fight_seconds_estimate": observed_seconds,
             "observed_dps_estimate": round(bucket["damage"] / observed_seconds, 2) if observed_seconds else None,
             "observed_hps_estimate": round(bucket["healing"] / observed_seconds, 2) if observed_seconds else None,
             "observed_incoming_rate_estimate": round(bucket["incoming"] / observed_seconds, 2) if observed_seconds else None,
@@ -176,7 +178,7 @@ def compare_stat_sets(rows: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "method": "descriptive totals by activity, profile and complete stat snapshot",
         "groups": result,
-        "note": "Описательная статистика, не причинный эффект и не Marginal Efficiency. Время — только диапазон секунд с наблюдавшимися событиями.",
+        "note": "Описательная статистика, не причинный эффект и не Marginal Efficiency. Время оценено по максимальной секунде таймера каждого боя + 1; это не точная длительность при отсутствии завершающего события.",
     }
 
 
@@ -407,12 +409,13 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                         seed=20261115 + comparison_id * 101,
                     )
                     quality_label = "measured_pre" if hp_quality == "measured_pre" else "estimated_pre"
-                    if ci and ci[0] > 0:
-                        confidence = "MEDIUM" if min(len(baseline_values), len(test_values)) < 5 else "HIGH"
-                    elif ci and ci[1] < 0:
-                        confidence = "MEDIUM" if min(len(baseline_values), len(test_values)) < 5 else "HIGH"
-                    else:
-                        confidence = "LOW"
+                    ci_excludes_zero = bool(ci and (ci[0] > 0 or ci[1] < 0))
+                    # Unlogged target identity and combat modifiers prevent HIGH causal
+                    # confidence, even when the bootstrap interval is narrow.
+                    confidence = (
+                        "MEDIUM" if ci_excludes_zero and quality_label == "measured_pre"
+                        and min(len(baseline_values), len(test_values)) >= 5 else "LOW"
+                    )
                     comparisons.append({
                         "status": "derived_controlled_observation",
                         "classification": "DERIVED",
@@ -451,6 +454,13 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                         "confidence": confidence,
                         "n_independent_fights": len(baseline_values) + len(test_values),
                     })
+
+    included_events = sum(
+        len(values)
+        for builds in contexts.values()
+        for fights in builds.values()
+        for values in fights.values()
+    )
 
     comparisons.sort(
         key=lambda item: (
