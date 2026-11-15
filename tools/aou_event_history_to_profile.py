@@ -657,6 +657,17 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         target_quality = number(row.get("target_quality"))
         target_is_mob = str(row.get("target_is_mob") or "").strip()
 
+        # Canonicalize metadata for both comparison grouping and reporting.
+        # Case or boolean spelling changes must not split one archetype.
+        if actor_signature:
+            actor_descriptor = json.loads(actor_signature)
+            actor_name, actor_level, actor_quality = actor_descriptor[:3]
+            actor_is_mob = "1" if actor_descriptor[3] else "0"
+        if target_signature:
+            target_descriptor = json.loads(target_signature)
+            target_name, target_level, target_quality = target_descriptor[:3]
+            target_is_mob = "1" if target_descriptor[3] else "0"
+
         # Keep the player actor tied to its exact instance ID. Cross-instance
         # archetype matching is allowed for targets only, with a complete
         # signature; actor descriptors remain diagnostic metadata.
