@@ -99,7 +99,7 @@ expect(defenseRows[2][4], "HP/RES -", "defense quality does not reuse attack sam
 
 local beforeStatus = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
-local statusOutput = table.concat(output, "\\n", beforeStatus + 1)
+local statusOutput = table.concat(output, "\n", beforeStatus + 1)
 assert(string.find(statusOutput, "ON", 1, true), "AI status should report ON")
 assert(string.find(statusOutput, "Ollama", 1, true), "AI status should describe the local desktop companion")
 local beforeAdvice = #output
