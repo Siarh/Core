@@ -148,8 +148,6 @@ function TDetailsPanelGUI:CreateNewObject(name)
 			GlobalInfoHeaderStatsText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true),
 			GlobalInfoList = {},     -- Panel extra info list
 			OpponentHeader = nil,
-			OpponentHeaderNameText = nil,
-			OpponentHeaderStatsText = nil,
 			OpponentList = {},
 
 			SpellHeaderPanel = widget:GetChildByName("SpellHeaderPanel"), -- Header panel
@@ -465,7 +463,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local russian = localization == "rus"
 	local W = targetText
 	dp.OpponentHeader:Show()
-	dp.OpponentHeaderNameText:SetVal("Name",
+	dp.OpponentHeader.Line:SetVal("Name",
 		W(russian and "Цель | тип / ур. / качество | HP | сопротивление в событиях"
 			or "Target | type / lvl / quality | HP | resisted damage by school"))
 
@@ -842,7 +840,6 @@ function TUMeterGUI:Init()
 	local spellPanelDesc = self.DetailsPanel:GetChildByName("SpellPanel"):GetDesc()
 	local spellInfoPanelDesc = self.DetailsPanel:GetChildByName("SpellDetailPanel"):GetDesc()
 	local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()
-	local globalInfoHeaderDesc = self.DetailsPanel.GlobalInfoHeaderPanel:GetDesc()
 	local opponentPanelDesc = self.DetailsPanel:GetChildByName("OpponentPanel"):GetDesc()
 
 	-------------------------------------------------------------------------------
@@ -883,12 +880,13 @@ function TUMeterGUI:Init()
 
 	-- Opponent profiles (four highest-damage targets from the current fight).
 	local opponentHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
-	self.DetailsPanel.OpponentHeader = TWidget:CreateNewObjectByDesc(
-		"OpponentHeaderPanel", globalInfoHeaderDesc, self.DetailsPanel)
-	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
-	self.DetailsPanel.OpponentHeaderNameText = self.DetailsPanel.OpponentHeader.Widget:GetChildChecked(
-		"GlobalInfoHeaderTextViewName", true)
 	self.DetailsPanel:GetChildByName("OpponentPanel"):Destroy()
+	local headerWidget = TWidget:CreateNewObjectByDesc(
+		"OpponentHeaderPanel", opponentPanelDesc, self.DetailsPanel)
+	self.DetailsPanel.OpponentHeader = setmetatable({
+		Line = headerWidget:GetChildByName("OpponentLineTextViewName").Widget
+	}, { __index = headerWidget })
+	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
 	local opponentRowsOffset = opponentHeaderOffset + 18
 	for opponentIndex = 1, TARGET_INFO_ROWS do
 		local wtName = "OpponentPanel" .. opponentIndex
