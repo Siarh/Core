@@ -192,7 +192,9 @@ object = {
         if id == 2002 then return "Test Target" end
         return ""
     end,
-    IsMob = function(id) return id == 2002 end
+    IsMob = function(id) return id == 2002 end,
+    IsPlayer = function(id) return id == 1001 end,
+    IsExist = function() return true end
 }
 unit = {
     GetLevel = function() return 90 end,
@@ -236,15 +238,34 @@ local transitionRow = AOUA.Session.eventSamples[#AOUA.Session.eventSamples]
 assert(transitionRow:find("|50.0000|45.0000|measured_pre|1000.0000|", 1, true),
     "incoming sample should preserve exact pre-hit health fraction")
 expect(AOUA.Session.eventSamples[1]:find("damage", 1, true) ~= nil, true, "outgoing damage sample saved")
--- The known-good backup uses event schema v2; it intentionally stores actor/target IDs,
--- not the experimental display-name/level/quality descriptors from schema v3.
+
+local function splitPipe(value)
+    local cells = {}
+    for cell in (value .. "|"):gmatch("(.-)|") do cells[#cells + 1] = cell end
+    return cells
+end
+local damageFields = splitPipe(AOUA.Session.eventSamples[1])
+expect(damageFields[38], "Test Actor", "actor name metadata")
+expect(damageFields[39], "90.0000", "actor level metadata")
+expect(damageFields[42], "player", "actor kind metadata")
+expect(damageFields[43], "0", "actor mob classification")
+expect(damageFields[44], "Test Target", "target name metadata")
+expect(damageFields[45], "90.0000", "target level metadata")
+expect(damageFields[46], "4.0000", "target quality metadata")
+expect(damageFields[48], "mob", "target kind metadata")
+expect(damageFields[49], "1", "target mob classification")
+expect(damageFields[50], "500.0000", "target current HP snapshot")
+expect(damageFields[52], "1000.0000", "target HP limit snapshot")
+expect(damageFields[53], "measured", "target HP snapshot quality")
+-- Schema v3 appends actor/target descriptors after the v2 columns, so old
+-- persisted rows remain aligned and receive blank trailing metadata on export.
 expect(AOUA.Session.eventSamples[2]:find("|35.0000|self|Recorded self heal|", 1, true) ~= nil, true,
     "self-heal Resolve and recipient saved")
 local savedOk, savedCount = AOUA.OnFightStop()
 expect(savedOk, true, "event history persisted")
 expect(savedCount, 4, "persisted event count")
 expect(persistedConfig.aou_evt_count, 4, "event config count")
-expect(persistedConfig.aou_evt_schema, "v2", "event schema version")
+expect(persistedConfig.aou_evt_schema, "v3", "event schema version")
 expect(persistedConfig.aou_rec_count, nil, "legacy record keys untouched")
 local exportOk = AOUA.EventExport(3)
 expect(exportOk, true, "event export success")

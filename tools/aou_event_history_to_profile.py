@@ -538,22 +538,32 @@ def _fight_stat_signature(row: dict[str, str]) -> tuple[float, ...] | None:
 
 
 def _entity_match_signature(row: dict[str, str], prefix: str) -> str | None:
-    """Build a conservative cross-instance entity signature from live API metadata.
+    """Build a conservative cross-instance signature; never merge unknown types.
 
-    A signature is usable only when name, level, quality and mob classification
-    are all present. It is an archetype hint, not a globally unique template ID.
+    New rows use a categorical mob/player/NPC kind. Legacy rows may fall back to
+    the old is_mob flag, but an explicit kind="unknown" is a hard stop. The
+    signature is an archetype hint, not a globally unique template or state ID.
     """
     name = " ".join(str(row.get(f"{prefix}_name") or "").split()).casefold()
     level = number(row.get(f"{prefix}_level"))
     quality = number(row.get(f"{prefix}_quality"))
-    is_mob_raw = str(row.get(f"{prefix}_is_mob") or "").strip().lower()
-    if not name or level is None or quality is None or is_mob_raw not in {"0", "1", "true", "false"}:
+    kind_raw = str(row.get(f"{prefix}_kind") or "").strip().lower()
+    if kind_raw:
+        if kind_raw not in {"mob", "player", "npc"}:
+            return None
+        entity_kind = kind_raw
+    else:
+        # Backward compatibility for older CSVs that exported only is_mob.
+        is_mob_raw = str(row.get(f"{prefix}_is_mob") or "").strip().lower()
+        if is_mob_raw not in {"0", "1", "true", "false"}:
+            return None
+        entity_kind = "mob" if is_mob_raw in {"1", "true"} else "non_mob"
+    if not name or level is None or quality is None:
         return None
-    is_mob = is_mob_raw in {"1", "true"}
     level_value = int(level) if level.is_integer() else round(level, 4)
     quality_value = int(quality) if quality.is_integer() else round(quality, 4)
     return json.dumps(
-        [name, level_value, quality_value, is_mob],
+        [name, level_value, quality_value, entity_kind],
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -653,20 +663,24 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         actor_level = number(row.get("actor_level"))
         actor_quality = number(row.get("actor_quality"))
         actor_is_mob = str(row.get("actor_is_mob") or "").strip()
+        actor_kind = str(row.get("actor_kind") or "").strip().lower()
         target_level = number(row.get("target_level"))
         target_quality = number(row.get("target_quality"))
         target_is_mob = str(row.get("target_is_mob") or "").strip()
+        target_kind = str(row.get("target_kind") or "").strip().lower()
 
         # Canonicalize metadata for both comparison grouping and reporting.
         # Case or boolean spelling changes must not split one archetype.
         if actor_signature:
             actor_descriptor = json.loads(actor_signature)
             actor_name, actor_level, actor_quality = actor_descriptor[:3]
-            actor_is_mob = "1" if actor_descriptor[3] else "0"
+            actor_kind = actor_descriptor[3]
+            actor_is_mob = "1" if actor_kind == "mob" else "0" if actor_kind in {"player", "npc", "non_mob"} else ""
         if target_signature:
             target_descriptor = json.loads(target_signature)
             target_name, target_level, target_quality = target_descriptor[:3]
-            target_is_mob = "1" if target_descriptor[3] else "0"
+            target_kind = target_descriptor[3]
+            target_is_mob = "1" if target_kind == "mob" else "0" if target_kind in {"player", "npc", "non_mob"} else ""
 
         # For outgoing damage, the target is the creature archetype to compare.
         # For incoming damage, the source is the attacker archetype and the
@@ -699,10 +713,10 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         # This prevents irrelevant display metadata from splitting exact-ID groups.
         if actor_match_method != "entity_signature":
             actor_signature = None
-            actor_name, actor_level, actor_quality, actor_is_mob = "", None, None, ""
+            actor_name, actor_level, actor_quality, actor_is_mob, actor_kind = "", None, None, "", ""
         if target_match_method != "entity_signature":
             target_signature = None
-            target_name, target_level, target_quality, target_is_mob = "", None, None, ""
+            target_name, target_level, target_quality, target_is_mob, target_kind = "", None, None, "", ""
 
         signature = _fight_stat_signature(row)
         if signature is None:
@@ -892,19 +906,22 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "actor_name": actor_name or None,
                             "actor_level": actor_level,
                             "actor_quality": actor_quality,
+                            "actor_kind": actor_kind or None,
                             "actor_is_mob": actor_is_mob or None,
                             "target_name": target_name or None,
                             "target_level": target_level,
                             "target_quality": target_quality,
+                            "target_quality_name": row.get("target_quality_name") or None,
+                            "target_kind": target_kind or None,
                             "target_is_mob": target_is_mob or None,
                             "actor_match_basis": (
-                                "normalized name + level + quality + mob classification"
+                                "normalized name + level + quality + unit kind"
                                 if actor_match_method == "entity_signature"
                                 else "exact instance ID" if actor_match_method == "instance_id"
                                 else "legacy identity unavailable"
                             ),
                             "target_match_basis": (
-                                "normalized name + level + quality + mob classification"
+                                "normalized name + level + quality + unit kind"
                                 if target_match_method == "entity_signature"
                                 else "exact instance ID" if target_match_method == "instance_id"
                                 else "legacy identity unavailable"
@@ -1032,8 +1049,9 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "insufficient_repeated_pairs": insufficient_pairs,
         "comparisons": comparisons,
         "limitations": [
-            "actor_id/target_id сохраняются как instance IDs. Между разными экземплярами допускается сопоставление только при полном entity signature (имя + уровень + элитность + признак моба); signature является приближённым archetype key, а не уникальным server template ID.",
-            "Entity signature может объединить разные варианты с одинаковым именем, уровнем и элитностью; target HP max order, ability, HP band, Resolve band, element и остальные strata дополнительно ограничивают совпадение, но скрытые состояния цели всё ещё могут различаться.",
+            "actor_id/target_id сохраняются как исходные ObjectId экземпляров. Между разными target_id сопоставление допускается только по полному target_signature: нормализованное имя + уровень + качество + тип юнита (mob/player/NPC).",
+            "Неизвестные типы не получают target_signature и не объединяются между разными ObjectId. Для legacy CSV допускается прежний is_mob fallback, но его нельзя смешивать с новым категориальным типом.",
+            "target_signature — это только архетип цели, а не полная идентичность экземпляра или состояния: одинаковые имя, уровень, качество и тип не доказывают одинаковые баффы, сопротивления, HP, экипировку или условия боя.",
             "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
             "ME учитывает rate matched ability context по таймеру боя; это не DPS всего персонажа и зависит от использования способности/ротации.",
             "Для лечения сравнивается reported healing rate, не Effective HPS: callback не содержит достоверный overheal для всех событий.",
@@ -1042,6 +1060,203 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             "Строгое сравнение использует только строки со stat_sample_age не старше 3 секунд.",
             "ME рассчитана только при изменении одной характеристики; остальные сохранённые характеристики должны оставаться в допуске.",
             "Результат DERIVED и controlled-observational, но не доказывает причинность."
+        ],
+    }
+
+
+
+def build_target_statistics(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Aggregate opponent category, HP observations and event-level resistance components.
+
+    Cross-instance aggregation uses the same complete signature as controlled ME.
+    Rows without a known unit kind remain per-instance evidence and are not merged.
+    """
+    grouped: dict[str, dict[str, Any]] = {}
+    unmatched_events = 0
+    unmatched_instance_ids: set[str] = set()
+    component_columns = (
+        "resist", "runes_absorb", "absorb", "barrier", "block", "parry",
+        "mount", "multipliers_absorb", "overall_absorbed", "overall_prevented",
+    )
+
+    for row in rows:
+        if (row.get("kind") or "").strip().lower() != "damage":
+            continue
+        signature = _entity_match_signature(row, "target")
+        target_id = (row.get("target_id") or "").strip()
+        if not signature:
+            unmatched_events += 1
+            if target_id and target_id.lower() not in {"unknown", "none"}:
+                unmatched_instance_ids.add(target_id)
+            continue
+
+        name = " ".join(str(row.get("target_name") or "").split())
+        kind = str(row.get("target_kind") or "").strip().lower()
+        if not kind:
+            legacy_mob = str(row.get("target_is_mob") or "").strip().lower()
+            kind = "mob" if legacy_mob in {"1", "true"} else "non_mob"
+        level = number(row.get("target_level"))
+        quality = number(row.get("target_quality"))
+        quality_name = str(row.get("target_quality_name") or "").strip()
+        if not quality_name and quality is not None:
+            quality_name = f"ENUM:{int(quality)}" if quality.is_integer() else f"ENUM:{quality:g}"
+
+        bucket = grouped.setdefault(signature, {
+            "target_signature": signature,
+            "target_name": name,
+            "target_level": level,
+            "target_quality": quality,
+            "target_quality_name": quality_name or None,
+            "target_kind": kind,
+            "events": 0,
+            "fight_ids": set(),
+            "instance_ids": set(),
+            "hp_before": [],
+            "hp_before_measured": 0,
+            "hp_before_estimated": 0,
+            "hp_before_unknown": 0,
+            "hp_current": [],
+            "hp_current_percent": [],
+            "hp_current_snapshot_ages": [],
+            "hp_limits": [],
+            "by_element": {},
+            "component_totals": {column: 0.0 for column in component_columns},
+            "component_known_events": {column: 0 for column in component_columns},
+        })
+        bucket["events"] += 1
+        fight_id = (row.get("fight_id") or "").strip()
+        if fight_id and fight_id.lower() != "unknown":
+            bucket["fight_ids"].add(fight_id)
+        if target_id and target_id.lower() not in {"unknown", "none"}:
+            bucket["instance_ids"].add(target_id)
+
+        hp_before = number(row.get("target_hp_before"))
+        hp_quality = (row.get("hp_quality") or "").strip().lower()
+        if hp_before is not None and 0 <= hp_before <= 100 and hp_quality in PRE_HP_QUALITIES:
+            bucket["hp_before"].append(hp_before)
+            if hp_quality == "measured_pre":
+                bucket["hp_before_measured"] += 1
+            else:
+                bucket["hp_before_estimated"] += 1
+        else:
+            bucket["hp_before_unknown"] += 1
+
+        current_hp = number(row.get("target_hp_current"))
+        current_hp_percent = number(row.get("target_hp_current_percent"))
+        hp_limit = number(row.get("target_hp_limit"))
+        snapshot_quality = (row.get("target_hp_snapshot_quality") or "").strip().lower()
+        if snapshot_quality == "measured":
+            if current_hp is not None:
+                bucket["hp_current"].append(current_hp)
+            if current_hp_percent is not None:
+                bucket["hp_current_percent"].append(current_hp_percent)
+            if hp_limit is not None and hp_limit > 0:
+                bucket["hp_limits"].append(hp_limit)
+            snapshot_age = number(row.get("target_hp_snapshot_age"))
+            if snapshot_age is not None:
+                bucket["hp_current_snapshot_ages"].append(snapshot_age)
+
+        element = (row.get("element") or "unknown").strip().upper()
+        if element.startswith("ENUM_SUBELEMENT_"):
+            element = element[len("ENUM_SUBELEMENT_"):]
+        school = bucket["by_element"].setdefault(element, {
+            "events": 0, "observed_damage": 0.0,
+            "components": {column: 0.0 for column in component_columns},
+            "known_events": {column: 0 for column in component_columns},
+        })
+        school["events"] += 1
+        school["observed_damage"] += number(row.get("observed_amount")) or 0.0
+        for column in component_columns:
+            value = number(row.get(column))
+            if value is not None:
+                bucket["component_totals"][column] += value
+                bucket["component_known_events"][column] += 1
+                school["components"][column] += value
+                school["known_events"][column] += 1
+
+    targets = []
+    for signature, bucket in grouped.items():
+        hp_values = bucket["hp_before"]
+        current_hp_values = bucket["hp_current"]
+        current_percent_values = bucket["hp_current_percent"]
+        hp_limits = bucket["hp_limits"]
+        components = bucket["component_totals"]
+        known = bucket["component_known_events"]
+        by_element = []
+        for element, school in sorted(bucket["by_element"].items()):
+            by_element.append({
+                "element": element,
+                "events": school["events"],
+                "observed_damage": round(school["observed_damage"], 4),
+                "components": {key: round(value, 4) for key, value in school["components"].items()},
+                "component_known_events": dict(school["known_events"]),
+                "resistance_component_status": (
+                    "MEASURED_CALLBACK_COMPONENTS" if school["known_events"]["resist"] > 0 else "UNAVAILABLE"
+                ),
+            })
+        targets.append({
+            "target_signature": signature,
+            "target_name": bucket["target_name"],
+            "target_level": bucket["target_level"],
+            "target_quality": bucket["target_quality"],
+            "target_quality_name": bucket["target_quality_name"],
+            "target_kind": bucket["target_kind"],
+            "events": bucket["events"],
+            "fights": len(bucket["fight_ids"]),
+            "instances": len(bucket["instance_ids"]),
+            "hp": {
+                "pre_event_average_percent": round(sum(hp_values) / len(hp_values), 4) if hp_values else None,
+                "pre_event_min_percent": round(min(hp_values), 4) if hp_values else None,
+                "pre_event_max_percent": round(max(hp_values), 4) if hp_values else None,
+                "pre_event_samples": len(hp_values),
+                "pre_event_measured": bucket["hp_before_measured"],
+                "pre_event_estimated": bucket["hp_before_estimated"],
+                "pre_event_unknown": bucket["hp_before_unknown"],
+                "current_hp_snapshot_average": round(sum(current_hp_values) / len(current_hp_values), 4) if current_hp_values else None,
+                "current_hp_snapshot_average_percent": round(sum(current_percent_values) / len(current_percent_values), 4) if current_percent_values else None,
+                "current_hp_limit_average": round(sum(hp_limits) / len(hp_limits), 4) if hp_limits else None,
+                "current_hp_snapshot_samples": len(current_hp_values),
+                "current_hp_snapshot_average_age_seconds": (
+                    round(sum(bucket["hp_current_snapshot_ages"]) / len(bucket["hp_current_snapshot_ages"]), 4)
+                    if bucket["hp_current_snapshot_ages"] else None
+                ),
+            },
+            "resistance_components": {
+                "classification": (
+                    "MEASURED_CALLBACK_COMPONENTS" if known["resist"] > 0 else "UNAVAILABLE"
+                ),
+                "resist_amount": round(components["resist"], 4),
+                "resist_known_events": known["resist"],
+                "rune_absorb_amount": round(components["runes_absorb"], 4),
+                "rune_absorb_known_events": known["runes_absorb"],
+                "absorb_amount": round(components["absorb"], 4),
+                "barrier_amount": round(components["barrier"], 4),
+                "block_amount": round(components["block"], 4),
+                "parry_amount": round(components["parry"], 4),
+                "mount_absorb_amount": round(components["mount"], 4),
+                "multiplier_change_amount": round(components["multipliers_absorb"], 4),
+                "overall_absorbed_amount": round(components["overall_absorbed"], 4),
+                "overall_prevented_net_amount": round(components["overall_prevented"], 4),
+                "component_known_events": known,
+                "by_element": by_element,
+                "note": "Это измеренные поля отдельных боевых callback, а не числовой рейтинг сопротивления цели. Отрицательный multiplier_change_amount означает усиление урона.",
+            },
+            "identity_note": "target_signature identifies a target archetype, not a unique object instance or the full encounter state.",
+        })
+    targets.sort(key=lambda item: (-item["events"], item["target_name"].casefold(), item["target_level"] or 0))
+    return {
+        "status": "calculated" if targets else "insufficient_data",
+        "classification": "DERIVED",
+        "target_signature_fields": ["normalized_name", "level", "quality", "unit_kind"],
+        "target_profiles": len(targets),
+        "unmatched_target_events": unmatched_events,
+        "unmatched_target_instances": len(unmatched_instance_ids),
+        "targets": targets,
+        "limitations": [
+            "Объекты с неизвестным типом не получают target_signature и не объединяются между разными ObjectId.",
+            "Сопоставление по имени, уровню, качеству и типу не доказывает одинаковое состояние цели, её баффы/дебаффы, сопротивления, HP или экипировку.",
+            "HP до события хранится с отдельной меткой measured_pre/estimated_pre; текущий HP snapshot может быть старше события, поэтому возвращается его возраст.",
+            "resist/runes_absorb/absorb/barrier/block/parry — значения компонент callback, а не рейтинг сопротивления цели.",
         ],
     }
 
@@ -1322,6 +1537,7 @@ def build_profile(
     temporal_performance = build_temporal_performance(combat_rows)
     event_effectiveness = build_event_effectiveness(combat_rows)
     critical_analysis = build_critical_analysis(combat_rows)
+    target_statistics = build_target_statistics(combat_rows)
 
     return {
         "settings": {
@@ -1345,6 +1561,7 @@ def build_profile(
         "temporal_performance": temporal_performance,
         "event_effectiveness": event_effectiveness,
         "critical_analysis": critical_analysis,
+        "target_statistics": target_statistics,
         "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
@@ -1362,6 +1579,8 @@ def build_profile(
             "temporal_fight_reports": len(temporal_performance["fights"]),
             "event_effectiveness_groups": len(event_effectiveness["fights"]),
             "critical_analysis_groups": len(critical_analysis["groups"]),
+            "target_profiles": len(target_statistics["targets"]),
+            "target_events_without_signature": target_statistics["unmatched_target_events"],
             "controlled_stat_comparisons": len(controlled_efficiency["comparisons"]),
             "controlled_stat_analysis_status": controlled_efficiency["status"],
             "contaminated_fights_excluded": controlled_efficiency["contaminated_fights_excluded"],

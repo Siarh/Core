@@ -245,7 +245,9 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["target_match_method"], "entity_signature")
         self.assertEqual(mastery[0]["target_name"], "training creature")
         self.assertEqual(mastery[0]["target_match_basis"],
-                         "normalized name + level + quality + mob classification")
+                         "normalized name + level + quality + unit kind")
+        self.assertEqual(mastery[0]["target_kind"], "mob")
+        self.assertTrue(mastery[0]["target_signature"])
         self.assertEqual(mastery[0]["comparison_identity_scope"],
                          "same_actor_instance_and_target_archetype")
         self.assertEqual(mastery[0]["target_name"], "training creature")
@@ -253,6 +255,74 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["test"]["fights"], 3)
         self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)
         self.assertEqual(mastery[0]["evidence_tier"], "strict")
+
+
+    def test_unknown_target_kinds_are_not_merged_across_object_ids(self):
+        rows = []
+        for prefix, mastery, amount in (("base", 1000, 1000), ("test", 1100, 1050)):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
+                    row.update({
+                        "R": "200", "U": "300", "L": "400", "S": "500",
+                        "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Holy Wrath", "actor_id": "player-1",
+                        "target_id": f"unknown-{prefix}-{fight_number}",
+                        "target_name": "Ambiguous Unit", "target_level": "90",
+                        "target_quality": "4", "target_kind": "unknown",
+                        "target_is_mob": "",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        self.assertEqual(analysis["status"], "insufficient_data")
+        self.assertEqual(analysis["comparisons"], [])
+
+    def test_target_statistics_group_known_archetype_and_leave_unknown_unmatched(self):
+        rows = []
+        for fight_id, target_id, hp, resist, rune in (
+            ("fight-1", "mob-instance-1", "70", "10", "5"),
+            ("fight-2", "mob-instance-2", "50", "20", "0"),
+        ):
+            row = event("damage", fight_id, 4, 1000, 1000)
+            row.update({
+                "target_id": target_id, "target_name": "Training Creature",
+                "target_level": "90", "target_quality": "4",
+                "target_quality_name": "BOSS", "target_kind": "mob", "target_is_mob": "1",
+                "target_hp_before": hp, "hp_quality": "measured_pre",
+                "target_max_hp": "200000", "target_hp_current": str(float(hp) * 2000),
+                "target_hp_current_percent": hp, "target_hp_limit": "200000",
+                "target_hp_snapshot_quality": "measured", "target_hp_snapshot_age": "0",
+                "element": "fire", "resist": resist, "runes_absorb": rune,
+                "absorb": "2", "barrier": "0", "block": "0", "parry": "0",
+            })
+            rows.append(row)
+        unknown = event("damage", "fight-3", 4, 1000, 1000)
+        unknown.update({
+            "target_id": "unknown-instance", "target_name": "Unclassified",
+            "target_level": "90", "target_quality": "4", "target_kind": "unknown",
+            "target_is_mob": "", "target_hp_before": "60", "hp_quality": "measured_pre",
+        })
+        rows.append(unknown)
+
+        report = importer.build_target_statistics(rows)
+        self.assertEqual(report["target_profiles"], 1)
+        self.assertEqual(report["unmatched_target_events"], 1)
+        target = report["targets"][0]
+        self.assertEqual(target["target_kind"], "mob")
+        self.assertEqual(target["target_quality_name"], "BOSS")
+        self.assertEqual(target["instances"], 2)
+        self.assertEqual(target["events"], 2)
+        self.assertEqual(target["hp"]["pre_event_average_percent"], 60.0)
+        self.assertEqual(target["hp"]["current_hp_snapshot_average"], 120000.0)
+        self.assertEqual(target["resistance_components"]["resist_amount"], 30.0)
+        self.assertEqual(target["resistance_components"]["rune_absorb_amount"], 5.0)
+        self.assertEqual(target["resistance_components"]["classification"], "MEASURED_CALLBACK_COMPONENTS")
+        fire = target["resistance_components"]["by_element"][0]
+        self.assertEqual(fire["element"], "FIRE")
+        self.assertEqual(fire["components"]["resist"], 30.0)
+
 
     def test_incoming_matches_attacker_instances_by_entity_signature(self):
         rows = []

@@ -182,3 +182,13 @@ Build28 maintenance fixes
 - Fixed the Russian/English OptSchA/OptSchE/OptSchN/OptSchL resource files: they were stored as UTF-16 data while the addon localization resources are UTF-8. This caused the mojibake visible in the bottom school-statistics block.
 - Added a regression test that rejects UTF-16 BOM/NUL bytes in the Russian school-label resources.
 - /aou eventfile is documented as the single AOUCSV export workflow for screenshot/OCR capture; it does not claim unsupported direct disk writes by the game client.
+
+
+Target identity and resistance telemetry:
+- Event export schema v3 appends actor/target names, levels, quality enum/category, unit kind (mob/player/NPC), and best-effort current HP snapshots with quality and age.
+- Original actor_id and target_id ObjectIds remain unchanged; metadata is cached per instance for the duration of a fight and bounded to 512 objects.
+- Offline target_signature uses normalized name + level + quality + known unit kind. Explicitly unknown unit kinds do not get a cross-instance signature and are not merged.
+- The profile now includes target_statistics: target archetypes, event HP distribution, measured current-HP snapshots, and callback resistance/absorption components grouped by damage school.
+- Resistance fields are reported as observed event components (resist, rune absorb, absorb, barrier, block, parry, etc.), not as a target's numeric resistance rating. The API does not document a general target-resistance-rating getter.
+- Target signature matching is an archetype match only; it does not prove the target's full encounter state, buffs, debuffs, equipment or resistance state.
+- Legacy v2 persisted rows remain aligned: v3 columns are appended, so legacy rows receive blank trailing metadata rather than shifted values.
