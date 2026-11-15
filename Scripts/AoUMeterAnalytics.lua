@@ -674,15 +674,12 @@ function AOUA.GetTargetDisplayRows(limit)
             row.hpBeforeQuality = profile.hpBeforeQuality or "unknown"
         end
         for school, stat in pairs(profile.resistByElement or {}) do
-            rows[#rows + 1] = row
             row.resistSchools[#row.resistSchools + 1] = {
                 element = school, amount = stat.amount, samples = stat.samples
             }
         end
-        if not next(profile.resistByElement or {}) then
-            rows[#rows + 1] = row
-        end
         table.sort(row.resistSchools, function(a, b) return a.amount > b.amount end)
+        rows[#rows + 1] = row
     end
     table.sort(rows, function(a, b)
         if (a.damage or 0) == (b.damage or 0) then
