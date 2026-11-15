@@ -1447,11 +1447,21 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local liveStats = Optim.ReadStats(true)
 	local totalStats = (cfg.on == 1 and cfg.auto == 1 and Optim.LastStatsRead and Optim.LastStatsRead.found >= 3) and liveStats or nil
 	add(heal and "OptModeH" or "OptModeD", totalStats and "auto" or "manual")
-	if cfg.on ~= 1 or not o or N(o.pw) <= 0 then
+	local manualOffense = N(cfg.fM) + N(cfg.fR) + N(cfg.fU) + N(cfg.L) +
+		N(cfg.bM) + N(cfg.bR) + N(cfg.bU) + N(cfg.eM) + N(cfg.eR) + N(cfg.eU)
+	local manualDefense = N(cfg.fS) + N(cfg.fW) + N(cfg.fB) +
+		N(cfg.bS) + N(cfg.bW) + N(cfg.bB) + N(cfg.eS) + N(cfg.eW) + N(cfg.eB)
+	local hasManualStats = manualOffense + manualDefense > 0
+	local missingAutomaticStats = not totalStats and not hasManualStats
+	if cfg.on ~= 1 or not o or N(o.pw) <= 0 or missingAutomaticStats then
 		-- Current character stats are useful even before this fight has enough
-		-- Resolve/HP samples for a recommendation. Show measured values and
-		-- explicit dashes for the unavailable optimal/delta columns.
-		add("OptNoData")
+		-- Resolve/HP samples for a recommendation, or when the API only provides
+		-- a partial snapshot. Never replace valid live rows with a blank panel.
+		if o and N(o.pw) > 0 and missingAutomaticStats then
+			add("OptSet")
+		else
+			add("OptNoData")
+		end
 		local shown = 0
 		local function addCurrentOnly(key, stat, manualValue)
 			local value = stat and stat.total
