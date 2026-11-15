@@ -489,6 +489,62 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
+	-- Runtime fallback: some Sunshine event callbacks do not expose a target
+	-- object to the analytics journal even though the legacy meter/optimizer
+	-- already captured the last outgoing damage event. Build one display row
+	-- directly from that event so the opponent block is not silently absent.
+	if #rows == 0 and Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] then
+		local ev = Optim.LastEv[enumMode.Dps]
+		local targetId = ev.target
+		if not targetId and type(Optim.GetTarget) == "function" then
+			local okTarget, currentTarget = pcall(Optim.GetTarget)
+			if okTarget then targetId = currentTarget end
+		end
+		if targetId then
+			local row = { name = "", kind = "unknown", resistSchools = {} }
+			if object and type(object.GetName) == "function" then
+				local okName, value = pcall(object.GetName, targetId)
+				if okName then row.name = value or "" end
+			end
+			if object and type(object.IsMob) == "function" then
+				local okMob, value = pcall(object.IsMob, targetId)
+				if okMob and value == true then row.kind = "mob" end
+			end
+			if row.kind == "unknown" and object and type(object.IsPlayer) == "function" then
+				local okPlayer, value = pcall(object.IsPlayer, targetId)
+				if okPlayer and value == true then row.kind = "player" end
+			end
+			if row.kind == "unknown" and object and type(object.IsUnit) == "function" then
+				local okUnit, value = pcall(object.IsUnit, targetId)
+				if okUnit and value == true then row.kind = "npc" end
+			end
+			if unit and type(unit.GetLevel) == "function" then
+				local okLevel, value = pcall(unit.GetLevel, targetId)
+				if okLevel and tonumber(value) then row.level = tonumber(value) end
+			end
+			if unit and type(unit.GetQuality) == "function" then
+				local okQuality, value = pcall(unit.GetQuality, targetId)
+				if okQuality and tonumber(value) then row.quality = tonumber(value) end
+			end
+			if Optim and type(Optim.GetHealth) == "function" then
+				local okHp, current, maximum, real = pcall(Optim.GetHealth, targetId)
+				if okHp and real == true and tonumber(current) and tonumber(maximum) and maximum > 0 then
+					row.hpCurrent, row.hpLimit = tonumber(current), tonumber(maximum)
+					row.hpPercent = row.hpCurrent / row.hpLimit * 100
+				end
+			end
+			local element = targetSchoolLabel(ev.sysSubElement or ev.subElement or ev.element)
+			local resisted = targetCompactNumber(ev.resist)
+			if element ~= "" and resisted ~= "" and tonumber(ev.resist) and tonumber(ev.resist) > 0 then
+				row.resistSchools[1] = { element = ev.sysSubElement or ev.subElement or ev.element, amount = tonumber(ev.resist), samples = 1 }
+			end
+			if targetReadableName(row.name) ~= "" or row.kind ~= "unknown" or tonumber(row.level)
+				or row.hpCurrent or #row.resistSchools > 0 then
+				rows[1], total = row, 1
+			end
+		end
+	end
+
 	if total <= 0 or #rows == 0 then
 		dp.OpponentHeader:Hide()
 		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
