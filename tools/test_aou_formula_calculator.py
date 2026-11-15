@@ -320,7 +320,7 @@ class FormulaTests(unittest.TestCase):
         result = calc.model_marginal_efficiency(activity, stats, cfg)
 
         self.assertEqual(result["classification"], "ESTIMATED")
-        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(result["status"], "partial_estimates")
         self.assertEqual(result["baseline_model_result"], 1100)
         self.assertEqual(result["curves"]["mastery"]["points"][1]["marginal_efficiency_per_100"], 100)
         self.assertFalse(result["curves"]["luck"]["allocation_eligible"])
