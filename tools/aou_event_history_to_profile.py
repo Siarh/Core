@@ -556,6 +556,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     # all hits of the same ability rather than conditioning on a hit already being crit.
     contexts_all_hits: ContextMap = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     fight_signatures: dict[str, set[tuple[float, ...]]] = defaultdict(set)
+    fight_valid_event_counts: Counter[str] = Counter()
+    validated_event_rows = 0
     skipped: Counter[str] = Counter()
 
     for row in rows:
@@ -640,6 +642,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         recipient = (row.get("recipient") or "unknown").strip().lower() if kind == "healing" else ""
         duration_seconds = max(1, fight_last_second.get(fight, int(second_value)) + 1)
         duration = _duration_band(duration_seconds)
+        validated_event_rows += 1
+        fight_valid_event_counts[fight] += 1
         base_stratum = (
             kind, profile, duration, actor_id, target_id,
             ability.lower(), element, damage_source.lower(),
@@ -742,7 +746,9 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                         test_mean = sum(test_rates) / len(test_rates)
                         baseline_event_mean = sum(baseline_event_means) / len(baseline_event_means)
                         test_event_mean = sum(test_event_means) / len(test_event_means)
-                        effect_per_100 = (test_mean - baseline_mean) * 100.0 / delta
+                        delta_result = test_mean - baseline_mean
+                        marginal_per_stat = delta_result / delta
+                        effect_per_100 = marginal_per_stat * 100.0
                         relative_per_100 = (
                             ((test_mean / baseline_mean) ** (100.0 / delta) - 1.0) * 100.0
                             if baseline_mean > 0 and test_mean > 0 else None
@@ -783,6 +789,15 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "from": low_value,
                             "to": high_value,
                             "delta_stat": delta,
+                            "delta_result": round(delta_result, 6),
+                            "result_unit": "reported_amount_per_second",
+                            "me_formula": "ME = (Result_test - Result_base) / (Stat_test - Stat_base)",
+                            "marginal_efficiency_per_stat": round(marginal_per_stat, 6),
+                            "marginal_efficiency_unit_per_stat": "reported amount per second per +1 stat point",
+                            "marginal_efficiency_per_100": round(effect_per_100, 4),
+                            "marginal_efficiency_unit_per_100": "reported amount per second per +100 stat points",
+                            "result_direction": "minimize" if kind == "incoming" else "maximize",
+                            "beneficial_effect_per_100": round(-effect_per_100 if kind == "incoming" else effect_per_100, 4),
                             "baseline": {
                                 "fights": len(baseline_rates), "events": baseline_events,
                                 "mean_context_rate_per_second": round(baseline_mean, 4),
@@ -799,11 +814,12 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                                 "mean_event_amount": round(test_event_mean, 4),
                                 "elapsed_seconds": test_durations,
                             },
-                            "marginal_efficiency_per_100": round(effect_per_100, 4),
-                            "marginal_efficiency_unit": "reported amount per second per +100 stat points",
                             "mean_event_amount_delta_per_100": round((test_event_mean - baseline_event_mean) * 100.0 / delta, 4),
                             "relative_change_per_100_percent": round(relative_per_100, 4) if relative_per_100 is not None else None,
                             "confidence_interval_95_per_100": ci,
+                            "confidence_interval_95_per_stat": (
+                                [round(ci[0] / 100.0, 6), round(ci[1] / 100.0, 6)] if ci else None
+                            ),
                             "confidence": confidence,
                             "n_independent_fights": len(baseline_rates) + len(test_rates),
                         })
@@ -814,6 +830,16 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     included_events = sum(
         len(values)
         for builds in contexts.values()
+        for fights in builds.values()
+        for values in fights.values()
+    )
+
+    contaminated_event_rows = sum(
+        fight_valid_event_counts.get(fight, 0) for fight in contaminated_fights
+    )
+    included_luck_all_hit_events = sum(
+        len(values)
+        for builds in contexts_all_hits.values()
         for fights in builds.values()
         for values in fights.values()
     )
@@ -835,17 +861,16 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "minimum_events_per_fight_context": MIN_EVENTS_PER_FIGHT_CONTEXT,
         "max_stat_snapshot_age_seconds": MAX_STAT_SNAPSHOT_AGE_SECONDS,
         "bootstrap_replicates": BOOTSTRAP_REPLICATES,
+        "input_event_rows": len(rows),
+        "validated_event_rows_before_contamination": validated_event_rows,
+        "contaminated_event_rows_excluded": contaminated_event_rows,
         "included_events": included_events,
-        "included_luck_all_hit_events": sum(
-            len(values)
-            for builds in contexts_all_hits.values()
-            for fights in builds.values()
-            for values in fights.values()
-        ),
+        "included_luck_all_hit_events": included_luck_all_hit_events,
+        "total_comparisons": len(comparisons),
         "excluded_or_unusable": dict(sorted(skipped.items())),
         "contaminated_fights_excluded": len(contaminated_fights),
         "insufficient_repeated_pairs": insufficient_pairs,
-        "comparisons": comparisons[:100],
+        "comparisons": comparisons,
         "limitations": [
             "actor_id/target_id поступают как ключи объекта из callback; если API вернул нестабильный или неизвестный ключ, событие исключается. Ключи не гарантируют одинаковую фазу/состояние цели между боями.",
             "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
@@ -1161,7 +1186,9 @@ def build_profile(
         "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
-            "source_rows": len(combat_rows),
+            "source_rows": len(rows),
+            "combat_rows": len(combat_rows),
+            "ignored_non_combat_rows": len(rows) - len(combat_rows),
             "included_events": included,
             "skipped_events": dict(skipped),
             "profiles": profile_names,
