@@ -300,6 +300,15 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             skipped["stat_snapshot_stale"] += 1
             continue
 
+        actor_id = (row.get("actor_id") or "").strip()
+        target_id = (row.get("target_id") or "").strip()
+        if not actor_id or actor_id.lower() in {"unknown", "none"}:
+            skipped["actor_id_unknown"] += 1
+            continue
+        if not target_id or target_id.lower() in {"unknown", "none"}:
+            skipped["target_id_unknown"] += 1
+            continue
+
         signature = _fight_stat_signature(row)
         if signature is None:
             skipped["full_stat_snapshot_missing"] += 1
@@ -330,7 +339,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         duration_seconds = max(1, fight_last_second.get(fight, int(second_value)) + 1)
         duration = _duration_band(duration_seconds)
         base_stratum = (
-            kind, profile, duration, ability.lower(), element, damage_source.lower(),
+            kind, profile, duration, actor_id, target_id,
+            ability.lower(), element, damage_source.lower(),
             hp_band_start, hp_quality, target_hp_scale, resolve_band,
         )
         sample = (float(amount), int(second_value))
@@ -365,7 +375,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     def process_context_map(context_map: ContextMap, all_hits_for_luck: bool = False) -> None:
         nonlocal insufficient_pairs, comparison_id
         for stratum, builds in context_map.items():
-            kind, profile, duration, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
+            kind, profile, duration, actor_id, target_id, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
             if all_hits_for_luck:
                 stat_names = ("luck",)
             elif kind in {"damage", "healing"}:
@@ -455,6 +465,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "mode": kind,
                             "profile": profile,
                             "duration_band": duration,
+                            "actor_id": actor_id,
+                            "target_id": target_id,
                             "ability": ability,
                             "element": element or "unknown",
                             "damage_source": damage_source or "unknown",
@@ -514,7 +526,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     return {
         "status": "comparisons_available" if comparisons else "insufficient_data",
         "method": "one-stat-at-a-time matched ability context; mean per-fight context rate; bootstrap over independent fight rates",
-        "outcome_unit": "observed matched-context amount per elapsed fight second; mean event amount is secondary; not full-character DPS/HPS; healing is not effective healing",
+        "outcome_unit": "observed matched-target ability amount per elapsed fight second; mean event amount is secondary; not full-character DPS/HPS; healing is not effective healing",
         "luck_method": "Luck is compared across all Normal+Critical hits for the same ability; other stats are compared in separate Normal/Critical strata",
         "minimum_stat_step": MIN_STAT_STEP,
         "minimum_fights_per_build": MIN_FIGHTS_PER_BUILD,
@@ -533,7 +545,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "insufficient_repeated_pairs": insufficient_pairs,
         "comparisons": comparisons[:100],
         "limitations": [
-            "Цели не имеют отдельного target_id в текущей версии журнала; одинаковое имя способности и HP-диапазон не гарантируют одну и ту же цель.",
+            "actor_id/target_id поступают как ключи объекта из callback; если API вернул нестабильный или неизвестный ключ, событие исключается. Ключи не гарантируют одинаковую фазу/состояние цели между боями.",
             "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
             "ME учитывает rate matched ability context по таймеру боя; это не DPS всего персонажа и зависит от использования способности/ротации.",
             "Для лечения сравнивается reported healing rate, не Effective HPS: callback не содержит достоверный overheal для всех событий.",
