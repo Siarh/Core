@@ -7,14 +7,63 @@
 local TARGET_INFO_ROWS = 4
 local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7
 
+-- WString conversions can return either UTF-8 or legacy CP1251 text,
+-- depending on the object/API path. Only run UTF-8 through the CP1251 encoder.
+local function targetIsUtf8(value)
+	local i, n = 1, #value
+	while i <= n do
+		local b = string.byte(value, i)
+		if b <= 127 then
+			i = i + 1
+		elseif b >= 194 and b <= 223 then
+			local b2 = string.byte(value, i + 1)
+			if not b2 or b2 < 128 or b2 > 191 then return false end
+			i = i + 2
+		elseif b >= 224 and b <= 239 then
+			local b2, b3 = string.byte(value, i + 1), string.byte(value, i + 2)
+			if not b2 or not b3 or b2 < 128 or b2 > 191 or b3 < 128 or b3 > 191 then return false end
+			if b == 224 and b2 < 160 then return false end
+			if b == 237 and b2 >= 160 then return false end
+			i = i + 3
+		elseif b >= 240 and b <= 244 then
+			local b2, b3, b4 = string.byte(value, i + 1), string.byte(value, i + 2), string.byte(value, i + 3)
+			if not b2 or not b3 or not b4 or b2 < 128 or b2 > 191
+				or b3 < 128 or b3 > 191 or b4 < 128 or b4 > 191 then return false end
+			if b == 240 and b2 < 144 then return false end
+			if b == 244 and b2 > 143 then return false end
+			i = i + 4
+		else
+			return false
+		end
+	end
+	return true
+end
+
 local function targetText(value)
-	local converter = (Optim and Optim.ToWString) or userMods.ToWString
-	return converter(tostring(value or ""))
+	local text = tostring(value or "")
+	if userMods and type(userMods.ToWString) == "function" then
+		if localization == "rus" and Optim and type(Optim.ToWString) == "function"
+			and targetIsUtf8(text) then
+			return Optim.ToWString(text)
+		end
+		return userMods.ToWString(text)
+	end
+	return text
+end
+
+local function targetReadableName(value)
+	local name = tostring(value or "")
+	name = string.gsub(name, "^%s*(.-)%s*$", "%1")
+	if name == "" or string.match(name, "^userdata:") or string.match(name, "^table:") then return "" end
+	local visible = string.gsub(name, "[%s%?%p]", "")
+	local _, questionCount = string.gsub(name, "%?", "")
+	if visible == "" or (questionCount >= 2 and questionCount * 2 >= #name) then return "" end
+	return name
 end
 
 local function targetCompactNumber(value)
 	value = tonumber(value)
-	if not value then return "-" end
+	if not value then return "" end
 	if math.abs(value) >= 1000000 then
 		return string.format("%.1fM", value / 1000000)
 	elseif math.abs(value) >= 1000 then
@@ -26,11 +75,11 @@ end
 local function targetKindLabel(kind)
 	local russian = localization == "rus"
 	local labels = russian and {
-		mob = "моб", player = "игрок", npc = "НПС", unknown = "тип н/д"
+		mob = "моб", player = "игрок", npc = "НПС"
 	} or {
-		mob = "mob", player = "player", npc = "NPC", unknown = "type n/a"
+		mob = "mob", player = "player", npc = "NPC"
 	}
-	return labels[kind] or tostring(kind or (russian and "тип н/д" or "type n/a"))
+	return labels[kind]
 end
 
 local function targetQualityLabel(value)
@@ -48,7 +97,8 @@ local function targetQualityLabel(value)
 		MINI_BOSS = "mini-boss", BOSS = "boss", RAID_BOSS = "raid boss",
 		RAID_ELITE = "raid elite", CRITTER = "critter"
 	}
-	return labels[key] or string.lower(string.gsub(key, "_", " "))
+	if string.match(key, "^ENUM:") then return "" end
+	return labels[key] or ""
 end
 
 local function targetSchoolLabel(value)
@@ -63,7 +113,8 @@ local function targetSchoolLabel(value)
 		ELECTRIC = "Electric", ASTRAL = "Astral", DIVINE = "Divine",
 		NATURE = "Nature", LIGHT = "Light", DARK = "Dark"
 	}
-	return labels[key] or string.lower(key)
+	if labels[key] then return labels[key] end
+	return ""
 end
 
 --------------------------------------------------------------------------------
@@ -387,8 +438,8 @@ function TUMeterGUI:DisplaySpell(spellIndex)
 end
 --------------------------------------------------------------------------------
 -- Show current-fight opponents for the local player's damage events.
--- HP is either an exact recent snapshot, a labelled pre-hit estimate, or n/a.
--- "Resist" is the API-reported mitigated damage amount, not a stat rating.
+-- All available facts are placed in one full-width, labelled line per target.
+-- An unavailable/unreadable name or stat is omitted rather than fabricated.
 --------------------------------------------------------------------------------
 function TUMeterGUI:UpdateOpponentInfo()
 	local dp = self.DetailsPanel
@@ -405,66 +456,67 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
+	if total <= 0 or #rows == 0 then
+		dp.OpponentHeader:Hide()
+		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+		return
+	end
+
 	local russian = localization == "rus"
 	local W = targetText
 	dp.OpponentHeader:Show()
-	dp.OpponentHeaderNameText:SetVal("Name", W(russian and "Противники" or "Opponents"))
-	dp.OpponentHeaderStatsText:SetVal("Min", W("HP"))
-	dp.OpponentHeaderStatsText:SetVal("Avg", W(russian and "Резист / школа" or "Resist / school"))
-	dp.OpponentHeaderStatsText:SetVal("Max", W(""))
-
-	if total == 0 then
-		local row = dp.OpponentList[1]
-		row:Show()
-		row.Bar:Hide()
-		row.Name:SetVal("Name", W(russian and "Нет данных о целях" or "No target data"))
-		row.Count:SetVal("Count", W("-"))
-		row.Damage:SetVal("Min", W("-"))
-		row.Damage:SetVal("Avg", W(""))
-		row.Damage:SetVal("Max", W(""))
-		row.Percent:SetVal("Percentage", W(""))
-		return
-	end
+	dp.OpponentHeaderNameText:SetVal("Name",
+		W(russian and "Цель | тип / ур. / качество | HP | сопротивление в событиях"
+			or "Target | type / lvl / quality | HP | resisted damage by school"))
 
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
 		local data = rows[i]
 		local panel = dp.OpponentList[i]
-		local name = (data.name and data.name ~= "") and data.name
-			or (russian and "Без имени" or "Unnamed")
-		local details = targetKindLabel(data.kind)
-		if data.level then details = details .. (russian and " ур." or " lvl ") .. tostring(data.level) end
-		local quality = targetQualityLabel(data.qualityName)
-		if quality ~= "" then details = details .. " · " .. quality end
+		local parts = {}
+		local name = targetReadableName(data.name)
+		if name ~= "" then parts[#parts + 1] = name end
 
-		local hpText
-		if data.hpCurrent ~= nil and data.hpLimit ~= nil and data.hpLimit > 0 then
-			hpText = "HP " .. targetCompactNumber(data.hpCurrent) .. "/"
-				.. targetCompactNumber(data.hpLimit) .. " (" .. string.format("%.0f", tonumber(data.hpPercent) or 0) .. "%)"
-		elseif data.hpBeforePercent ~= nil then
-			local marker = data.hpBeforeQuality == "measured_pre" and "" or "~"
-			hpText = (russian and "до удара " or "pre-hit ") .. marker
-				.. string.format("%.0f", tonumber(data.hpBeforePercent) or 0) .. "%"
-		else
-			hpText = "HP " .. (russian and "н/д" or "n/a")
+		local descriptors = {}
+		local kind = targetKindLabel(data.kind)
+		if kind and kind ~= "" then descriptors[#descriptors + 1] = kind end
+		if tonumber(data.level) then
+			descriptors[#descriptors + 1] = (russian and "ур. " or "Lv ") .. tostring(math.floor(data.level))
 		end
+		local quality = targetQualityLabel(data.qualityName)
+		if quality ~= "" then descriptors[#descriptors + 1] = quality end
+		if #descriptors > 0 then parts[#parts + 1] = table.concat(descriptors, ", ") end
+
+		local hpText = ""
+		if tonumber(data.hpCurrent) and tonumber(data.hpLimit) and data.hpLimit > 0 then
+			hpText = "HP " .. targetCompactNumber(data.hpCurrent) .. "/"
+				.. targetCompactNumber(data.hpLimit) .. " ("
+				.. string.format("%.0f", tonumber(data.hpPercent) or 0) .. "%)"
+		elseif tonumber(data.hpBeforePercent) then
+			local marker = data.hpBeforeQuality == "measured_pre" and "" or "~"
+			hpText = (russian and "HP до удара " or "HP pre-hit ") .. marker
+				.. string.format("%.0f", tonumber(data.hpBeforePercent)) .. "%"
+		end
+		if hpText ~= "" then parts[#parts + 1] = hpText end
 
 		local schools = data.resistSchools or {}
-		local resistCells = { "-", "-", "-" }
-		for j = 1, math.min(3, #schools) do
+		local resistParts = {}
+		for j = 1, math.min(2, #schools) do
 			local school = schools[j]
-			resistCells[j] = targetSchoolLabel(school.element) .. " "
-				.. targetCompactNumber(school.amount) .. "x" .. tostring(school.samples or 0)
+			local schoolName = targetSchoolLabel(school.element)
+			local amount = targetCompactNumber(school.amount)
+			if schoolName ~= "" and amount ~= "" then
+				resistParts[#resistParts + 1] = schoolName .. " " .. amount
+					.. " (" .. tostring(tonumber(school.samples) or 0) .. ")"
+			end
+		end
+		if #resistParts > 0 then
+			parts[#parts + 1] = (russian and "сопр. " or "resist ") .. table.concat(resistParts, ", ")
 		end
 
 		panel:Show()
-		panel.Bar:Hide()
-		panel.Name:SetVal("Name", W(name .. " [" .. details .. "]"))
-		panel.Count:SetVal("Count", W(hpText))
-		panel.Damage:SetVal("Min", W(resistCells[1]))
-		panel.Damage:SetVal("Avg", W(resistCells[2]))
-		panel.Damage:SetVal("Max", W(resistCells[3]))
-		panel.Percent:SetVal("Percentage", W(""))
+		panel.Line:SetVal("Name", W(table.concat(parts, " | ")))
 	end
+	for i = #rows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
 end
 
 --------------------------------------------------------------------------------
@@ -791,6 +843,7 @@ function TUMeterGUI:Init()
 	local spellInfoPanelDesc = self.DetailsPanel:GetChildByName("SpellDetailPanel"):GetDesc()
 	local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()
 	local globalInfoHeaderDesc = self.DetailsPanel.GlobalInfoHeaderPanel:GetDesc()
+	local opponentPanelDesc = self.DetailsPanel:GetChildByName("OpponentPanel"):GetDesc()
 
 	-------------------------------------------------------------------------------
 	-- Main Panel
@@ -835,16 +888,16 @@ function TUMeterGUI:Init()
 	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
 	self.DetailsPanel.OpponentHeaderNameText = self.DetailsPanel.OpponentHeader.Widget:GetChildChecked(
 		"GlobalInfoHeaderTextViewName", true)
-	self.DetailsPanel.OpponentHeaderStatsText = self.DetailsPanel.OpponentHeader.Widget:GetChildChecked(
-		"GlobalInfoHeaderTextViewStats", true)
+	self.DetailsPanel:GetChildByName("OpponentPanel"):Destroy()
 	local opponentRowsOffset = opponentHeaderOffset + 18
 	for opponentIndex = 1, TARGET_INFO_ROWS do
 		local wtName = "OpponentPanel" .. opponentIndex
-		self.DetailsPanel.OpponentList[opponentIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(
-			wtName, spellInfoPanelDesc, self.DetailsPanel)
+		local widget = TWidget:CreateNewObjectByDesc(wtName, opponentPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.OpponentList[opponentIndex] = setmetatable({
+			Line = widget:GetChildByName("OpponentLineTextViewName").Widget
+		}, { __index = widget })
 		self.DetailsPanel.OpponentList[opponentIndex]:SetPosition(
 			22, opponentRowsOffset + (opponentIndex - 1) * 18)
-		self.DetailsPanel.OpponentList[opponentIndex].Bar:Hide()
 	end
 
 	-- SpellHeader
