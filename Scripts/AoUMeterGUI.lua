@@ -532,12 +532,45 @@ function TUMeterGUI:UpdateOpponentInfo()
 	end
 	if not hasReadableRow then
 		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
-		local targetId = ev and ev.target or nil
-		if not targetId and Optim and type(Optim.GetTarget) == "function" then
-			local okTarget, currentTarget = pcall(Optim.GetTarget)
-			if okTarget then targetId = currentTarget end
+		local eventTarget = ev and ev.target or nil
+		local candidates = {}
+
+		local function isUsableUnitTarget(id)
+			if id == nil then return false end
+			if object and type(object.IsExist) == "function" then
+				local ok, exists = pcall(object.IsExist, id)
+				if not ok or exists ~= true then return false end
+			end
+			if object and type(object.IsUnit) == "function" then
+				local ok, isUnit = pcall(object.IsUnit, id)
+				if not ok or isUnit ~= true then return false end
+			end
+			return true
 		end
-		if targetId then
+
+		local function addCandidate(id)
+			if not isUsableUnitTarget(id) then return end
+			for i = 1, #candidates do
+				if candidates[i] == id then return end
+			end
+			candidates[#candidates + 1] = id
+		end
+
+		-- A hit event's target can already have despawned (e.g. a killed mob).
+		-- Keep it only while the ObjectId is still a live unit, then fall back
+		-- to the player's current selected target.
+		addCandidate(eventTarget)
+		if avatar and type(avatar.GetTarget) == "function" then
+			local okTarget, currentTarget = pcall(avatar.GetTarget)
+			if okTarget then addCandidate(currentTarget) end
+		end
+		if #candidates == 0 and Optim and type(Optim.GetTarget) == "function" then
+			local okTarget, currentTarget = pcall(Optim.GetTarget)
+			if okTarget then addCandidate(currentTarget) end
+		end
+
+		for candidateIndex = 1, #candidates do
+			local targetId = candidates[candidateIndex]
 			local row = { name = "", kind = "unknown", resistSchools = {} }
 			if object and type(object.GetName) == "function" then
 				local okName, value = pcall(object.GetName, targetId)
@@ -572,18 +605,28 @@ function TUMeterGUI:UpdateOpponentInfo()
 					row.hpCurrent, row.hpLimit = tonumber(current), tonumber(maximum)
 					row.hpPercent = row.hpCurrent / row.hpLimit * 100
 				elseif okHp and real == false and tonumber(current) and tonumber(current) >= 0 and tonumber(current) <= 100 then
-					-- Sunshine may expose only the target's current HP percentage.
 					row.hpCurrentPercent = tonumber(current)
 				end
 			end
-			local element = ev and targetSchoolLabel(ev.sysSubElement or ev.subElement or ev.element) or ""
-			local resisted = ev and targetCompactNumber(ev.resist) or ""
-			if ev and element ~= "" and resisted ~= "" and tonumber(ev.resist) and tonumber(ev.resist) > 0 then
-				row.resistSchools[1] = { element = ev.sysSubElement or ev.subElement or ev.element, amount = tonumber(ev.resist), samples = 1 }
+
+			-- Resistance belongs to the hit-event target only; never attach an
+			-- old hit's mitigation to a different currently selected unit.
+			if targetId == eventTarget then
+				local element = targetSchoolLabel(ev and (ev.sysSubElement or ev.subElement or ev.element))
+				local resisted = targetCompactNumber(ev and ev.resist)
+				if element ~= "" and resisted ~= "" and tonumber(ev and ev.resist) and tonumber(ev.resist) > 0 then
+					row.resistSchools[1] = {
+						element = ev.sysSubElement or ev.subElement or ev.element,
+						amount = tonumber(ev.resist), samples = 1
+					}
+				end
 			end
+
 			if targetReadableName(row.name) ~= "" or row.kind ~= "unknown" or tonumber(row.level)
+				or targetQualityLabel(row.qualityName or row.quality) ~= ""
 				or row.hpCurrent or row.hpCurrentPercent or #row.resistSchools > 0 then
 				rows[1], total = row, 1
+				break
 			end
 		end
 	end
