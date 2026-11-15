@@ -327,6 +327,8 @@ class FormulaTests(unittest.TestCase):
         self.assertNotIn("might", result["curves"])
         self.assertIn("might", result["unavailable_stats"])
         self.assertIn("INSUFFICIENT DATA", result["unavailable_stats"]["might"])
+        self.assertEqual(result["baseline_input_quality"]["might"], "assumed_default_20_unmeasured")
+        self.assertTrue(result["baseline_input_quality"]["absolute_damage_healing_scale_depends_on_might"])
         self.assertIsNone(result["confidence_interval"])
 
         interaction = next(
