@@ -182,3 +182,9 @@ Build28 maintenance fixes
 - Fixed the Russian/English OptSchA/OptSchE/OptSchN/OptSchL resource files: they were stored as UTF-16 data while the addon localization resources are UTF-8. This caused the mojibake visible in the bottom school-statistics block.
 - Added a regression test that rejects UTF-16 BOM/NUL bytes in the Russian school-label resources.
 - /aou eventfile is documented as the single AOUCSV export workflow for screenshot/OCR capture; it does not claim unsupported direct disk writes by the game client.
+
+
+Global determination row layout:
+- Separated the event count from the Min / Avg / Max values in the Resolve global-info row. The previous X placements overlapped at the same left edge and could draw the count over the minimum value.
+- Allocated independent horizontal ranges for the name, count, Min / Avg / Max statistics, and percentage.
+- Added a regression test that parses the widget XDB placements and rejects overlapping columns.
