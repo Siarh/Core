@@ -757,6 +757,14 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
     if missing_hp and "ruthlessness" in candidates:
         candidates.remove("ruthlessness")
         unavailable_stats["ruthlessness"] = "INSUFFICIENT DATA: target HP is missing for at least one event"
+    # The live event snapshot does not currently contain Might or Endurance.
+    # Never treat the simulator's convenience defaults as measured character stats.
+    if "might" in candidates and "might" not in base_stats and "might" not in cfg:
+        candidates.remove("might")
+        unavailable_stats["might"] = "INSUFFICIENT DATA: current Might was not supplied or measured"
+    if mode == "tank" and "endurance" in candidates and "endurance" not in base_stats and "endurance" not in cfg:
+        candidates.remove("endurance")
+        unavailable_stats["endurance"] = "INSUFFICIENT DATA: current Endurance was not supplied or measured"
     if mode == "tank" and num(cfg.get("class_k", 0.0)) <= 0 and "endurance" in candidates:
         candidates.remove("endurance")
         unavailable_stats["endurance"] = "INSUFFICIENT DATA: class_k is required to model Endurance-derived HP"
