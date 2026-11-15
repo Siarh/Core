@@ -338,6 +338,164 @@ def build_temporal_performance(rows: list[dict[str, str]]) -> dict[str, Any]:
     }
 
 
+def build_event_effectiveness(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Keep callback-reported amounts separate from HP-capped effective estimates."""
+    fight_last_second: dict[str, int] = {}
+    for row in rows:
+        fight = (row.get("fight_id") or "unknown").strip()
+        second = number(row.get("second"))
+        if fight and fight != "unknown" and second is not None:
+            fight_last_second[fight] = max(fight_last_second.get(fight, 0), int(second))
+
+    buckets: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        kind = (row.get("kind") or "").strip().lower()
+        if kind not in {"damage", "healing", "incoming", "receivedheal"}:
+            continue
+        fight = (row.get("fight_id") or "unknown").strip()
+        profile = (row.get("profile") or "unknown").strip().lower()
+        if not fight or fight == "unknown":
+            continue
+        recipient = (row.get("recipient") or "unknown").strip().lower()
+        key = (fight, profile, kind, recipient)
+        bucket = buckets.setdefault(key, {
+            "fight_id": fight, "profile": profile, "kind": kind, "recipient": recipient,
+            "reported_amount": 0.0, "events": 0,
+            "estimated_effective_amount": 0.0, "estimated_excess_amount": 0.0,
+            "hp_eligible_events": 0, "measured_hp_events": 0, "estimated_hp_events": 0,
+            "unknown_hp_events": 0,
+        })
+        amount = number(row.get("observed_amount"))
+        if amount is None or amount < 0:
+            continue
+        bucket["reported_amount"] += amount
+        bucket["events"] += 1
+        hp_pct = number(row.get("target_hp_before"))
+        hp_max = number(row.get("target_max_hp"))
+        hp_quality = (row.get("hp_quality") or "").strip().lower()
+        if hp_pct is None or hp_max is None or hp_max <= 0 or hp_quality not in PRE_HP_QUALITIES:
+            bucket["unknown_hp_events"] += 1
+            continue
+
+        if kind in {"healing", "receivedheal"}:
+            available_hp = max(0.0, min(float(hp_max), float(hp_max) * (1.0 - hp_pct / 100.0)))
+        else:
+            available_hp = max(0.0, min(float(hp_max), float(hp_max) * (hp_pct / 100.0)))
+        effective_estimate = min(amount, available_hp)
+        excess_estimate = max(0.0, amount - effective_estimate)
+        bucket["estimated_effective_amount"] += effective_estimate
+        bucket["estimated_excess_amount"] += excess_estimate
+        bucket["hp_eligible_events"] += 1
+        if hp_quality == "measured_pre":
+            bucket["measured_hp_events"] += 1
+        else:
+            bucket["estimated_hp_events"] += 1
+
+    results = []
+    for bucket in buckets.values():
+        duration = max(1, fight_last_second.get(bucket["fight_id"], 0) + 1)
+        reported = bucket["reported_amount"]
+        effective = bucket["estimated_effective_amount"]
+        excess = bucket["estimated_excess_amount"]
+        is_heal = bucket["kind"] in {"healing", "receivedheal"}
+        results.append({
+            **bucket,
+            "classification": "ESTIMATED",
+            "duration_seconds_estimate": duration,
+            "reported_rate_per_second": round(reported / duration, 4),
+            "effective_rate_per_second_estimated": round(effective / duration, 4),
+            "excess_rate_per_second_estimated": round(excess / duration, 4),
+            "effective_share_percent_estimated": round(effective / reported * 100.0, 4) if reported > 0 else None,
+            "excess_share_percent_estimated": round(excess / reported * 100.0, 4) if reported > 0 else None,
+            "excess_label": "overheal_estimated" if is_heal else "overkill_estimated",
+            "hp_coverage_percent": round(bucket["hp_eligible_events"] / bucket["events"] * 100.0, 4) if bucket["events"] else 0.0,
+            "method": "per-event HP cap: min(reported amount, missing HP for healing or remaining HP for damage)",
+            "limitations": [
+                "Не является MEASURED effective amount: callback не содержит надёжный target_hp_after для каждого события.",
+                "Не учитывает последовательные события в одной временной метке, щиты, поглощения, модификаторы и серверную очередность.",
+                "Неизвестный HP исключается из effective estimate, но reported amount сохраняется отдельно.",
+            ],
+        })
+    results.sort(key=lambda item: (item["fight_id"], item["kind"], item["recipient"]))
+    return {
+        "status": "calculated" if results else "insufficient_data",
+        "classification": "ESTIMATED",
+        "fights": results,
+    }
+
+
+def build_critical_analysis(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Descriptive per-ability critical contribution from event flags and amounts."""
+    groups: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        kind = (row.get("kind") or "").strip().lower()
+        if kind not in {"damage", "healing"}:
+            continue
+        profile = (row.get("profile") or "unknown").strip().lower()
+        ability = (row.get("ability") or row.get("damage_source") or "unknown").strip()
+        if not ability or ability.lower() == "unknown":
+            continue
+        critical = (row.get("critical") or "").strip()
+        amount = number(row.get("observed_amount"))
+        if amount is None or amount <= 0:
+            continue
+        hp = number(row.get("target_hp_before"))
+        hp_band = "unknown" if hp is None else f"{min(80, int(max(0, min(100, hp)) // 20) * 20)}-{min(100, int(max(0, min(100, hp)) // 20) * 20) + 20}%"
+        pool = number(row.get("resolve_pool"))
+        pool_band = "unknown" if pool is None else f"{min(90, int(max(0, min(100, pool)) // 10) * 10)}-{min(100, int(max(0, min(100, pool)) // 10) * 10) + 10}%"
+        stats = _fight_stat_signature(row)
+        recipient = (row.get("recipient") or "unknown").strip().lower()
+        element = (row.get("element") or "unknown").strip().lower()
+        key = (kind, profile, ability.lower(), element, hp_band, pool_band, recipient, stats)
+        bucket = groups.setdefault(key, {
+            "kind": kind, "profile": profile, "ability": ability, "element": element,
+            "target_hp_band": hp_band, "resolve_pool_band": pool_band,
+            "recipient": recipient, "stats": (
+                {name: value for name, value in zip(ALL_STAT_COLUMNS.values(), stats)}
+                if stats is not None else None
+            ),
+            "normal_events": 0, "critical_events": 0, "unknown_critical_events": 0,
+            "normal_amount": 0.0, "critical_amount": 0.0, "fights": set(),
+        })
+        fight = (row.get("fight_id") or "unknown").strip()
+        if fight and fight != "unknown":
+            bucket["fights"].add(fight)
+        if critical == "0":
+            bucket["normal_events"] += 1
+            bucket["normal_amount"] += amount
+        elif critical == "1":
+            bucket["critical_events"] += 1
+            bucket["critical_amount"] += amount
+        else:
+            bucket["unknown_critical_events"] += 1
+
+    results = []
+    for bucket in groups.values():
+        normal_n, critical_n = bucket["normal_events"], bucket["critical_events"]
+        known_n = normal_n + critical_n
+        total_amount = bucket["normal_amount"] + bucket["critical_amount"]
+        normal_avg = bucket["normal_amount"] / normal_n if normal_n else None
+        critical_avg = bucket["critical_amount"] / critical_n if critical_n else None
+        results.append({
+            **{key: value for key, value in bucket.items() if key != "fights"},
+            "classification": "DERIVED",
+            "fight_count": len(bucket["fights"]),
+            "known_critical_flag_events": known_n,
+            "observed_critical_rate_percent": round(critical_n / known_n * 100.0, 4) if known_n else None,
+            "observed_critical_amount_share_percent": round(bucket["critical_amount"] / total_amount * 100.0, 4) if total_amount else None,
+            "normal_average_amount": round(normal_avg, 4) if normal_avg is not None else None,
+            "critical_average_amount": round(critical_avg, 4) if critical_avg is not None else None,
+            "observed_critical_to_normal_average_ratio": round(critical_avg / normal_avg, 4)
+                if normal_avg and critical_avg is not None else None,
+            "causal_status": "descriptive_only_target_buffs_rotation_may_confound",
+        })
+    results.sort(key=lambda item: (
+        item["kind"], item["profile"], item["ability"], item["target_hp_band"],
+        item["resolve_pool_band"], -(item["normal_events"] + item["critical_events"]),
+    ))
+    return {"status": "calculated" if results else "insufficient_data", "classification": "DERIVED", "groups": results}
+
+
 def _percentile(values: list[float], fraction: float) -> float:
     ordered = sorted(values)
     if not ordered:
@@ -972,6 +1130,8 @@ def build_profile(
 
     controlled_efficiency = analyze_controlled_stat_efficiency(combat_rows)
     temporal_performance = build_temporal_performance(combat_rows)
+    event_effectiveness = build_event_effectiveness(combat_rows)
+    critical_analysis = build_critical_analysis(combat_rows)
 
     return {
         "settings": {
@@ -993,6 +1153,8 @@ def build_profile(
         "activities": activities,
         "stat_comparison": compare_stat_sets(combat_rows),
         "temporal_performance": temporal_performance,
+        "event_effectiveness": event_effectiveness,
+        "critical_analysis": critical_analysis,
         "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
@@ -1006,6 +1168,8 @@ def build_profile(
             "resistance_families": sorted(resistance_ratings),
             "stat_comparison": compare_stat_sets(combat_rows),
             "temporal_fight_reports": len(temporal_performance["fights"]),
+            "event_effectiveness_groups": len(event_effectiveness["fights"]),
+            "critical_analysis_groups": len(critical_analysis["groups"]),
             "controlled_stat_comparisons": len(controlled_efficiency["comparisons"]),
             "controlled_stat_analysis_status": controlled_efficiency["status"],
             "contaminated_fights_excluded": controlled_efficiency["contaminated_fights_excluded"],
