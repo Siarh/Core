@@ -517,6 +517,16 @@ local function captureEntityMetadata(value)
         end
     end
 
+    -- The Sunshine 6.0 client may not expose object.IsMob. The local avatar
+    -- can still be classified safely from its own ID; all other unknown
+    -- entities remain blank instead of guessing from quality or level.
+    if isMob == nil and avatar and type(avatar.GetId) == "function" then
+        local okAvatarId, avatarId = pcall(avatar.GetId)
+        if okAvatarId and avatarId ~= nil and tostring(avatarId) == tostring(id) then
+            isMob = false
+        end
+    end
+
     local metadata = {
         name = name,
         level = sampleNumber(level),

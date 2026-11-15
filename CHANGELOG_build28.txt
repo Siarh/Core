@@ -194,3 +194,8 @@ Global determination numeric spacing refinement:
 - Rebalanced the global-info row so the determination label and event count use compact, separate columns while Min / Avg / Max retain the same 160 px value width as the spell-detail rows.
 - Increased the visible padding around both separators in the Min / Avg / Max value string to make adjacent values easier to distinguish.
 - Extended the widget-layout regression test to enforce the numeric field width and separator spacing.
+
+
+Entity classification fallback:
+- When object.IsMob is unavailable in the Sunshine 6.0 API, the event journal now marks only the verified local avatar ID as non-mob (0).
+- Other entities remain unknown; quality and level are not treated as proof that an entity is a mob.
