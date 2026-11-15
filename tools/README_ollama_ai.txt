@@ -140,6 +140,26 @@ Resolve summary сначала усредняет значения пула вн
 time-above-threshold или Resolve uptime. PvE/PvP приходит из выбранного профиля,
 не является автоматически выведенной классификацией игры.
 
+**event_effectiveness** хранит две отдельные величины:
+- reported_amount/rate — сумма amount из callback;
+- estimated_effective_amount/rate — min(reported amount, оставшийся HP для damage
+  или недостающий HP для healing), когда перед событием известны HP и max HP;
+- estimated_excess_amount — estimated overkill/overheal.
+
+Эта capped оценка имеет классификацию ESTIMATED: API не даёт достоверный
+target_hp_after и полную очередность щитов/поглощений/модификаторов. События без
+HP сохраняются в reported_total, но не входят в estimated_effective_total.
+Поэтому не называй этот расчёт точным Effective DPS/HPS.
+
+**critical_analysis** — сводка по способности/элементу/HP- и Resolve-фазе:
+флаги обычных/критических событий и суммы из callback — MEASURED;
+crit rate, доля суммы от критов и отношение средних — DERIVED descriptive.
+Наблюдаемое отношение не является доказанным универсальным critical multiplier:
+условия цели, баффы и фазы могут различаться.
+
+Сами actor_id/target_id сохраняются только в локальном профиле для сопоставления;
+их значения не передаются в Ollama payload.
+
 Медианный снимок статов служит только входом теоретического калькулятора.
 Он не заменяет контролируемое сравнение. УВС, лечение и входящий урон не
 складываются в один показатель.
