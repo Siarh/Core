@@ -20,10 +20,37 @@ end
 
 local function emit(value)
     local text = tostring(value or "")
-    if type(sayLong) == "function" then
-        sayLong(text)
-    elseif type(message) == "function" then
-        message(text)
+    local function send(chunk)
+        local output = chunk
+        if Optim and type(Optim.ToWString) == "function" then
+            local ok, wide = pcall(Optim.ToWString, chunk)
+            if ok and wide ~= nil then output = wide end
+        end
+        if type(message) == "function" then
+            message(output)
+        elseif type(sayLong) == "function" then
+            sayLong(output)
+        end
+    end
+
+    -- Keep chat messages bounded without splitting a UTF-8 character.
+    while #text > 0 do
+        local cut = math.min(110, #text)
+        if cut < #text then
+            while cut > 0 do
+                local byte = string.byte(text, cut + 1)
+                if not byte or byte < 128 or byte >= 192 then break end
+                cut = cut - 1
+            end
+            local space
+            for i = 1, cut do
+                if string.byte(text, i) == 32 then space = i end
+            end
+            if space and space >= 55 then cut = space end
+        end
+        if cut <= 0 then cut = math.min(110, #text) end
+        send(string.sub(text, 1, cut))
+        text = string.sub(text, cut + 1)
     end
 end
 
@@ -147,6 +174,9 @@ function DPScopeAI.Analyze(context)
     local allyShare = healTotal > 0 and allyAmount / healTotal or 0
     local survivalDelta = tonumber(context.survivalDeltaPct)
     local offenseDelta = tonumber(context.offenseDeltaPct)
+    local avgTargetHpPct = tonumber(context.avgTargetHpPct)
+    local avgResolve = tonumber(context.avgResolve)
+    local hpSampleLabel = context.hpSampleLabel or "цели"
 
     local insight, nextStep
     if mode == "hps" then
@@ -237,11 +267,16 @@ function DPScopeAI.Analyze(context)
     elseif mode == "tank" then
         detail = string.format(" Входящий урон=%.0f/с.", incoming)
     end
+    local meanHpText = avgTargetHpPct and string.format("%.1f%%", avgTargetHpPct) or "нет данных"
+    local meanResolveText = avgResolve and string.format("%.1f", avgResolve) or "нет данных"
+    local meansSummary = string.format("Средний HP %s=%s; средняя Решимость=%s.",
+        hpSampleLabel, meanHpText, meanResolveText)
     local summary = string.format(
-        "AI %s (%d/100): %s. Режим=%s, событий=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%).%s Следующий шаг: %s",
+        "AI %s (%d/100): %s. Режим=%s, событий=%d, HP=%d/%d (%.0f%%), Решимость=%d/%d (%.0f%%).%s %s Следующий шаг: %s",
         confidence, confidenceScore, insight, modeName, eventCount,
         hpSamples, eventCount, hpCoverage * 100,
-        poolSamples, eventCount, poolCoverage * 100, detail, nextStep or "Собери ещё один сопоставимый бой."
+        poolSamples, eventCount, poolCoverage * 100, detail, meansSummary,
+        nextStep or "Собери ещё один сопоставимый бой."
     )
 
     return {
@@ -252,6 +287,9 @@ function DPScopeAI.Analyze(context)
         hpCoverage = hpCoverage,
         poolCoverage = poolCoverage,
         insight = insight,
+        avgTargetHpPct = avgTargetHpPct,
+        avgResolve = avgResolve,
+        hpSampleLabel = hpSampleLabel,
         nextStep = nextStep or "Собери ещё один сопоставимый бой.",
         summary = summary
     }
@@ -297,11 +335,17 @@ function DPScopeAI.BuildLines(context)
     local confidence = result.confidence
     local i1, i2, i3 = splitCells(result.insight)
     local n1, n2, n3 = splitCells(result.nextStep)
+    local hpLabel = result.hpSampleLabel == "получателя" and "получ." or "цели"
+    local hpMean = result.avgTargetHpPct and
+        string.format("HP %s %.1f%%", hpLabel, result.avgTargetHpPct) or "HP n/a"
+    local resolveMean = result.avgResolve and
+        string.format("RES %.1f", result.avgResolve) or "RES n/a"
     return {
         { "OptAITitle", "LOCAL", confidence, tostring(result.confidenceScore) .. "/100" },
         { "OptAIQuality", tostring(result.eventCount),
             result.mode == "tank" and "IN" or string.format("HP %.0f%%", result.hpCoverage * 100),
             result.mode == "tank" and "HP/RES -" or string.format("RES %.0f%%", result.poolCoverage * 100) },
+        { "OptAIMeans", hpMean, resolveMean, "" },
         { "OptAIInsight", i1, i2, i3 },
         { "OptAIFocus", n1, n2, n3 }
     }
