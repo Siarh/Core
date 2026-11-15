@@ -233,6 +233,7 @@ local originalAvatarGetId = avatar.GetId
 avatar.GetTarget = function() return nil end
 avatar.GetId = function() return { GetId = function() return 1001 end } end
 AOUA.OnFightStart()
+local damageEventsBeforeNilTarget = AOUA.Session.damage.events
 AOUA.OnHit(
     { ID = { GetId = function() return 1001 end } },
     enumMode.Dps,
@@ -241,7 +242,7 @@ AOUA.OnHit(
     nil,
     { Name = "Target from event" }
 )
-expect(AOUA.Session.damage.events, 1, "outgoing hit accepted with nil selected target")
+expect(AOUA.Session.damage.events, damageEventsBeforeNilTarget + 1, "outgoing hit accepted with nil selected target")
 expect(AOUA.Session.rawDiagnostics.outgoingHitCallbacks, 1, "outgoing hit callback count")
 expect(AOUA.Session.rawDiagnostics.outgoingHitOwnerMatched, 1, "ObjectId wrapper owner match")
 expect(AOUA.Session.rawDiagnostics.outgoingHitAccepted, 1, "outgoing hit accepted count")
