@@ -58,13 +58,29 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
         self.assertIn("common.IsWString", gui)
         self.assertIn("userMods.FromWString", gui)
-        self.assertIn("local targetId = ev and ev.target or nil", block)
+        self.assertIn("local eventTarget = ev and ev.target or nil", block)
+        self.assertIn("object.IsExist", block)
+        self.assertIn("object.IsUnit", block)
+        self.assertIn("addCandidate(eventTarget)", block)
+        self.assertIn("avatar.GetTarget", block)
+        self.assertIn("for candidateIndex = 1, #candidates do", block)
         self.assertIn("pcall(Optim.GetTarget)", block)
         self.assertIn('hpText = (russian and "HP " or "HP ") .. "~"', block)
         self.assertNotIn("if #rows == 0 and Optim and Optim.LastEv", block)
         self.assertIn('key = string.gsub(key, "^ENUM_SubElement_", "")', gui)
         self.assertIn("local numeric = tonumber(key)", gui)
         self.assertIn("row.qualityName = tostring(value)", block)
+
+    def test_optimizer_target_lookup_falls_back_to_avatar_target(self):
+        optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
+        start = optim.index("function Optim.GetTarget()")
+        end = optim.index("\nend", start)
+        block = optim[start:end]
+        self.assertIn("object.IsExist", block)
+        self.assertIn("object.IsUnit", block)
+        self.assertLess(block.index("avatar.GetTarget"), block.index("unit.GetTarget"))
+        self.assertIn("if ok then", block)
+        self.assertIn("if id ~= nil then return id end", block)
 
     def test_opponent_section_collapses_to_visible_row_count(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
