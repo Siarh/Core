@@ -254,6 +254,37 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)
         self.assertEqual(mastery[0]["evidence_tier"], "strict")
 
+    def test_incoming_matches_attacker_instances_by_entity_signature(self):
+        rows = []
+        for prefix, fortitude, amount in (("base", 1000, 1000), ("test", 1100, 900)):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("incoming", f"{prefix}{fight_number}", 5 + repeat % 3, 500, amount)
+                    row.update({
+                        "profile": "pvp", "M": "100", "R": "200", "U": "300", "L": "400",
+                        "S": str(fortitude), "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "critical": "0", "ability": "Enemy Strike",
+                        "damage_source": "attack", "element": "physical",
+                        "actor_id": f"enemy-{prefix}-{fight_number}",
+                        "target_id": "player-1",
+                        "actor_name": "Training Creature", "actor_level": "90",
+                        "actor_quality": "4", "actor_is_mob": "1",
+                        "target_name": "Local Character", "target_level": "90",
+                        "target_quality": "0", "target_is_mob": "0",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        fortitude = [item for item in analysis["comparisons"] if item["stat"] == "fortitude"]
+        self.assertEqual(len(fortitude), 1)
+        self.assertEqual(fortitude[0]["mode"], "incoming")
+        self.assertEqual(fortitude[0]["actor_match_method"], "entity_signature")
+        self.assertEqual(fortitude[0]["target_match_method"], "instance_id")
+        self.assertEqual(fortitude[0]["comparison_identity_scope"],
+                         "same_source_archetype_and_target_instance")
+        self.assertEqual(fortitude[0]["marginal_efficiency_per_100"], -62.5)
+        self.assertEqual(fortitude[0]["beneficial_effect_per_100"], 62.5)
+
     def test_different_target_entity_signatures_are_not_matched(self):
         rows = []
         for prefix, mastery, quality in (("base", 1000, "4"), ("test", 1100, "5")):

@@ -158,8 +158,10 @@ controlled-observational, а не доказанная причинность.
 actor_id/target_id записываются только при наличии примитивного instance ID из
 callback; имя или путь resource-шаблона не считается идентификатором экземпляра.
 Новые v3 строки дополнительно содержат actor/target name, level, quality и is_mob.
-Анализатор строит entity signature из нормализованного имени, уровня, элитности
-и признака моба, чтобы сопоставлять разные instance IDs одного архетипа. Исходные
+Для исходящего damage анализатор сопоставляет разные target instance IDs по
+signature цели, а для incoming — разные actor instance IDs по signature атакующего.
+В обоих случаях signature требует нормализованное имя, уровень, элитность и признак
+моба. Для healing получатель остаётся привязан к точному instance ID. Исходные
 instance IDs сохраняются и по-прежнему обязательны вместе со свежим stat_sample_age
 для strict evidence. Entity signature — приближённый archetype key, а не уникальный
 серверный template ID: одинаковые имя/уровень/элитность могут соответствовать

@@ -668,22 +668,41 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             target_name, target_level, target_quality = target_descriptor[:3]
             target_is_mob = "1" if target_descriptor[3] else "0"
 
-        # Keep the player actor tied to its exact instance ID. Cross-instance
-        # archetype matching is allowed for targets only, with a complete
-        # signature; actor descriptors remain diagnostic metadata.
-        actor_match_method = "instance_id" if actor_id_known else "legacy_unverified"
-        target_match_method = "entity_signature" if target_signature else (
-            "instance_id" if target_id_known else "legacy_unverified"
-        )
+        # For outgoing damage, the target is the creature archetype to compare.
+        # For incoming damage, the source is the attacker archetype and the
+        # target is the local player instance. Healing recipients remain exact.
+        if kind == "incoming":
+            actor_match_method = "entity_signature" if actor_signature else (
+                "instance_id" if actor_id_known else "legacy_unverified"
+            )
+            target_match_method = "instance_id" if target_id_known else "legacy_unverified"
+        else:
+            actor_match_method = "instance_id" if actor_id_known else "legacy_unverified"
+            target_match_method = (
+                "entity_signature" if kind == "damage" and target_signature
+                else "instance_id" if target_id_known
+                else "legacy_unverified"
+            )
+
         actor_match_key = (
-            "instance:" + actor_id if actor_id_known
+            "entity:" + actor_signature if actor_match_method == "entity_signature"
+            else "instance:" + actor_id if actor_id_known
             else "legacy_unknown_actor"
         )
         target_match_key = (
-            "entity:" + target_signature if target_signature
+            "entity:" + target_signature if target_match_method == "entity_signature"
             else "instance:" + target_id if target_id_known
             else "legacy_unknown_target"
         )
+
+        # Keep only the descriptors that participate in this context's join key.
+        # This prevents irrelevant display metadata from splitting exact-ID groups.
+        if actor_match_method != "entity_signature":
+            actor_signature = None
+            actor_name, actor_level, actor_quality, actor_is_mob = "", None, None, ""
+        if target_match_method != "entity_signature":
+            target_signature = None
+            target_name, target_level, target_quality, target_is_mob = "", None, None, ""
 
         signature = _fight_stat_signature(row)
         if signature is None:
@@ -878,6 +897,12 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "target_level": target_level,
                             "target_quality": target_quality,
                             "target_is_mob": target_is_mob or None,
+                            "actor_match_basis": (
+                                "normalized name + level + quality + mob classification"
+                                if actor_match_method == "entity_signature"
+                                else "exact instance ID" if actor_match_method == "instance_id"
+                                else "legacy identity unavailable"
+                            ),
                             "target_match_basis": (
                                 "normalized name + level + quality + mob classification"
                                 if target_match_method == "entity_signature"
@@ -885,7 +910,9 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                                 else "legacy identity unavailable"
                             ),
                             "comparison_identity_scope": (
-                                "same_actor_instance_and_target_archetype"
+                                "same_source_archetype_and_target_instance"
+                                if actor_match_method == "entity_signature"
+                                else "same_actor_instance_and_target_archetype"
                                 if target_match_method == "entity_signature"
                                 else "same_actor_and_target_instances"
                                 if actor_match_method == "instance_id" and target_match_method == "instance_id"

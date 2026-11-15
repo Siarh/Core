@@ -44,7 +44,7 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Не предлагай конкретное перераспределение очков, если в отчёте нет calculated/partial рекомендации для этой активности.
 - Отдельно анализируй УВС (DPS), лечение себя, лечение союзников и защиту (TANK); не складывай разные режимы в одну метрику.
 - Учитывай размер выборки, HP coverage, Resolve pool coverage и warnings. При низкой полноте данных предпочитай следующий тест, а не уверенный совет.
-- target_signature может объединять разные экземпляры цели по нормализованному имени, уровню, элитности и признаку моба. Это приближённая сигнатура архетипа, не уникальный ID шаблона; проверяй target_match_basis и comparison_identity_scope, не называй совпадение полной идентичностью цели. Actor всегда сопоставляется по точному actor_id.
+- Для исходящего damage target_signature может объединять разные экземпляры цели; для incoming actor_signature может объединять экземпляры атакующего. Сигнатура включает нормализованное имя, уровень, элитность и признак моба, но не является уникальным ID шаблона. Проверяй actor_match_basis, target_match_basis и comparison_identity_scope; не называй совпадение полной идентичностью цели. В healing получатель остаётся точным instance ID.
 - Сравнивай активности только с оглядкой на их собственные условия; не объявляй победителем бой только из-за большего абсолютного урона.
 - temporal_performance содержит наблюдаемые burst/sustained окна, рассчитанные по полному таймеру боя с нулевыми тихими секундами. Называй их reported/raw DPS/HPS rate; не называй Effective DPS/HPS.
 - resolve_sample_summary даёт среднюю/пиковую Решимость и долю секунд с замерами выше порога. Это sample share по секундам с событиями, не реальный временной uptime; не переименовывай его в uptime.
@@ -204,9 +204,10 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
                 "classification", "causal_status", "evidence_tier",
                 "identity_quality", "snapshot_quality",
                 "actor_match_method", "target_match_method",
-                "actor_signature", "target_signature", "target_name",
-                "target_level", "target_quality", "target_is_mob", "target_match_basis",
-                "comparison_identity_scope",
+                "actor_signature", "target_signature", "actor_name", "actor_level",
+                "actor_quality", "actor_is_mob", "actor_match_basis",
+                "target_name", "target_level", "target_quality", "target_is_mob",
+                "target_match_basis", "comparison_identity_scope",
                 "mode", "profile",
                 "environment_classification", "duration_band", "ability", "element", "target_hp_band",
                 "target_hp_quality", "resolve_pool_band", "critical", "critical_scope", "recipient",
