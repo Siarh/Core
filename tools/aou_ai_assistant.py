@@ -227,6 +227,15 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         }
         for item in (experimental.get("comparisons", []) or [])
     ]
+    # Instance-level signatures are useful for strict matching inside the local
+    # profile, but not needed by the LLM. Remove them and anonymize player names.
+    for comparison in compact_experimental["comparisons"]:
+        comparison.pop("actor_signature", None)
+        comparison.pop("target_signature", None)
+        if str(comparison.get("actor_kind", "")).lower() == "player":
+            comparison["actor_name"] = "player actor"
+        if str(comparison.get("target_kind", "")).lower() == "player":
+            comparison["target_name"] = "player target"
 
     me_groups: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
     for item in (experimental.get("comparisons", []) or []):

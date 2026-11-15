@@ -138,6 +138,10 @@ class AIAssistantTests(unittest.TestCase):
                     "critical": True, "critical_scope": "normal_only",
                     "evidence_tier": "strict", "identity_quality": "measured_instance_ids",
                     "snapshot_quality": "fresh",
+                    "actor_signature": "[\"private player name\",90,0,\"player\"]",
+                    "target_signature": "[\"private target name\",90,0,\"player\"]",
+                    "actor_name": "Private Player Name", "actor_kind": "player",
+                    "target_name": "Private Target Name", "target_kind": "player",
                     "stat": "mastery", "from": 500, "to": 600,
                     "delta_stat": 100, "delta_result": 25, "result_unit": "reported_amount_per_second",
                     "me_formula": "ME = (Result_test - Result_base) / (Stat_test - Stat_base)",
@@ -195,6 +199,9 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("target_id", rendered)
         self.assertNotIn("12345", rendered)
         self.assertNotIn("Private Player Name", rendered)
+        self.assertNotIn("Private Target Name", rendered)
+        self.assertNotIn("private player name", rendered)
+        self.assertNotIn("private target name", rendered)
         target_stats = payload["target_statistics"]
         self.assertEqual(target_stats["target_profiles"], 2)
         self.assertEqual(target_stats["target_profiles_in_ai_payload"], 2)
@@ -202,7 +209,7 @@ class AIAssistantTests(unittest.TestCase):
         self.assertEqual(target_stats["targets"][0]["hp"]["pre_event_average_percent"], 47.5)
         self.assertEqual(target_stats["targets"][0]["resistance_components"]["resist_amount"], 12000)
         self.assertEqual(target_stats["targets"][1]["target_name"], "player target")
-        self.assertNotIn("target_signature", str(target_stats))
+        self.assertNotIn("target_signature", target_stats["targets"][0])
         self.assertIn("Small sample", rendered)
         self.assertIn("estimated_gain_percent", rendered)
         model = payload["activities"]["raid_fight_1_dps"]["model_marginal_efficiency"]
