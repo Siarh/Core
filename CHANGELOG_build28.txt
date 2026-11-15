@@ -205,3 +205,10 @@ Global Resolve percentage positioning:
 - Moved the yellow current Resolve percentage from the far-right edge of the cloned detail row to the dedicated slot at x=321, just after the typical Resolve bar fill.
 - The percentage is repositioned only for the global Resolve row; spell-detail percentages keep their original alignment.
 - Added a regression check for the runtime position override.
+
+
+Global determination row layout correction:
+- Corrected the target of the layout fix: global-info rows are cloned from SpellDetailPanel at runtime, so the previous static GlobalInfoPanel template edits did not affect the displayed rows.
+- Applied separate runtime widths and positions to the cloned name, event count, Min / Avg / Max, and percentage widgets.
+- Reserved the final 40 px for the percentage label; the filled bar now uses a 356 px track and the yellow percentage follows its filled edge without covering the numeric columns.
+- Moved Min / Avg / Max separator spacing into the active SpellDetailPanel text format and updated regression tests to verify the runtime clone layout.
