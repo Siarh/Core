@@ -837,6 +837,7 @@ def build_profile(
             "max_hp": max_hp,
             "base_stats": dict(stats),
             "might": 20,
+            "might_source": "assumed_default",
             "power_scale": 10,
             "resolve_coefficient": resolve_coefficient,
             "might_affects_healing": True,
