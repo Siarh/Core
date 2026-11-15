@@ -105,6 +105,18 @@ local defenseRows = DPScopeAI.BuildLines({
 expect(defenseRows[2][3], "IN", "defense quality uses incoming samples")
 expect(defenseRows[2][4], "HP/RES -", "defense quality does not reuse attack sample ratios")
 
+-- Restore the HPS context before testing the advice command: the defensive
+-- BuildLines call above intentionally replaced LastSummary with its own mode.
+DPScopeAI.BuildLines({
+    mode = "hps", eventCount = 120, hpSamples = 110, poolSamples = 100,
+    selfAmount = 1000, allyAmount = 9000,
+    selfHealPerSecond = 10, allyHealPerSecond = 90, incomingPerSecond = 40,
+    survivalDeltaPct = 3.2, hpMax = 10000,
+    avgTargetHpPct = 68.4, avgResolve = 36.2, hpSampleLabel = "цели",
+    critCount = 3, normalCount = 2, critSamples = 5,
+    critRateObserved = 0.60, critMultiplier = 3.09, critPairedCount = 2,
+    measuredHealSamples = 60, estimatedHealSamples = 40
+})
 local beforeStatus = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
 local statusOutput = table.concat(output, "\n", beforeStatus + 1)
