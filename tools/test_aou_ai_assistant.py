@@ -49,6 +49,23 @@ class AIAssistantTests(unittest.TestCase):
                 }
             },
             "import_warnings": ["HP values partly estimated"],
+            "temporal_performance": {
+                "status": "calculated",
+                "classification": "DERIVED",
+                "method": "zero-filled rolling windows",
+                "burst_windows_seconds": [1, 3, 5, 10, 15, 30],
+                "sustained_windows_seconds": [30, 60, 120, 180, 300],
+                "fights": [{
+                    "fight_id": "fight-1", "kind": "damage",
+                    "duration_seconds_estimate": 60,
+                    "burst_windows": {"3s": {"mean_rate_per_second": 500}},
+                    "sustained_windows": {"60s": {"mean_rate_per_second": 200}},
+                    "resolve_sample_summary": {
+                        "mean_sampled_pool": 50, "peak_sampled_pool": 90,
+                        "sampled_second_share_above": {"50": 0.5}
+                    }
+                }]
+            },
             "controlled_stat_efficiency": {
                 "status": "comparisons_available",
                 "method": "matched contexts",
@@ -123,6 +140,10 @@ class AIAssistantTests(unittest.TestCase):
         self.assertNotIn("raw", model)
         self.assertEqual(payload["controlled_stat_efficiency"]["status"], "comparisons_available")
         self.assertEqual(payload["controlled_stat_efficiency"]["comparisons"][0]["marginal_efficiency_per_100"], 25)
+        temporal = payload["temporal_performance"]
+        self.assertEqual(temporal["classification"], "DERIVED")
+        self.assertEqual(temporal["fights"][0]["burst_windows"]["3s"]["mean_rate_per_second"], 500)
+        self.assertEqual(temporal["fights"][0]["resolve_sample_summary"]["mean_sampled_pool"], 50)
         self.assertNotIn("not_selected", rendered)
 
     def test_compact_payload_keeps_heal_recipient_split(self):
@@ -159,6 +180,8 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("не являются измеренным игровым эффектом", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("не реальный временной uptime", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("Effective DPS/HPS", ai.SYSTEM_INSTRUCTIONS)
 
 
     def test_normalizes_ollama_host_variants(self):
