@@ -53,7 +53,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         end = gui.index("\nend", start)
         block = gui[start:end]
         self.assertIn("local hasReadableRow = false", block)
-        self.assertIn("if not hasReadableRow then", block)
+        self.assertIn("if not hasReadableRow and liveCurrentFight then", block)
         self.assertIn("targetQualityLabel(data.qualityName or data.quality)", block)
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
         self.assertIn("common.IsWString", gui)
@@ -141,7 +141,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         analytics = (ROOT / "Scripts/AoUMeterAnalytics.lua").read_text(encoding="utf-8")
         self.assertIn("outgoing callbacks/owner/accepted/other=", optim)
         self.assertIn("diag.outgoingHitCallbacks", analytics)
-        self.assertIn("diag.outgoingHitOwnerMatched", analytics)
+        self.assertIn("outgoingHitOwnerMatched", analytics)
         self.assertIn("diag.lastOutgoingTarget", optim)
 
 
