@@ -3,6 +3,69 @@
 -- Desc: Graphical user interface
 --------------------------------------------------------------------------------
 
+-- Current-fight opponent summary shown in the selected player's details panel.
+local TARGET_INFO_ROWS = 4
+local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7
+
+local function targetText(value)
+	local converter = (Optim and Optim.ToWString) or userMods.ToWString
+	return converter(tostring(value or ""))
+end
+
+local function targetCompactNumber(value)
+	value = tonumber(value)
+	if not value then return "-" end
+	if math.abs(value) >= 1000000 then
+		return string.format("%.1fM", value / 1000000)
+	elseif math.abs(value) >= 1000 then
+		return string.format("%.1fK", value / 1000)
+	end
+	return string.format("%.0f", value)
+end
+
+local function targetKindLabel(kind)
+	local russian = localization == "rus"
+	local labels = russian and {
+		mob = "моб", player = "игрок", npc = "НПС", unknown = "тип н/д"
+	} or {
+		mob = "mob", player = "player", npc = "NPC", unknown = "type n/a"
+	}
+	return labels[kind] or tostring(kind or (russian and "тип н/д" or "type n/a"))
+end
+
+local function targetQualityLabel(value)
+	if not value or value == "" then return "" end
+	local key = tostring(value)
+	key = string.gsub(key, "^UNIT_QUALITY_", "")
+	key = string.gsub(key, "^ENUM:", "quality#")
+	local russian = localization == "rus"
+	local labels = russian and {
+		COMMON = "обычный", ELITE = "элита", FLAVOR_ELITE = "сюжетный элитный",
+		MINI_BOSS = "мини-босс", BOSS = "босс", RAID_BOSS = "рейд-босс",
+		RAID_ELITE = "рейд-элита", CRITTER = "существо"
+	} or {
+		COMMON = "common", ELITE = "elite", FLAVOR_ELITE = "flavor elite",
+		MINI_BOSS = "mini-boss", BOSS = "boss", RAID_BOSS = "raid boss",
+		RAID_ELITE = "raid elite", CRITTER = "critter"
+	}
+	return labels[key] or string.lower(string.gsub(key, "_", " "))
+end
+
+local function targetSchoolLabel(value)
+	local key = tostring(value or "UNKNOWN")
+	local russian = localization == "rus"
+	local labels = russian and {
+		PHYSICAL = "Физ", FIRE = "Огонь", COLD = "Холод", ICE = "Холод",
+		ELECTRIC = "Эл-во", ASTRAL = "Астрал", DIVINE = "Бож",
+		NATURE = "Природа", LIGHT = "Свет", DARK = "Тьма"
+	} or {
+		PHYSICAL = "Physical", FIRE = "Fire", COLD = "Cold", ICE = "Ice",
+		ELECTRIC = "Electric", ASTRAL = "Astral", DIVINE = "Divine",
+		NATURE = "Nature", LIGHT = "Light", DARK = "Dark"
+	}
+	return labels[key] or string.lower(key)
+end
+
 --------------------------------------------------------------------------------
 -- Type TMainPanelGUI
 Global("TMainPanelGUI", {})
@@ -33,6 +96,10 @@ function TDetailsPanelGUI:CreateNewObject(name)
 			GlobalInfoHeaderNameText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true),
 			GlobalInfoHeaderStatsText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true),
 			GlobalInfoList = {},     -- Panel extra info list
+			OpponentHeader = nil,
+			OpponentHeaderNameText = nil,
+			OpponentHeaderStatsText = nil,
+			OpponentList = {},
 
 			SpellHeaderPanel = widget:GetChildByName("SpellHeaderPanel"), -- Header panel
 			SpellHeaderNameText = widget.Widget:GetChildChecked("SpellHeaderTextViewName", true),
@@ -319,6 +386,88 @@ function TUMeterGUI:DisplaySpell(spellIndex)
 	end
 end
 --------------------------------------------------------------------------------
+-- Show current-fight opponents for the local player's damage events.
+-- HP is either an exact recent snapshot, a labelled pre-hit estimate, or n/a.
+-- "Resist" is the API-reported mitigated damage amount, not a stat rating.
+--------------------------------------------------------------------------------
+function TUMeterGUI:UpdateOpponentInfo()
+	local dp = self.DetailsPanel
+	if not dp.OpponentHeader or not dp.OpponentList then return end
+
+	local isCurrentPlayerFight = self.ActiveFight == self.DPSMeter.Fight.Current
+		and self.SelectedCombatant and avatar and avatar.IsExist and avatar.IsExist()
+		and self.SelectedCombatant.ID == avatar.GetId()
+	if not isCurrentPlayerFight then return end
+
+	local rows, total = {}, 0
+	if AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
+		local ok, result, count = pcall(AOUA.GetTargetDisplayRows, TARGET_INFO_ROWS)
+		if ok then rows, total = result or {}, tonumber(count) or 0 end
+	end
+
+	local russian = localization == "rus"
+	local W = targetText
+	dp.OpponentHeader:Show()
+	dp.OpponentHeaderNameText:SetVal("Name", W(russian and "Противники" or "Opponents"))
+	dp.OpponentHeaderStatsText:SetVal("Min", W("HP"))
+	dp.OpponentHeaderStatsText:SetVal("Avg", W(russian and "Резист / школа" or "Resist / school"))
+	dp.OpponentHeaderStatsText:SetVal("Max", W(""))
+
+	if total == 0 then
+		local row = dp.OpponentList[1]
+		row:Show()
+		row.Bar:Hide()
+		row.Name:SetVal("Name", W(russian and "Нет данных о целях" or "No target data"))
+		row.Count:SetVal("Count", W("-"))
+		row.Damage:SetVal("Min", W("-"))
+		row.Damage:SetVal("Avg", W(""))
+		row.Damage:SetVal("Max", W(""))
+		row.Percent:SetVal("Percentage", W(""))
+		return
+	end
+
+	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
+		local data = rows[i]
+		local panel = dp.OpponentList[i]
+		local name = (data.name and data.name ~= "") and data.name
+			or (russian and "Без имени" or "Unnamed")
+		local details = targetKindLabel(data.kind)
+		if data.level then details = details .. (russian and " ур." or " lvl ") .. tostring(data.level) end
+		local quality = targetQualityLabel(data.qualityName)
+		if quality ~= "" then details = details .. " · " .. quality end
+
+		local hpText
+		if data.hpCurrent ~= nil and data.hpLimit ~= nil and data.hpLimit > 0 then
+			hpText = "HP " .. targetCompactNumber(data.hpCurrent) .. "/"
+				.. targetCompactNumber(data.hpLimit) .. " (" .. string.format("%.0f", tonumber(data.hpPercent) or 0) .. "%)"
+		elseif data.hpBeforePercent ~= nil then
+			local marker = data.hpBeforeQuality == "measured_pre" and "" or "~"
+			hpText = (russian and "до удара " or "pre-hit ") .. marker
+				.. string.format("%.0f", tonumber(data.hpBeforePercent) or 0) .. "%"
+		else
+			hpText = "HP " .. (russian and "н/д" or "n/a")
+		end
+
+		local schools = data.resistSchools or {}
+		local resistCells = { "-", "-", "-" }
+		for j = 1, math.min(3, #schools) do
+			local school = schools[j]
+			resistCells[j] = targetSchoolLabel(school.element) .. " "
+				.. targetCompactNumber(school.amount) .. "x" .. tostring(school.samples or 0)
+		end
+
+		panel:Show()
+		panel.Bar:Hide()
+		panel.Name:SetVal("Name", W(name .. " [" .. details .. "]"))
+		panel.Count:SetVal("Count", W(hpText))
+		panel.Damage:SetVal("Min", W(resistCells[1]))
+		panel.Damage:SetVal("Avg", W(resistCells[2]))
+		panel.Damage:SetVal("Max", W(resistCells[3]))
+		panel.Percent:SetVal("Percentage", W(""))
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Stat optimizer block (bottom of the details panel, only for the player)
 --------------------------------------------------------------------------------
 function TUMeterGUI:UpdateOptim()
@@ -330,7 +479,7 @@ function TUMeterGUI:UpdateOptim()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
-	local height = 826
+	local height = 826 + TARGET_INFO_HEIGHT
 
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
@@ -416,6 +565,7 @@ function TUMeterGUI:UpdateSpellList()
 		for GlobalInfoIndex = 1, EXTRATYPES do
 			self:DisplayGlobalInfo(GlobalInfoIndex)
 		end
+		self:UpdateOpponentInfo()
 		for spellIndex = 1, MAXSPELLS do
 			self:DisplaySpell(spellIndex)
 		end
@@ -640,6 +790,7 @@ function TUMeterGUI:Init()
 	local spellPanelDesc = self.DetailsPanel:GetChildByName("SpellPanel"):GetDesc()
 	local spellInfoPanelDesc = self.DetailsPanel:GetChildByName("SpellDetailPanel"):GetDesc()
 	local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()
+	local globalInfoHeaderDesc = self.DetailsPanel.GlobalInfoHeaderPanel:GetDesc()
 
 	-------------------------------------------------------------------------------
 	-- Main Panel
@@ -677,8 +828,27 @@ function TUMeterGUI:Init()
 		self.DetailsPanel.GlobalInfoList[extraIndex]:SetPosition(22, GlobalInfoOffset + (extraIndex-1) * 18)
 	end
 
+	-- Opponent profiles (four highest-damage targets from the current fight).
+	local opponentHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
+	self.DetailsPanel.OpponentHeader = TWidget:CreateNewObjectByDesc(
+		"OpponentHeaderPanel", globalInfoHeaderDesc, self.DetailsPanel)
+	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
+	self.DetailsPanel.OpponentHeaderNameText = self.DetailsPanel.OpponentHeader.Widget:GetChildChecked(
+		"GlobalInfoHeaderTextViewName", true)
+	self.DetailsPanel.OpponentHeaderStatsText = self.DetailsPanel.OpponentHeader.Widget:GetChildChecked(
+		"GlobalInfoHeaderTextViewStats", true)
+	local opponentRowsOffset = opponentHeaderOffset + 18
+	for opponentIndex = 1, TARGET_INFO_ROWS do
+		local wtName = "OpponentPanel" .. opponentIndex
+		self.DetailsPanel.OpponentList[opponentIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(
+			wtName, spellInfoPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.OpponentList[opponentIndex]:SetPosition(
+			22, opponentRowsOffset + (opponentIndex - 1) * 18)
+		self.DetailsPanel.OpponentList[opponentIndex].Bar:Hide()
+	end
+
 	-- SpellHeader
-	local spellHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
+	local spellHeaderOffset = opponentRowsOffset + TARGET_INFO_ROWS * 18 + 7
 	self.DetailsPanel.SpellHeaderPanel:SetPosition(22, spellHeaderOffset)
 
 	-- Spell list
