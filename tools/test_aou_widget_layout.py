@@ -27,6 +27,26 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Pos>132</Pos>", stats)
         self.assertIn("<Size>200</Size>", stats)
 
+    def test_opponent_summary_uses_one_full_width_labelled_line(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        self.assertIn("local function targetIsUtf8", gui)
+        self.assertIn("local function targetReadableName", gui)
+        self.assertIn('if name ~= "" then parts[#parts + 1] = name end', gui)
+        self.assertIn('dp.OpponentHeader.Line:SetVal("Name"', gui)
+        self.assertNotIn("Без имени", gui)
+        self.assertNotIn("Unnamed", gui)
+        self.assertNotIn("Нет данных о целях", gui)
+        self.assertIn("resistance in events", gui)
+
+        root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
+        self.assertIn('OpponentPanel/OpponentPanel.(WidgetPanel).xdb', root)
+
+        panel = (ROOT / "Widgets/SpellInfoPanel/OpponentPanel/OpponentPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
+        self.assertIn('TextViews/Name.(WidgetTextView).xdb', panel)
+        line = (ROOT / "Widgets/SpellInfoPanel/OpponentPanel/TextViews/Name.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        self.assertIn("<HighPos>0</HighPos>", line)
+        self.assertIn("<Pos>5</Pos>", line)
+
     def test_resolve_value_is_next_to_the_label_and_bar_is_bounded(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
