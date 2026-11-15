@@ -240,15 +240,23 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
 		-- Keep the Resolve fill below the numeric row so it cannot tint/cross the values.
-		GlobalInfoPanel.Bar:SetPosition(0, 13)
+		GlobalInfoPanel.Bar:SetPosition(0, 15)
 		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
-		GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))
+		if GlobalInfoData.ID == enumGlobalInfo.Determination then
+			-- Show the average Resolve pool value immediately after its label.
+			-- Min/Avg/Max remain in their own column; the old far-right percent
+			-- field was misleading here because this value is a pool, not a %.
+			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Avg, "%d"))
+			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
+		else
+			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))
+			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage , "%d"))
+		end
 		GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min , "%f3K5"))
 		GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg , "%f3K5"))
 		GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max , "%f3K5"))
-		GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage , "%d"))
 	end
 end
 --------------------------------------------------------------------------------
@@ -321,8 +329,9 @@ function TUMeterGUI:UpdateOptim()
 		local W = Optim.ToWString or userMods.ToWString
 		-- a cell starting with "@" is the key of a localized text
 		local function cell(v)
-			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
-			return W(v)
+			local value = tostring(v or "")
+			if string.sub(value, 1, 1) == "@" then return Optim.Text(string.sub(value, 2)) end
+			return W(value)
 		end
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
