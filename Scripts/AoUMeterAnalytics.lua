@@ -176,6 +176,8 @@ function AOUA.OnFightStart()
     AOUA.Session.eventSampleNext = 1
     AOUA.Session.elapsedSeconds = 0
     AOUA.Session.statSnapshot = nil
+    AOUA.Session.statSnapshotSecond = nil
+    AOUA.Session.statSnapshotAttemptSecond = nil
     AOUA.Session.started = true
     local sequence = 0
     pcall(function()
@@ -644,7 +646,7 @@ local function persistEventSamples()
         for i = 1, #combined do section["aou_evt_" .. i] = combined[i] end
         for i = #combined + 1, oldSlots do section["aou_evt_" .. i] = "" end
         section.aou_evt_count = #combined
-        section.aou_evt_schema = "v1"
+        section.aou_evt_schema = "v2"
         section.aou_evt_fight_id = tonumber(AOUA.Session.fightId) or 0
         section.aou_evt_last_dropped = tonumber(AOUA.Session.eventSamplesDropped) or 0
         section.aou_evt_last_seconds = tonumber(AOUA.Session.elapsedSeconds) or 0
@@ -703,7 +705,7 @@ function AOUA.EventExport(count, page)
 
     -- Every page repeats the identical header and global row numbering so that
     -- multiple page captures can be concatenated into one OCR text file.
-    emit("AOUCSV|BEGIN|2|" .. selected .. "|events")
+    emit("AOUCSV|BEGIN|3|" .. selected .. "|events")
     emitChunks("H", EVENT_COLUMNS)
     for i = pageFirst, pageLast do
         emitChunks("R" .. (i - first + 1), rows[i])
