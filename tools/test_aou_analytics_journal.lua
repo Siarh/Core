@@ -226,6 +226,72 @@ expect(targetRows[1].hpPercent, 50, "live target HP percent")
 expect(targetRows[1].resistTotal, 10, "live target resisted damage amount")
 expect(targetRows[1].resistSchools[1].element, "PHYSICAL", "live target resistance school")
 expect(targetRows[1].resistSchools[1].samples, 1, "live target resistance sample count")
+
+-- The selected-target getter may be nil; outgoing damage must use params.target.
+-- Distinct ObjectId wrappers representing the same player must still match.
+local originalAvatarGetId = avatar.GetId
+avatar.GetTarget = function() return nil end
+avatar.GetId = function() return { GetId = function() return 1001 end } end
+AOUA.OnFightStart()
+AOUA.OnHit(
+    { ID = { GetId = function() return 1001 end } },
+    enumMode.Dps,
+    { source = 1001, target = 2002, amount = 111, resist = 7,
+      sysSubElement = "ENUM_SubElement_FIRE", ability = "Target from event" },
+    nil,
+    { Name = "Target from event" }
+)
+expect(AOUA.Session.damage.events, 1, "outgoing hit accepted with nil selected target")
+expect(AOUA.Session.rawDiagnostics.outgoingHitCallbacks, 1, "outgoing hit callback count")
+expect(AOUA.Session.rawDiagnostics.outgoingHitOwnerMatched, 1, "ObjectId wrapper owner match")
+expect(AOUA.Session.rawDiagnostics.outgoingHitAccepted, 1, "outgoing hit accepted count")
+expect(AOUA.Session.rawDiagnostics.outgoingHitOtherCombatant, 0, "outgoing hit not misclassified as another actor")
+expect(AOUA.Session.rawDiagnostics.lastOutgoingTarget, "2002", "last outgoing event target")
+local eventTargetRows, eventTargetTotal = AOUA.GetTargetDisplayRows(4)
+expect(eventTargetTotal, 1, "event target profile without selected target")
+expect(eventTargetRows[1].name, "Test Target", "event target name without selected target")
+expect(eventTargetRows[1].level, 90, "event target level without selected target")
+expect(eventTargetRows[1].hpCurrent, 500, "event target HP without selected target")
+expect(eventTargetRows[1].resistSchools[1].amount, 7, "event target resistance without selected target")
+avatar.GetId = originalAvatarGetId
+
+-- Simulate the real TUMeter stop/start lifecycle: final target rows stay on
+-- the stopped fight and move to Previous when the next fight begins.
+Global = function(name, value) _G[name] = value end
+group = { IsCreatureInGroup = function() return false end }
+dofile("../Scripts/AoUMeterData.lua")
+local function makeFightStub()
+    return {
+        StopFight = function() end,
+        StartFight = function() end
+    }
+end
+local currentFight = makeFightStub()
+local totalFight = makeFightStub()
+local simulatedMeter = setmetatable({
+    FightsList = { [1] = totalFight, [2] = {}, [3] = currentFight },
+    Fight = { Total = 1, Previous = 2, Current = 3 },
+    bCollectData = true,
+    CopyFightFromCurrenToPrev = function(self)
+        local previousRows = {}
+        for i, row in ipairs(self.FightsList[3].AOUATargetRows or {}) do
+            local copied = {}
+            for key, value in pairs(row) do copied[key] = value end
+            previousRows[i] = copied
+        end
+        self.FightsList[2] = { AOUATargetRows = previousRows }
+    end,
+    ResetFight = function() end,
+    RegenCombatantList = function() end
+}, { __index = TUMeter })
+simulatedMeter:Stop()
+expect(currentFight.AOUATargetRows[1].name, "Test Target", "stopped fight keeps target snapshot")
+simulatedMeter:Start()
+expect(simulatedMeter.FightsList[2].AOUATargetRows[1].name, "Test Target", "target snapshot copied to previous fight")
+expect(currentFight.AOUATargetRows, nil, "new current fight does not inherit old targets")
+local clearedRows, clearedTotal = AOUA.GetTargetDisplayRows(4)
+expect(clearedTotal, 0, "new current fight starts with empty target profiles")
+
 AOUA.OnHit(
     { ID = 1001 },
     enumMode.Hps,

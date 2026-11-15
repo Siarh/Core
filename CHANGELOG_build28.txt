@@ -214,3 +214,9 @@ Opponent panel readability fix:
 - Missing target names, names consisting of question marks, unknown unit categories, unresolved quality enums, unavailable HP and unknown damage schools are omitted instead of shown as fake names or placeholders.
 - Target text conversion now detects UTF-8 versus legacy CP1251 strings before conversion, avoiding turning CP1251 object names into question marks.
 - When no target data is available, the opponent block is hidden rather than showing a placeholder line.
+
+Opponent panel fight-history and ObjectId correction:
+- The opponent summary is now available for both the current and previous fight. The completed fight's target rows are snapshotted onto that fight when DPScope stops collecting; the next fight copies the snapshot to Previous before clearing the reused Current record.
+- The Previous tab reads only its own saved target rows. It never supplements an archived fight with the currently selected live target.
+- Outgoing-hit owner matching now compares canonical ObjectId values as well as direct equality, covering APIs that return distinct wrapper objects for the same object identifier.
+- `/aou targettest` now reports meter collection state, outgoing callback/owner-match/accepted counters, last event target, and saved current/previous target-row counts. A nil selected target can therefore be distinguished from a missing combat-event path.

@@ -1957,15 +1957,30 @@ function Optim.OnSlash(text)
 		inspectTarget("unit.GetTarget", unitTarget)
 		inspectTarget("lastEvent.target", event and event.target or nil)
 		local session = AOUA and AOUA.Session or nil
+		local diag = session and session.rawDiagnostics or {}
+		local meter = DPSMeterGUI and DPSMeterGUI.DPSMeter or nil
+		local currentFight = meter and meter.FightsList and meter.Fight
+			and meter.FightsList[meter.Fight.Current] or nil
+		local previousFight = meter and meter.FightsList and meter.Fight
+			and meter.FightsList[meter.Fight.Previous] or nil
+		local currentStored = currentFight and currentFight.AOUATargetRows or {}
+		local previousStored = previousFight and previousFight.AOUATargetRows or {}
 		local rows, total = {}, 0
 		if AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
 			local ok, result, count = pcall(AOUA.GetTargetDisplayRows, 4)
 			if ok then rows, total = result or {}, tonumber(count) or 0 end
 		end
-		say("AOUA started=" .. tostring(session and session.started) ..
-			" damageEvents=" .. tostring(session and session.damage and session.damage.events or 0) ..
-			" profiles=" .. tostring(session and session.targetProfileCount or 0) ..
-			" displayRows=" .. tostring(#rows) .. "/" .. tostring(total))
+		say("Meter collecting=" .. tostring(meter and meter.bCollectData == true) ..
+			" | AOUA started=" .. tostring(session and session.started) ..
+			" | outgoing callbacks/owner/accepted/other=" ..
+			tostring(diag.outgoingHitCallbacks or 0) .. "/" ..
+			tostring(diag.outgoingHitOwnerMatched or 0) .. "/" ..
+			tostring(diag.outgoingHitAccepted or 0) .. "/" ..
+			tostring(diag.outgoingHitOtherCombatant or 0))
+		say("last event target=" .. tostring(diag.lastOutgoingTarget or "") ..
+			" | profiles=" .. tostring(session and session.targetProfileCount or 0) ..
+			" | live rows=" .. tostring(#rows) .. "/" .. tostring(total) ..
+			" | stored current/previous=" .. tostring(#currentStored) .. "/" .. tostring(#previousStored))
 	elseif cmd == "hptest" then
 		local tg = Optim.GetTarget()
 		say("target id: " .. tostring(tg))

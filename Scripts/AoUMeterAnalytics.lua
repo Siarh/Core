@@ -82,7 +82,10 @@ local function freshSession()
         journal = freshJournal(),
         rawDiagnostics = {
             incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-            healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
+            healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0,
+            outgoingHitCallbacks = 0, outgoingHitOwnerMatched = 0, outgoingHitAccepted = 0,
+            outgoingHitOtherCombatant = 0, outgoingHitRejected = 0,
+            lastOutgoingTarget = "", lastOutgoingAmount = 0
         },
         determination = freshDeterminationStats(),
         determinationByMode = {
@@ -136,8 +139,20 @@ local function ensureSession()
     AOUA.Session.journal = AOUA.Session.journal or freshJournal()
     AOUA.Session.rawDiagnostics = AOUA.Session.rawDiagnostics or {
         incomingCallbacks = 0, incomingMatched = 0, incomingOther = 0, incomingAccepted = 0,
-        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0
+        healCallbacks = 0, healMatched = 0, healOther = 0, healAccepted = 0, damageFilters = 0, healFilters = 0, healthFilters = 0,
+        outgoingHitCallbacks = 0, outgoingHitOwnerMatched = 0, outgoingHitAccepted = 0,
+        outgoingHitOtherCombatant = 0, outgoingHitRejected = 0,
+        lastOutgoingTarget = "", lastOutgoingAmount = 0
     }
+    local rd = AOUA.Session.rawDiagnostics
+    for _, key in ipairs({
+        "outgoingHitCallbacks", "outgoingHitOwnerMatched", "outgoingHitAccepted",
+        "outgoingHitOtherCombatant", "outgoingHitRejected"
+    }) do
+        rd[key] = tonumber(rd[key]) or 0
+    end
+    rd.lastOutgoingTarget = rd.lastOutgoingTarget or ""
+    rd.lastOutgoingAmount = tonumber(rd.lastOutgoingAmount) or 0
     local j = AOUA.Session.journal
     for _, key in ipairs({
         "incomingByType", "incomingByAbility", "incomingByAttacker",
@@ -205,7 +220,10 @@ function AOUA.OnFightStart()
         -- These are per-target filter counts, not handler totals.
         damageFilters = tonumber(previous.damageFilters) or 0,
         healFilters = tonumber(previous.healFilters) or 0,
-        healthFilters = tonumber(previous.healthFilters) or 0
+        healthFilters = tonumber(previous.healthFilters) or 0,
+        outgoingHitCallbacks = 0, outgoingHitOwnerMatched = 0, outgoingHitAccepted = 0,
+        outgoingHitOtherCombatant = 0, outgoingHitRejected = 0,
+        lastOutgoingTarget = "", lastOutgoingAmount = 0
     }
 end
 
@@ -495,6 +513,13 @@ local function eventObjectId(value)
     return nil
 end
 
+
+local function sameEventObject(left, right)
+    if left == right then return true end
+    local leftKey = eventObjectId(left)
+    local rightKey = eventObjectId(right)
+    return leftKey ~= nil and rightKey ~= nil and leftKey == rightKey
+end
 
 local TARGET_METADATA_CACHE_LIMIT = 512
 local QUALITY_LABELS = {
@@ -1191,12 +1216,44 @@ function AOUA.OnHit(combatant, mode, params, determination, spellInfo)
         return
     end
 
-    if not combatant or not combatant.ID or not avatar or not avatar.GetId then return end
+    if kind == "damage" then
+        local diag = AOUA.Session.rawDiagnostics
+        diag.outgoingHitCallbacks = diag.outgoingHitCallbacks + 1
+    end
+    if not combatant or not combatant.ID or not avatar or type(avatar.GetId) ~= "function" then
+        if kind == "damage" then
+            AOUA.Session.rawDiagnostics.outgoingHitRejected =
+                AOUA.Session.rawDiagnostics.outgoingHitRejected + 1
+        end
+        return
+    end
     local okId, playerId = pcall(avatar.GetId)
-    if not okId or combatant.ID ~= playerId then return end
+    if not okId or not sameEventObject(combatant.ID, playerId) then
+        if kind == "damage" then
+            AOUA.Session.rawDiagnostics.outgoingHitOtherCombatant =
+                AOUA.Session.rawDiagnostics.outgoingHitOtherCombatant + 1
+        end
+        return
+    end
+    if kind == "damage" then
+        AOUA.Session.rawDiagnostics.outgoingHitOwnerMatched =
+            AOUA.Session.rawDiagnostics.outgoingHitOwnerMatched + 1
+    end
 
     local amount = (kind == "healing") and N(params.heal or params.amount) or N(params.amount)
-    if amount <= 0 then return end
+    if amount <= 0 then
+        if kind == "damage" then
+            AOUA.Session.rawDiagnostics.outgoingHitRejected =
+                AOUA.Session.rawDiagnostics.outgoingHitRejected + 1
+        end
+        return
+    end
+    if kind == "damage" then
+        local diag = AOUA.Session.rawDiagnostics
+        diag.outgoingHitAccepted = diag.outgoingHitAccepted + 1
+        diag.lastOutgoingTarget = eventObjectId(params.target) or ""
+        diag.lastOutgoingAmount = amount
+    end
     local b = AOUA.Session[kind]
     if kind == "damage" then addEvent(b, amount, params) end
 

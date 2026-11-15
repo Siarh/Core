@@ -1171,6 +1171,10 @@ end
 function TUMeter:Start()
 	self:CopyFightFromCurrenToPrev()
 
+	-- The previous fight copy keeps its opponent snapshot. The reused current
+	-- fight object must not carry that snapshot into the next encounter.
+	local currentFight = self.FightsList[self.Fight.Current]
+	if currentFight then currentFight.AOUATargetRows = nil end
 	self:ResetFight(self.Fight.Current)
     
     if AOUA and type(AOUA.OnFightStart) == "function" then
@@ -1192,6 +1196,18 @@ function TUMeter:Stop()
 	self.bCollectData = false
 	self.FightsList[self.Fight.Current]:StopFight()
 	self.FightsList[self.Fight.Total]:StopFight()
+
+	-- Keep the final opponent summary with this fight. TUMeter copies the
+	-- completed current fight to Previous at the next Start(), so the rows
+	-- remain available when the user opens the previous-fight tab.
+	local currentFight = self.FightsList[self.Fight.Current]
+	if currentFight and AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
+		local ok, rows = pcall(AOUA.GetTargetDisplayRows)
+		if ok and type(rows) == "table" then
+			currentFight.AOUATargetRows = rows
+		end
+	end
+
 	-- Persist the separate raw-event history without touching the legacy /aou rec store.
 	if AOUA and type(AOUA.OnFightStop) == "function" then
 		pcall(AOUA.OnFightStop)

@@ -493,7 +493,10 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local dp = self.DetailsPanel
 	if not dp.OpponentHeader or not dp.OpponentList then return end
 
-	local isCurrentPlayerFight = self.ActiveFight == self.DPSMeter.Fight.Current
+	local activeFight = self:GetActiveFight()
+	local isOpponentSummaryFight = self.ActiveFight == self.DPSMeter.Fight.Current
+		or self.ActiveFight == self.DPSMeter.Fight.Previous
+	local isCurrentPlayerFight = isOpponentSummaryFight and activeFight
 		and self.SelectedCombatant and avatar and avatar.IsExist and avatar.IsExist()
 		and self.SelectedCombatant.ID == avatar.GetId()
 	if not isCurrentPlayerFight then
@@ -504,14 +507,23 @@ function TUMeterGUI:UpdateOpponentInfo()
 	end
 
 	local rows, total = {}, 0
-	if AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
+	local liveCurrentFight = self.ActiveFight == self.DPSMeter.Fight.Current
+		and self.DPSMeter.bCollectData == true
+	local storedRows = activeFight and activeFight.AOUATargetRows or nil
+	if self.ActiveFight == self.DPSMeter.Fight.Previous then
+		rows = storedRows or {}
+		total = #rows
+	elseif storedRows and not liveCurrentFight then
+		rows = storedRows
+		total = #rows
+	elseif AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
 		local ok, result, count = pcall(AOUA.GetTargetDisplayRows, TARGET_INFO_ROWS)
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
-	-- Runtime fallback: try the current target whenever the analytics journal
-	-- has no displayable profile. A profile can exist with no readable metadata
-	-- when the client has already invalidated the event's target object.
+	-- During an active current fight, a live selected target may fill missing
+	-- metadata before the first event profile is available. Archived fights
+	-- must only use their own event-derived snapshot.
 	local hasReadableRow = false
 	for i = 1, #rows do
 		local data = rows[i]
@@ -530,7 +542,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 			break
 		end
 	end
-	if not hasReadableRow then
+	if not hasReadableRow and liveCurrentFight then
 		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
 		local eventTarget = ev and ev.target or nil
 		local candidates = {}

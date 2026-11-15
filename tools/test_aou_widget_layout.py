@@ -127,5 +127,23 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("Combatant:UpdateGlobalInfo(params, spellInfo.Determination, mode)", data)
 
 
+    def test_opponent_summary_is_saved_and_shown_for_previous_fight(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        data = (ROOT / "Scripts/AoUMeterData.lua").read_text(encoding="utf-8")
+        self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", gui)
+        self.assertIn("activeFight.AOUATargetRows", gui)
+        self.assertIn("if not hasReadableRow and liveCurrentFight then", gui)
+        self.assertIn("currentFight.AOUATargetRows = rows", data)
+        self.assertIn("if currentFight then currentFight.AOUATargetRows = nil end", data)
+
+    def test_targettest_reports_outgoing_event_pipeline(self):
+        optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
+        analytics = (ROOT / "Scripts/AoUMeterAnalytics.lua").read_text(encoding="utf-8")
+        self.assertIn("outgoing callbacks/owner/accepted/other=", optim)
+        self.assertIn("diag.outgoingHitCallbacks", analytics)
+        self.assertIn("diag.outgoingHitOwnerMatched", analytics)
+        self.assertIn("diag.lastOutgoingTarget", optim)
+
+
 if __name__ == "__main__":
     unittest.main()
