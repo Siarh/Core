@@ -10,7 +10,10 @@ userMods = {
     SetGlobalConfigSection = function(_, value) section = value end,
 }
 message = function(value) output[#output + 1] = tostring(value) end
-Optim = { Memo = { key = "cached" } }
+Optim = {
+    Memo = { key = "cached" },
+    ToWString = function(value) return "W:" .. tostring(value) end
+}
 
 dofile("../Scripts/AoUMeterAI.lua")
 
@@ -36,21 +39,29 @@ local rows = DPScopeAI.BuildLines({
     selfAmount = 1000, allyAmount = 9000,
     selfHealPerSecond = 10, allyHealPerSecond = 90, incomingPerSecond = 40,
     survivalDeltaPct = 3.2, hpMax = 10000,
+    avgTargetHpPct = 68.4, avgResolve = 36.2, hpSampleLabel = "цели",
     measuredHealSamples = 60, estimatedHealSamples = 40,
     currentStats = { 100, 200, 300 },
     recommendedStats = { 120, 190, 290 }
 })
-expect(#rows, 4, "AI panel row count")
+expect(#rows, 5, "AI panel row count")
 expect(rows[1][1], "OptAITitle", "AI title row")
 expect(rows[1][2], "LOCAL", "AI row must use ASCII-safe payload")
 expect(rows[2][3], "HP 92%", "AI HP payload")
-expect(rows[2][4], "RES 83%", "AI Resolve payload")
-assert(rows[3][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
-assert(rows[4][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
+expect(rows[2][4], "RES 83%", "AI Resolve sample coverage")
+expect(rows[3][1], "OptAIMeans", "average metrics row")
+expect(rows[3][2], "HP цели 68.4%", "average target HP")
+expect(rows[3][3], "RES 36.2", "average Resolve")
+assert(rows[4][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
+assert(rows[5][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
 assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
     "HPS AI summary should identify ally-focused healing")
 assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
     "AI summary should provide a next test")
+assert(string.find(DPScopeAI.LastSummary, "Средний HP цели=68.4%", 1, true),
+    "AI summary should report average target HP")
+assert(string.find(DPScopeAI.LastSummary, "средняя Решимость=36.2", 1, true),
+    "AI summary should report average Resolve")
 
 local weak = DPScopeAI.Analyze({ mode = "dps", eventCount = 5, hpSamples = 1, poolSamples = 0 })
 expect(weak.confidence, "низкая", "low sample confidence")
@@ -89,5 +100,11 @@ expect(defenseRows[2][4], "HP/RES -", "defense quality does not reuse attack sam
 DPScopeAI.OnSlash({ "/aou", "ai", "status" })
 assert(string.find(output[#output], "ON", 1, true), "AI status should report ON")
 assert(string.find(output[#output], "Ollama", 1, true), "AI status should describe the local desktop companion")
+local beforeAdvice = #output
+DPScopeAI.OnSlash({ "/aou", "ai", "advice" })
+local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
+assert(string.find(adviceOutput, "W:", 1, true), "Russian chat output should pass through the wide-string converter")
+assert(string.find(adviceOutput, "Средний HP", 1, true), "chat advice should include average target HP")
+assert(string.find(adviceOutput, "средняя Решимость", 1, true), "chat advice should include average Resolve")
 
 print("DPScope AI advisor tests passed.")
