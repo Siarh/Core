@@ -49,6 +49,28 @@ class AIAssistantTests(unittest.TestCase):
                 }
             },
             "import_warnings": ["HP values partly estimated"],
+            "event_effectiveness": {
+                "status": "calculated",
+                "classification": "ESTIMATED",
+                "fights": [{
+                    "kind": "healing", "reported_amount": 1000,
+                    "estimated_effective_amount": 700,
+                    "estimated_excess_amount": 300,
+                    "excess_label": "overheal_estimated",
+                    "hp_coverage_percent": 80
+                }]
+            },
+            "critical_analysis": {
+                "status": "calculated",
+                "classification": "DERIVED",
+                "groups": [{
+                    "ability": "Holy Wrath", "normal_events": 2, "critical_events": 3,
+                    "observed_critical_rate_percent": 60,
+                    "observed_critical_amount_share_percent": 81.8,
+                    "observed_critical_to_normal_average_ratio": 3.0,
+                    "causal_status": "descriptive_only"
+                }]
+            },
             "temporal_performance": {
                 "status": "calculated",
                 "classification": "DERIVED",
@@ -146,6 +168,12 @@ class AIAssistantTests(unittest.TestCase):
         self.assertEqual(temporal["classification"], "DERIVED")
         self.assertEqual(temporal["fights"][0]["burst_windows"]["3s"]["mean_rate_per_second"], 500)
         self.assertEqual(temporal["fights"][0]["resolve_sample_summary"]["mean_sampled_pool"], 50)
+        effectiveness = payload["event_effectiveness"]
+        self.assertEqual(effectiveness["classification"], "ESTIMATED")
+        self.assertEqual(effectiveness["fights"][0]["excess_label"], "overheal_estimated")
+        critical = payload["critical_analysis"]
+        self.assertEqual(critical["classification"], "DERIVED")
+        self.assertEqual(critical["groups"][0]["observed_critical_rate_percent"], 60)
         self.assertNotIn("not_selected", rendered)
 
     def test_compact_payload_keeps_heal_recipient_split(self):
@@ -184,6 +212,9 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не реальный временной uptime", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("Effective DPS/HPS", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("overheal", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("target_hp_after", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("критический множитель", ai.SYSTEM_INSTRUCTIONS)
 
 
     def test_normalizes_ollama_host_variants(self):
