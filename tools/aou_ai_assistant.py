@@ -33,6 +33,8 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Сравнивай активности только с оглядкой на их собственные условия; не объявляй победителем бой только из-за большего абсолютного урона.
 - Изменение характеристик между боями — полезный экспериментальный фактор, а не ошибка и не повод прекращать анализ. stat_comparison является только описательной сводкой и не доказывает причинность.
 - При наличии controlled_stat_efficiency используй только сравнения, где менялась одна характеристика, остальные характеристики были в допуске, контекст события совпадал, а на каждом наборе статов было не менее трёх независимых боёв. Обязательно указывай ME на +100, 95% CI, число боёв и событий.
+- model_marginal_efficiency — отдельный ESTIMATED расчёт по формуле на неизменной структуре событий и фиксированных наблюдаемых пулах Решимости. Его ME/interaction/soft_knee не являются измеренным игровым эффектом или доказанным soft cap. Указывай assumptions, особенно fixed Resolve pool и крит x2.
+- Не смешивай ESTIMATED кривые формулы с DERIVED controlled_stat_efficiency. Если у характеристики status unavailable или отсутствует формула, прямо говори, что модель её не оценивает.
 - controlled_stat_efficiency имеет статус DERIVED / controlled-observational, а не доказанная причинность: target_id, баффы/дебаффы, таланты и ротация пока не записываются. Не называй сравнение чистым экспериментом.
 - Если controlled_stat_efficiency.status = insufficient_data или доверительный интервал включает ноль, не ранжируй характеристики по этому сравнению; напиши INSUFFICIENT DATA и предложи повторный контролируемый тест.
 - Не делай причинный вывод только по корреляции: учитывай различия целей, длительности, состава группы, ротации, бафов, HP цели и Resolve. Если условия несопоставимы, называй результат предварительным и предложи повторить тест на одинаковой цели/условиях.
@@ -103,6 +105,20 @@ def _compact_activity(profile_activity: dict[str, Any], report_item: dict[str, A
             },
         }
 
+    model_me = report_item.get("model_marginal_efficiency", {}) or {}
+    compact_model = {
+        key: model_me[key]
+        for key in (
+            "status", "classification", "metric", "metric_per_second",
+            "baseline_model_result", "event_count", "duration_seconds",
+            "method", "resolve_policy", "critical_policy", "unavailable_stats",
+            "confidence_interval", "note",
+        )
+        if key in model_me
+    }
+    compact_model["curves"] = model_me.get("curves", {})
+    compact_model["interactions"] = model_me.get("interactions", [])[:30]
+
     result: dict[str, Any] = {
         "mode": mode,
         "weight": profile_activity.get("weight", 1.0),
@@ -121,6 +137,7 @@ def _compact_activity(profile_activity: dict[str, Any], report_item: dict[str, A
         },
         "simulation": compact_sim,
         "recommendation": compact_rec,
+        "model_marginal_efficiency": compact_model,
     }
     if recipient_segments:
         result["recipient_segments"] = recipient_segments
@@ -179,6 +196,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         },
         "current_stats": profile.get("stats", {}),
         "formula_assumptions": report.get("assumptions", {}),
+        "stat_model_registry": report.get("stat_model_registry", {}),
         "character_summary": compact_character,
         "activities": activities,
         "cross_activity_recommendations": report.get("cross_activity_recommendations", {}),
