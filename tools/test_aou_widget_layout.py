@@ -50,6 +50,10 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertGreaterEqual(bounds["stats"][1] - bounds["stats"][0], 155)
         self.assertEqual(bounds["stats"], (156, 316))
 
+    def test_global_resolve_percentage_is_pulled_toward_bar(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        self.assertIn('GlobalInfoPanel.Percent:SetPosition(321, 1)', gui)
+
     def test_min_avg_max_have_clear_visual_separation(self):
         fmt = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.txt").read_text(encoding="utf-8-sig")
         self.assertGreaterEqual(fmt.count("   |   "), 2)

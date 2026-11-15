@@ -199,3 +199,9 @@ Global determination numeric spacing refinement:
 Entity classification fallback:
 - When object.IsMob is unavailable in the Sunshine 6.0 API, the event journal now marks only the verified local avatar ID as non-mob (0).
 - Other entities remain unknown; quality and level are not treated as proof that an entity is a mob.
+
+
+Global Resolve percentage positioning:
+- Moved the yellow current Resolve percentage from the far-right edge of the cloned detail row to the dedicated slot at x=321, just after the typical Resolve bar fill.
+- The percentage is repositioned only for the global Resolve row; spell-detail percentages keep their original alignment.
+- Added a regression check for the runtime position override.

@@ -247,6 +247,9 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg , "%f3K5"))
 		GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max , "%f3K5"))
 		GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage , "%d"))
+		-- Keep the yellow current-Resolve percentage near the filled bar.
+		-- Reserve the right-hand slot so it does not collide with Min / Avg / Max.
+		GlobalInfoPanel.Percent:SetPosition(321, 1)
 	end
 end
 --------------------------------------------------------------------------------
