@@ -467,9 +467,9 @@ function TUMeterGUI:UpdateOpponentInfo()
 		W(russian and "Цель | тип / ур. / качество | HP | сопротивление в событиях"
 			or "Target | type / lvl / quality | HP | resisted damage by school"))
 
+	local displayedRows = 0
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
 		local data = rows[i]
-		local panel = dp.OpponentList[i]
 		local parts = {}
 		local name = targetReadableName(data.name)
 		if name ~= "" then parts[#parts + 1] = name end
@@ -511,10 +511,16 @@ function TUMeterGUI:UpdateOpponentInfo()
 			parts[#parts + 1] = (russian and "сопр. " or "resist ") .. table.concat(resistParts, ", ")
 		end
 
-		panel:Show()
-		panel.Line:SetVal("Name", W(table.concat(parts, " | ")))
+		local line = table.concat(parts, " | ")
+		if line ~= "" then
+			displayedRows = displayedRows + 1
+			local panel = dp.OpponentList[displayedRows]
+			panel:Show()
+			panel.Line:SetVal("Name", W(line))
+		end
 	end
-	for i = #rows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+	for i = displayedRows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+	if displayedRows == 0 then dp.OpponentHeader:Hide() end
 end
 
 --------------------------------------------------------------------------------
