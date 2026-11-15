@@ -111,7 +111,7 @@ def _compact_activity(profile_activity: dict[str, Any], report_item: dict[str, A
         key: model_me[key]
         for key in (
             "status", "classification", "metric", "metric_per_second",
-            "baseline_model_result", "event_count", "duration_seconds",
+            "baseline_input_quality", "baseline_model_result", "event_count", "duration_seconds",
             "method", "resolve_policy", "critical_policy", "unavailable_stats",
             "confidence_interval", "note",
         )
