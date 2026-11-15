@@ -188,7 +188,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             "input_event_rows", "validated_event_rows_before_contamination",
             "contaminated_event_rows_excluded",
             "minimum_stat_step", "minimum_fights_per_build",
-            "max_stat_snapshot_age_seconds", "included_events",
+            "max_stat_snapshot_age_seconds", "included_events", "included_luck_all_hit_events",
             "excluded_or_unusable", "contaminated_fights_excluded",
             "insufficient_repeated_pairs", "limitations",
         )
@@ -198,7 +198,8 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         {
             key: item.get(key)
             for key in (
-                "classification", "causal_status", "mode", "profile",
+                "classification", "causal_status", "evidence_tier",
+                "identity_quality", "snapshot_quality", "mode", "profile",
                 "duration_band", "ability", "element", "target_hp_band",
                 "target_hp_quality", "resolve_pool_band", "critical", "critical_scope", "recipient",
                 "stat", "from", "to", "delta_stat", "delta_result", "result_unit",
@@ -214,7 +215,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
         for item in (experimental.get("comparisons", []) or [])
     ]
 
-    me_groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    me_groups: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
     for item in (experimental.get("comparisons", []) or []):
         group_key = (
             str(item.get("stat", "unknown")),
