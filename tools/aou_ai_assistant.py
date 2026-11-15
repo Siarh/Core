@@ -35,7 +35,7 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Не объединяй единицы и контексты разных способностей в одну среднюю ME и не строй абсолютный рейтинг по несовместимым сценариям. Показывай распределение сравнений по контекстам; при смешанных условиях пиши INSUFFICIENT DATA.
 - Проанализируй все переданные controlled_stat_efficiency.comparisons. Не ограничивайся первыми 25, не выбирай только удобные положительные результаты и не игнорируй отрицательные/нулевые результаты. Сверяй total_comparisons, strict_comparison_count, legacy_exploratory_comparison_count и included_events.
 - Разделяй evidence_tier=strict и evidence_tier=legacy_exploratory. Legacy сравнения без instance IDs или свежести снимка разрешено обсуждать только как гипотезы с VERY_LOW confidence; запрещено объединять их со strict ME или называть экспериментально подтверждёнными.
-- Если ожидается 1000 экспортных записей, сначала проверь input_data_coverage/import_summary: reconstructed/export_records, source_rows, combat_rows, skipped/included. Если число не совпадает или экспорт неполный, не утверждай, что все 1000 проанализированы.
+- Если ожидается 1000 экспортных записей, сначала проверь input_data_coverage/import_summary: reconstructed/export_records, source_rows, combat_rows, skipped/included. Затем проверь input_event_rows, strict_valid_event_rows, legacy_exploratory_event_rows, contaminated_event_rows_excluded. Если число не совпадает или экспорт неполный, не утверждай, что все 1000 проанализированы.
 - При отсутствии валидных повторных сравнений ME не вычисляй по простому сравнению общего DPS двух разных боёв. Сообщай INSUFFICIENT DATA и предлагай тест, где меняется один стат.
 
 Правила:
@@ -187,6 +187,7 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
             "total_comparisons", "strict_comparison_count",
             "legacy_exploratory_comparison_count",
             "input_event_rows", "validated_event_rows_before_contamination",
+            "strict_valid_event_rows", "legacy_exploratory_event_rows",
             "contaminated_event_rows_excluded",
             "minimum_stat_step", "minimum_fights_per_build",
             "max_stat_snapshot_age_seconds", "included_events", "included_luck_all_hit_events",
