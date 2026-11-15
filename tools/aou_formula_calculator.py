@@ -23,6 +23,96 @@ SCHOOLS = {
     "nature": "nature",
 }
 
+STAT_MODEL_REGISTRY = {
+    "might": {"name": "Могущество", "type": "offensive", "scope": ["dps", "hps"],
+              "affected_events": ["damage", "healing"], "formula": "might_level_multiplier",
+              "soft_caps": [], "hard_caps": [], "dependencies": ["level", "power_scale"],
+              "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+              "formula_supported": True, "snapshot_available": False},
+    "mastery": {"name": "Мастерство", "type": "offensive", "scope": ["dps", "hps"],
+                "affected_events": ["damage", "healing"], "formula": "mastery_multiplier",
+                "soft_caps": [], "hard_caps": [], "dependencies": [],
+                "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                "formula_supported": True, "snapshot_available": True},
+    "resolve": {"name": "Решимость", "type": "offensive", "scope": ["dps", "hps"],
+                "affected_events": ["damage", "healing"], "formula": "resolve_multiplier",
+                "soft_caps": [], "hard_caps": [], "dependencies": ["resolve_pool", "resolve_coefficient"],
+                "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                "formula_supported": True, "snapshot_available": True},
+    "ruthlessness": {"name": "Беспощадность", "type": "offensive", "scope": ["dps", "hps"],
+                     "affected_events": ["damage", "healing"], "formula": "ruthlessness_multiplier",
+                     "soft_caps": ["implicit_from_m_over_log1pm"], "hard_caps": [],
+                     "dependencies": ["target_hp_before"],
+                     "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                     "formula_supported": True, "snapshot_available": True},
+    "luck": {"name": "Удача", "type": "offensive", "scope": ["dps", "hps"],
+             "affected_events": ["damage", "healing"], "formula": "crit_chance",
+             "soft_caps": ["softened_stat_after_500"], "hard_caps": [850],
+             "dependencies": ["critical_multiplier_assumed_x2"],
+             "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+             "formula_supported": True, "snapshot_available": True},
+    "fortitude": {"name": "Стойкость", "type": "defensive", "scope": ["tank"],
+                  "affected_events": ["incoming"], "formula": "fortitude_health",
+                  "soft_caps": [], "hard_caps": [], "dependencies": ["max_hp"],
+                  "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                  "formula_supported": True, "snapshot_available": True},
+    "endurance": {"name": "Выносливость", "type": "defensive", "scope": ["tank"],
+                  "affected_events": ["incoming"], "formula": "endurance_health",
+                  "soft_caps": [], "hard_caps": [], "dependencies": ["class_k", "level"],
+                  "pve_relevance": "requires_class_k", "pvp_relevance": "requires_class_k",
+                  "formula_supported": True, "snapshot_available": False},
+    "bloodthirst": {"name": "Кровожадность", "type": "defensive_sustain", "scope": ["dps", "hps", "tank"],
+                    "affected_events": ["damage", "healing", "incoming"], "formula": "bloodthirst_fraction",
+                    "soft_caps": ["asymptotic_x_over_x_plus_1_8"], "hard_caps": [],
+                    "dependencies": ["outgoing_damage", "healing_wound_fraction"],
+                    "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                    "formula_supported": True, "snapshot_available": True},
+    "caution": {"name": "Осторожность", "type": "defensive", "scope": ["tank"],
+                "affected_events": ["incoming"], "formula": "caution_multiplier",
+                "soft_caps": [], "hard_caps": [350], "dependencies": ["actor_hp_before"],
+                "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                "formula_supported": True, "snapshot_available": True},
+    "will": {"name": "Воля", "type": "defensive_control", "scope": ["tank"],
+             "affected_events": ["control"], "formula": "will_result",
+             "soft_caps": ["threshold_steps"], "hard_caps": [], "dependencies": ["control_windows", "control_weight"],
+             "pve_relevance": "not_enabled_without_control_weight",
+             "pvp_relevance": "formula_supported_with_control_weight",
+             "formula_supported": True, "snapshot_available": True},
+    "fury": {"name": "Ярость", "type": "anti_heal", "scope": ["dps"],
+             "affected_events": ["damage_to_player"], "formula": "fury_healing_absorption",
+             "soft_caps": ["softened_stat_after_500"], "hard_caps": [850],
+             "dependencies": ["target_is_player", "in_combat"],
+             "pve_relevance": "not_applicable_to_current_profile",
+             "pvp_relevance": "event_context_not_exported",
+             "formula_supported": True, "snapshot_available": False},
+    "armor": {"name": "Броня", "type": "defensive_resistance", "scope": ["tank"],
+              "affected_events": ["incoming_physical"], "formula": "resistance_multiplier",
+              "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
+              "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+              "formula_supported": True, "snapshot_available": False},
+    "elements": {"name": "Стихии", "type": "defensive_resistance", "scope": ["tank"],
+                 "affected_events": ["incoming_fire_cold_lightning"], "formula": "resistance_multiplier",
+                 "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
+                 "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+                 "formula_supported": True, "snapshot_available": False},
+    "divine": {"name": "Свет/Тьма/Астрал", "type": "defensive_resistance", "scope": ["tank"],
+               "affected_events": ["incoming_holy_shadow_astral"], "formula": "resistance_multiplier",
+               "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
+               "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+               "formula_supported": True, "snapshot_available": False},
+    "nature": {"name": "Природа", "type": "defensive_resistance", "scope": ["tank"],
+               "affected_events": ["incoming_poison_disease_acid"], "formula": "resistance_multiplier",
+               "soft_caps": [], "hard_caps": [], "dependencies": ["damage_school"],
+               "pve_relevance": "formula_supported", "pvp_relevance": "formula_supported",
+               "formula_supported": True, "snapshot_available": False},
+    "haste": {"name": "Стремительность", "type": "offensive", "scope": ["dps", "hps"],
+              "affected_events": ["cast_time", "cooldown", "dot_ticks"],
+              "formula": None, "soft_caps": [], "hard_caps": [],
+              "dependencies": ["cast_timing", "cooldown_events"],
+              "pve_relevance": "unsupported", "pvp_relevance": "unsupported",
+              "formula_supported": False, "snapshot_available": False},
+}
+
 
 def num(value: Any, default: float = 0.0) -> float:
     try:
@@ -600,6 +690,132 @@ def _score_for_optimization(activity: dict[str, Any], stats: dict[str, Any], cfg
     if score_value is None:
         return None, basis
     return float(score_value), basis
+
+
+def _model_objective_rate(activity: dict[str, Any], stats: dict[str, Any], cfg: dict[str, Any]) -> tuple[float | None, str, int]:
+    simulation = simulate(activity, stats, cfg, expected_crit=True)
+    mode = str(activity.get("mode", "dps")).lower()
+    score, basis = _objective(simulation, mode, cfg)
+    duration = max(1, int(simulation.get("seconds", 1)))
+    if score is None:
+        return None, basis, duration
+    return (float(score) / duration if mode in ("dps", "hps") else float(score)), basis, duration
+
+
+def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+    """Finite-difference sensitivity of the supplied formula model, not a measured game effect."""
+    mode = str(activity.get("mode", "dps")).lower()
+    baseline, basis, duration = _model_objective_rate(activity, base_stats, cfg)
+    if baseline is None:
+        return {
+            "status": "insufficient_data", "classification": "ESTIMATED",
+            "reason": basis, "curves": {}, "interactions": [],
+        }
+
+    candidates = list(_optimizable_stats(mode, cfg))
+    if mode in ("dps", "hps") and "luck" not in candidates:
+        candidates.append("luck")  # sensitivity only; the in-game allocator keeps Luck fixed
+    if mode in ("dps", "hps") and "might" not in candidates:
+        candidates.append("might")
+    candidates = [key for key in candidates if key in STAT_MODEL_REGISTRY and STAT_MODEL_REGISTRY[key]["formula_supported"]]
+    increments = (0, 100, 200, 300, 400)
+    curves: dict[str, Any] = {}
+
+    for stat in candidates:
+        current = num(base_stats.get(stat, cfg.get(stat, 20.0 if stat == "might" else 0.0)))
+        previous_value = current
+        previous_score = baseline
+        points = [{
+            "stat_value": round(current, 4),
+            "model_result": round(baseline, 6),
+            "marginal_efficiency_per_100": None,
+            "relative_gain_per_100_percent": None,
+        }]
+        slopes: list[float] = []
+        failed_reason = None
+        for increment in increments[1:]:
+            test_stats = dict(base_stats)
+            test_stats[stat] = current + increment
+            score, candidate_basis, _ = _model_objective_rate(activity, test_stats, cfg)
+            if score is None:
+                failed_reason = candidate_basis
+                break
+            delta_stat = increment - (previous_value - current)
+            delta_result = score - previous_score
+            efficiency = delta_result * 100.0 / delta_stat if delta_stat > 0 else None
+            relative = ((score / previous_score) ** (100.0 / delta_stat) - 1.0) * 100.0 if previous_score > 0 and score > 0 and delta_stat > 0 else None
+            points.append({
+                "stat_value": round(current + increment, 4),
+                "model_result": round(score, 6),
+                "marginal_efficiency_per_100": round(efficiency, 6) if efficiency is not None else None,
+                "relative_gain_per_100_percent": round(relative, 6) if relative is not None else None,
+            })
+            if efficiency is not None:
+                slopes.append(efficiency)
+            previous_value = current + increment
+            previous_score = score
+
+        soft_knee = None
+        for index in range(2, len(slopes)):
+            first, second, third = slopes[index - 2:index + 1]
+            if first > 0 and second < first * 0.90 and third < second * 0.90:
+                soft_knee = points[index]["stat_value"]
+                break
+        curves[stat] = {
+            "classification": "ESTIMATED",
+            "allocation_eligible": stat in _optimizable_stats(mode, cfg),
+            "current_value": round(current, 4),
+            "formula_supported": True,
+            "soft_knee_candidate": soft_knee,
+            "points": points,
+            "reason_if_incomplete": failed_reason,
+        }
+
+    interactions = []
+    for first_index in range(len(candidates)):
+        for second_index in range(first_index + 1, len(candidates)):
+            first_stat, second_stat = candidates[first_index], candidates[second_index]
+            test_first = dict(base_stats)
+            test_second = dict(base_stats)
+            test_both = dict(base_stats)
+            first_base = num(base_stats.get(first_stat, cfg.get(first_stat, 20.0 if first_stat == "might" else 0.0)))
+            second_base = num(base_stats.get(second_stat, cfg.get(second_stat, 20.0 if second_stat == "might" else 0.0)))
+            test_first[first_stat] = first_base + 100.0
+            test_second[second_stat] = second_base + 100.0
+            test_both[first_stat] = first_base + 100.0
+            test_both[second_stat] = second_base + 100.0
+            score_first, _, _ = _model_objective_rate(activity, test_first, cfg)
+            score_second, _, _ = _model_objective_rate(activity, test_second, cfg)
+            score_both, _, _ = _model_objective_rate(activity, test_both, cfg)
+            if score_first is None or score_second is None or score_both is None:
+                continue
+            interaction = score_both - score_first - score_second + baseline
+            interactions.append({
+                "classification": "ESTIMATED",
+                "first_stat": first_stat,
+                "second_stat": second_stat,
+                "step_each": 100,
+                "interaction_effect": round(interaction, 6),
+                "direction": "synergy" if interaction > 1e-9 else ("competition" if interaction < -1e-9 else "neutral"),
+                "metric": basis,
+            })
+
+    return {
+        "status": "calculated",
+        "classification": "ESTIMATED",
+        "metric": basis,
+        "metric_per_second": mode in ("dps", "hps"),
+        "baseline_model_result": round(baseline, 6),
+        "event_count": len(activity.get("samples", []) or []),
+        "duration_seconds": duration,
+        "method": "one-factor-at-a-time finite differences; fixed event mix, HP phases and recorded Resolve pools",
+        "resolve_policy": "measured per-event Resolve pool is held fixed; its build-dependent growth is not re-simulated",
+        "critical_policy": "expected Luck chance with the calculator's x2 critical baseline; raw cross-ability ratios are not treated as a causal multiplier",
+        "curves": curves,
+        "interactions": interactions,
+        "confidence_interval": None,
+        "note": "Расчётная чувствительность формулы, не ME, измеренная в игре; точность ограничена неполными модификаторами callback.",
+    }
 
 
 def optimize(activity: dict[str, Any], base_stats: dict[str, Any], budget: int, cfg: dict[str, Any]) -> dict[str, Any]:
