@@ -304,5 +304,84 @@ class FormulaTests(unittest.TestCase):
         self.assertIsNone(rating)
 
 
+    def test_model_marginal_efficiency_and_interaction_are_estimated(self):
+        activity = {
+            "mode": "dps",
+            "samples": [{
+                "second": 0,
+                "raw": 1000,
+                "target_hp": 1.0,
+                "resolve_pool": 0,
+                "critical": False,
+            }],
+        }
+        stats = {"mastery": 100, "resolve": 0, "ruthlessness": 0, "luck": 0}
+        cfg = {"level": 1, "resolve_coefficient": 0.015, "might": 20}
+        result = calc.model_marginal_efficiency(activity, stats, cfg)
+
+        self.assertEqual(result["classification"], "ESTIMATED")
+        self.assertEqual(result["status"], "calculated")
+        self.assertEqual(result["baseline_model_result"], 1100)
+        self.assertEqual(result["curves"]["mastery"]["points"][1]["marginal_efficiency_per_100"], 100)
+        self.assertFalse(result["curves"]["luck"]["allocation_eligible"])
+        self.assertFalse(result["curves"]["might"]["allocation_eligible"])
+        self.assertIsNone(result["confidence_interval"])
+
+        interaction = next(
+            row for row in result["interactions"]
+            if {row["first_stat"], row["second_stat"]} == {"mastery", "luck"}
+        )
+        self.assertAlmostEqual(interaction["interaction_effect"], 10.0, places=6)
+        self.assertEqual(interaction["direction"], "synergy")
+
+    def test_model_efficiency_refuses_ruthlessness_curve_when_target_hp_missing(self):
+        activity = {
+            "mode": "dps",
+            "samples": [{
+                "second": 0, "raw": 1000, "resolve_pool": 0,
+                "critical": False,
+            }],
+        }
+        result = calc.model_marginal_efficiency(
+            activity,
+            {"mastery": 100, "resolve": 0, "ruthlessness": 100, "luck": 0},
+            {"level": 1, "resolve_coefficient": 0.015},
+        )
+        self.assertEqual(result["status"], "partial_estimates")
+        self.assertNotIn("ruthlessness", result["curves"])
+        self.assertIn("ruthlessness", result["unavailable_stats"])
+        self.assertIn("INSUFFICIENT DATA", result["unavailable_stats"]["ruthlessness"])
+
+    def test_model_registry_marks_unverified_stats_unsupported(self):
+        self.assertTrue(calc.STAT_MODEL_REGISTRY["mastery"]["formula_supported"])
+        self.assertTrue(calc.STAT_MODEL_REGISTRY["mastery"]["snapshot_available"])
+        self.assertFalse(calc.STAT_MODEL_REGISTRY["haste"]["formula_supported"])
+        self.assertFalse(calc.STAT_MODEL_REGISTRY["dominance"]["formula_supported"])
+        self.assertFalse(calc.STAT_MODEL_REGISTRY["vitality"]["formula_supported"])
+
+    def test_calculate_profile_includes_estimated_me_and_registry(self):
+        profile = {
+            "settings": {"level": 1, "resolve_coefficient": 0.015, "might": 20},
+            "stats": {"mastery": 100, "resolve": 0, "ruthlessness": 0, "luck": 0},
+            "fixed_stats": {"mastery": 100, "resolve": 0, "ruthlessness": 0, "luck": 0},
+            "allocation_budget": 0,
+            "activities": {
+                "single_target": {
+                    "mode": "dps",
+                    "samples": [{
+                        "second": 0, "raw": 1000, "target_hp": 1.0,
+                        "resolve_pool": 0, "critical": False,
+                    }],
+                }
+            },
+        }
+        report = calc.calculate_profile(profile)
+        item = report["activities"]["single_target"]
+        self.assertIn("model_marginal_efficiency", item)
+        self.assertEqual(item["model_marginal_efficiency"]["classification"], "ESTIMATED")
+        self.assertIn("haste", report["stat_model_registry"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
