@@ -83,6 +83,7 @@ DEFENSIVE_EXPERIMENT_STATS = ("fortitude", "will", "bloodthirst", "caution")
 MIN_STAT_STEP = 25.0
 MIN_FIGHTS_PER_BUILD = 3
 MIN_EVENTS_PER_FIGHT_CONTEXT = 3
+MAX_STAT_SNAPSHOT_AGE_SECONDS = 3.0
 BOOTSTRAP_REPLICATES = 500
 
 
@@ -289,6 +290,14 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             continue
         if kind in {"damage", "healing"} and number(row.get("resolve_pool")) is None:
             skipped["resolve_pool_unknown"] += 1
+            continue
+
+        snapshot_age = number(row.get("stat_sample_age"))
+        if snapshot_age is None:
+            skipped["stat_snapshot_age_missing"] += 1
+            continue
+        if snapshot_age < 0 or snapshot_age > MAX_STAT_SNAPSHOT_AGE_SECONDS:
+            skipped["stat_snapshot_stale"] += 1
             continue
 
         signature = _fight_stat_signature(row)
@@ -510,6 +519,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         "minimum_stat_step": MIN_STAT_STEP,
         "minimum_fights_per_build": MIN_FIGHTS_PER_BUILD,
         "minimum_events_per_fight_context": MIN_EVENTS_PER_FIGHT_CONTEXT,
+        "max_stat_snapshot_age_seconds": MAX_STAT_SNAPSHOT_AGE_SECONDS,
         "bootstrap_replicates": BOOTSTRAP_REPLICATES,
         "included_events": included_events,
         "included_luck_all_hit_events": sum(
@@ -527,6 +537,8 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
             "Баффы, дебаффы, аспект, таланты, ротация и состав группы не сохраняются по каждому событию; скрытое смешение условий остаётся возможным.",
             "ME учитывает rate matched ability context по таймеру боя; это не DPS всего персонажа и зависит от использования способности/ротации.",
             "Для лечения сравнивается reported healing rate, не Effective HPS: callback не содержит достоверный overheal для всех событий.",
+            "Снимок статов обновляется не чаще одного раза в 3 секунды. Переключение статов и возврат к исходным значениям между двумя снимками может остаться незамеченным.",
+            "Строгое сравнение использует только строки со stat_sample_age не старше 3 секунд.",
             "ME рассчитана только при изменении одной характеристики; остальные сохранённые характеристики должны оставаться в допуске.",
             "Результат DERIVED и controlled-observational, но не доказывает причинность."
         ],
