@@ -93,7 +93,8 @@ local function freshSession()
         eventSamples = {}, eventSamplesDropped = 0, eventSampleCount = 0, eventSampleNext = 1,
         elapsedSeconds = 0, fightId = 0, statSnapshot = nil,
         statSnapshotSecond = nil, statSnapshotAttemptSecond = nil,
-        objectMetadata = {}, objectMetadataCount = 0, started = false
+        objectMetadata = {}, objectMetadataCount = 0,
+        targetProfiles = {}, targetProfileCount = 0, started = false
     }
 end
 
@@ -155,6 +156,8 @@ local function ensureSession()
     AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped or 0
     AOUA.Session.objectMetadata = AOUA.Session.objectMetadata or {}
     AOUA.Session.objectMetadataCount = tonumber(AOUA.Session.objectMetadataCount) or 0
+    AOUA.Session.targetProfiles = AOUA.Session.targetProfiles or {}
+    AOUA.Session.targetProfileCount = tonumber(AOUA.Session.targetProfileCount) or 0
     AOUA.Session.eventSampleCount = math.max(0, math.min(EVENT_BUFFER_LIMIT,
         math.floor(tonumber(AOUA.Session.eventSampleCount) or #AOUA.Session.eventSamples)))
     AOUA.Session.eventSampleNext = math.floor(tonumber(AOUA.Session.eventSampleNext) or
@@ -177,6 +180,8 @@ function AOUA.OnFightStart()
     AOUA.Session.eventSamplesDropped = 0
     AOUA.Session.objectMetadata = {}
     AOUA.Session.objectMetadataCount = 0
+    AOUA.Session.targetProfiles = {}
+    AOUA.Session.targetProfileCount = 0
     -- HP transitions from an earlier fight must never leak into the new fight.
     AOUA.HpCache = {}
     AOUA.HealthTransitions = {}
@@ -578,6 +583,119 @@ local function metadataCsv(meta)
         (meta.isMob == nil) and "" or (meta.isMob and "1" or "0")
 end
 
+-- Aggregate live opponent data for the in-game details panel. Profiles are
+-- keyed by the target ObjectId for this fight; unknown object types are never
+-- merged merely because their metadata is unavailable.
+local function updateTargetProfile(targetKey, targetMeta, amount, hpBefore, hpQuality,
+    hpCurrent, hpLimit, hpPercent, hpAge, element, params)
+    if not targetKey or targetKey == "" then return end
+    local session = AOUA.Session
+    session.targetProfiles = session.targetProfiles or {}
+    local profile = session.targetProfiles[targetKey]
+    if not profile then
+        session.targetProfileCount = (tonumber(session.targetProfileCount) or 0) + 1
+        profile = {
+            ordinal = session.targetProfileCount,
+            name = eventText(targetMeta and targetMeta.name) or "",
+            level = targetMeta and tonumber(targetMeta.level) or nil,
+            quality = targetMeta and tonumber(targetMeta.quality) or nil,
+            qualityName = targetMeta and eventText(targetMeta.qualityName) or "",
+            kind = targetMeta and targetMeta.kind or "unknown",
+            events = 0, damage = 0,
+            resistTotal = 0, resistSamples = 0, resistByElement = {}
+        }
+        session.targetProfiles[targetKey] = profile
+    end
+
+    profile.events = profile.events + 1
+    profile.damage = profile.damage + N(amount)
+    profile.lastSecond = tonumber(session.elapsedSeconds) or 0
+
+    if hpCurrent ~= nil and hpLimit ~= nil and hpLimit > 0 then
+        profile.hpCurrent = hpCurrent
+        profile.hpLimit = hpLimit
+        profile.hpPercent = hpPercent
+        profile.hpSecond = math.max(0, profile.lastSecond - (tonumber(hpAge) or 0))
+    end
+    if hpBefore ~= nil then
+        profile.hpBeforePercent = hpBefore * 100
+        profile.hpBeforeQuality = hpQuality or "unknown"
+        profile.hpBeforeSecond = profile.lastSecond
+    end
+
+    local resist = tonumber(params and params.resist)
+    if resist and resist > 0 then
+        local school = (element and element ~= "") and element or "UNKNOWN"
+        local schoolRow = profile.resistByElement[school]
+        if not schoolRow then
+            schoolRow = { amount = 0, samples = 0 }
+            profile.resistByElement[school] = schoolRow
+        end
+        schoolRow.amount = schoolRow.amount + resist
+        schoolRow.samples = schoolRow.samples + 1
+        profile.resistTotal = profile.resistTotal + resist
+        profile.resistSamples = profile.resistSamples + 1
+    end
+end
+
+-- Public, read-only view consumed by the GUI. HP snapshots remain explicitly
+-- measured; pre-hit HP is exposed separately and must be labelled as an estimate
+-- or as a pre-hit sample rather than as current HP.
+function AOUA.GetTargetDisplayRows(limit)
+    ensureSession()
+    local rows = {}
+    local now = tonumber(AOUA.Session.elapsedSeconds) or 0
+    for _, profile in pairs(AOUA.Session.targetProfiles or {}) do
+        local row = {
+            ordinal = profile.ordinal,
+            name = profile.name,
+            level = profile.level,
+            quality = profile.quality,
+            qualityName = profile.qualityName,
+            kind = profile.kind,
+            events = profile.events,
+            damage = profile.damage,
+            resistTotal = profile.resistTotal or 0,
+            resistSamples = profile.resistSamples or 0,
+            resistSchools = {}
+        }
+        if profile.hpCurrent ~= nil and profile.hpLimit ~= nil and profile.hpLimit > 0 then
+            row.hpAge = math.max(0, now - (tonumber(profile.hpSecond) or now))
+            if row.hpAge <= 30 then
+                row.hpCurrent = profile.hpCurrent
+                row.hpLimit = profile.hpLimit
+                row.hpPercent = profile.hpPercent
+                row.hpQuality = "measured"
+            end
+        end
+        if row.hpCurrent == nil and profile.hpBeforePercent ~= nil then
+            row.hpBeforePercent = profile.hpBeforePercent
+            row.hpBeforeAge = math.max(0, now - (tonumber(profile.hpBeforeSecond) or now))
+            row.hpBeforeQuality = profile.hpBeforeQuality or "unknown"
+        end
+        for school, stat in pairs(profile.resistByElement or {}) do
+            rows[#rows + 1] = row
+            row.resistSchools[#row.resistSchools + 1] = {
+                element = school, amount = stat.amount, samples = stat.samples
+            }
+        end
+        if not next(profile.resistByElement or {}) then
+            rows[#rows + 1] = row
+        end
+        table.sort(row.resistSchools, function(a, b) return a.amount > b.amount end)
+    end
+    table.sort(rows, function(a, b)
+        if (a.damage or 0) == (b.damage or 0) then
+            return (a.events or 0) > (b.events or 0)
+        end
+        return (a.damage or 0) > (b.damage or 0)
+    end)
+    local total = #rows
+    local maximum = math.max(0, math.floor(tonumber(limit) or total))
+    while #rows > maximum do rows[#rows] = nil end
+    return rows, total
+end
+
 -- Refresh innate stats at most once per elapsed fight second interval.
 -- Re-reading the API for every hit would add avoidable work to the combat hot path.
 local STAT_SNAPSHOT_INTERVAL = 3
@@ -723,6 +841,11 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         sampleNumber(targetHpSnapshotAge)
     }
     samples[sampleIndex] = table.concat(values, "|")
+    if kind == "damage" then
+        updateTargetProfile(targetKey, targetMeta, amount, hpBefore, hpQuality,
+            targetHpCurrent, targetHpLimit, targetHpCurrentPercent, targetHpSnapshotAge,
+            element, params)
+    end
     AOUA.Session.eventSampleCount = sampleCount
     AOUA.Session.eventSampleNext = (sampleIndex % EVENT_BUFFER_LIMIT) + 1
 end
