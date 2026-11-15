@@ -9,7 +9,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
     def test_global_info_display_does_not_call_wrapper_methods_on_raw_children(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
-        end = gui.index("\\nend", start)
+        end = gui.index("\nend", start)
         block = gui[start:end]
         for widget in ("Name", "Count", "Damage", "Percent"):
             self.assertNotIn(f"GlobalInfoPanel.{widget}:SetWidth", block)
@@ -18,7 +18,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
     def test_global_info_resolve_value_is_inline_and_range_is_preserved(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
-        end = gui.index("\\nend", start)
+        end = gui.index("\nend", start)
         block = gui[start:end]
         self.assertIn("GlobalInfoPanel.Bar:SetPosition(0, 15)", block)
         self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Avg', block)
