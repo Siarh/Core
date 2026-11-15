@@ -604,6 +604,10 @@ local function estimateCritModel(spells, luck)
 	}
 end
 
+-- Public pure helper so the critical calibration can be regression-tested without
+-- launching the game client.
+Optim.EstimateCritModel = estimateCritModel
+
 local function masteryMult(s)
 	if s >= 0 then return 1 + s / 1000 end
 	return 1 / (1 + math.abs(s) / 1000)
