@@ -188,3 +188,9 @@ Global determination row layout:
 - Separated the event count from the Min / Avg / Max values in the Resolve global-info row. The previous X placements overlapped at the same left edge and could draw the count over the minimum value.
 - Allocated independent horizontal ranges for the name, count, Min / Avg / Max statistics, and percentage.
 - Added a regression test that parses the widget XDB placements and rejects overlapping columns.
+
+
+Global determination numeric spacing refinement:
+- Rebalanced the global-info row so the determination label and event count use compact, separate columns while Min / Avg / Max retain the same 160 px value width as the spell-detail rows.
+- Increased the visible padding around both separators in the Min / Avg / Max value string to make adjacent values easier to distinguish.
+- Extended the widget-layout regression test to enforce the numeric field width and separator spacing.

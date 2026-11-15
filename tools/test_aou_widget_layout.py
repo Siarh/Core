@@ -27,7 +27,7 @@ def x_bounds(relative_path: str) -> tuple[int, int]:
 
 
 class GlobalInfoLayoutTests(unittest.TestCase):
-    def test_columns_do_not_overlap(self):
+    def test_columns_do_not_overlap_and_keep_enough_room(self):
         files = {
             "name": "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/Name.(WidgetTextView).xdb",
             "count": "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/Count.(WidgetTextView).xdb",
@@ -45,6 +45,14 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         for name, (left, right) in bounds.items():
             self.assertGreaterEqual(left, 0, name)
             self.assertLessEqual(right, PANEL_WIDTH, name)
+        self.assertGreaterEqual(bounds["name"][1] - bounds["name"][0], 100)
+        self.assertGreaterEqual(bounds["count"][1] - bounds["count"][0], 30)
+        self.assertGreaterEqual(bounds["stats"][1] - bounds["stats"][0], 155)
+        self.assertEqual(bounds["stats"], (156, 316))
+
+    def test_min_avg_max_have_clear_visual_separation(self):
+        fmt = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.txt").read_text(encoding="utf-8-sig")
+        self.assertGreaterEqual(fmt.count("   |   "), 2)
 
 
 if __name__ == "__main__":
