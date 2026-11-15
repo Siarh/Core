@@ -95,7 +95,7 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["confidence_interval_95_per_100"], [31.25, 31.25])
         self.assertEqual(critical[0]["marginal_efficiency_per_100"], 62.5)
         self.assertEqual(critical[0]["critical_scope"], "critical_only")
-        self.assertEqual(mastery[0]["marginal_efficiency_unit"], "reported amount per second per +100 stat points")
+        self.assertEqual(mastery[0]["marginal_efficiency_unit_per_100"], "reported amount per second per +100 stat points")
         self.assertEqual(mastery[0]["classification"], "DERIVED")
         self.assertIn("not_proven", mastery[0]["causal_status"])
 
@@ -339,6 +339,30 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(item["snapshot_quality"], "legacy_age_unverified")
         self.assertEqual(item["delta_stat"], 100)
         self.assertEqual(item["marginal_efficiency_per_stat"], 0.3125)
+
+
+
+    def test_role_profiles_remain_separate_without_fake_pve_pvp_classification(self):
+        rows = []
+        for prefix, mastery, amount in (("base", 1000, 1000), ("test", 1100, 1050)):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("healing", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
+                    row.update({
+                        "profile": "heal", "R": "200", "U": "300", "L": "400",
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Healing Wave", "damage_source": "heal",
+                    })
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        mastery = [item for item in analysis["comparisons"] if item["stat"] == "mastery"]
+        self.assertEqual(len(mastery), 1)
+        self.assertEqual(mastery[0]["profile"], "heal")
+        self.assertEqual(mastery[0]["environment_classification"], "unknown_role_profile")
+        self.assertEqual(mastery[0]["result_direction"], "maximize")
+        self.assertEqual(analysis["excluded_or_unusable"].get("profile_unknown_or_not_classified", 0), 0)
 
 
 
