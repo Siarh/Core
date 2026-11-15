@@ -754,6 +754,16 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
     if missing_hp and "ruthlessness" in candidates:
         candidates.remove("ruthlessness")
         unavailable_stats["ruthlessness"] = "INSUFFICIENT DATA: target HP is missing for at least one event"
+    if mode == "tank" and num(cfg.get("class_k", 0.0)) <= 0 and "endurance" in candidates:
+        candidates.remove("endurance")
+        unavailable_stats["endurance"] = "INSUFFICIENT DATA: class_k is required to model Endurance-derived HP"
+    if mode == "tank" and "will" in candidates and not (
+        str(cfg.get("mode", "pve")).lower() == "pvp"
+        and num(cfg.get("control_weight", 0.0)) > 0
+        and bool(activity.get("control_windows"))
+    ):
+        candidates.remove("will")
+        unavailable_stats["will"] = "INSUFFICIENT DATA: PvP control_windows and control_weight are required"
     increments = (0, 100, 200, 300, 400)
     curves: dict[str, Any] = {}
 
@@ -838,7 +848,7 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
             })
 
     return {
-        "status": "calculated",
+        "status": "partial_estimates" if unavailable_stats else ("calculated" if candidates else "insufficient_data"),
         "classification": "ESTIMATED",
         "metric": basis,
         "metric_per_second": mode in ("dps", "hps"),
@@ -848,6 +858,7 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
         "method": "one-factor-at-a-time finite differences; fixed event mix, HP phases and recorded Resolve pools",
         "resolve_policy": "measured per-event Resolve pool is held fixed; its build-dependent growth is not re-simulated",
         "critical_policy": "expected Luck chance with the calculator's x2 critical baseline; raw cross-ability ratios are not treated as a causal multiplier",
+        "stat_model_registry": STAT_MODEL_REGISTRY,
         "curves": curves,
         "unavailable_stats": unavailable_stats,
         "interactions": interactions,
@@ -1058,6 +1069,7 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "healing_effective": "uses effective_heal or target_max_hp + target_hp; otherwise unknown",
             "resolve_pool_replay": "measured pool snapshots are held fixed when settings.freeze_resolve_pool is true",
         },
+        "stat_model_registry": STAT_MODEL_REGISTRY,
         "character": {
             "level_multiplier": level_multiplier(cfg.get("level", 1)),
             "crit_chance_percent": crit_chance(stats.get("luck", 0)) * 100.0,
@@ -1085,7 +1097,10 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
     weighted_by_mode: dict[str, list[tuple[str, dict[str, Any], float]]] = {}
     for name, activity in profile.get("activities", {}).items():
         sim = simulate(activity, stats, cfg)
-        item: dict[str, Any] = {"simulation": sim}
+        item: dict[str, Any] = {
+            "simulation": sim,
+            "model_marginal_efficiency": model_marginal_efficiency(activity, stats, cfg),
+        }
         mode = str(activity.get("mode", "dps")).lower()
         weight = num(activity.get("weight", 1.0), 1.0)
         weighted_by_mode.setdefault(mode, []).append((name, activity, weight))
@@ -1095,7 +1110,10 @@ def calculate_profile(profile: dict[str, Any]) -> dict[str, Any]:
                 segments = {}
                 for role, subset in _healing_recipient_segments(activity).items():
                     segment_sim = simulate(subset, stats, cfg)
-                    segment = {"simulation": segment_sim}
+                    segment = {
+                        "simulation": segment_sim,
+                        "model_marginal_efficiency": model_marginal_efficiency(subset, stats, cfg),
+                    }
                     segment["recommendation"] = optimize(subset, fixed, budget, cfg)
                     segments[role] = segment
                 if segments:
