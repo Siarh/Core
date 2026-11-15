@@ -36,7 +36,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertNotIn("Без имени", gui)
         self.assertNotIn("Unnamed", gui)
         self.assertNotIn("Нет данных о целях", gui)
-        self.assertIn("resistance in events", gui)
+        self.assertIn("resisted damage by school", gui)
 
         root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
         self.assertIn('OpponentPanel/OpponentPanel.(WidgetPanel).xdb', root)
