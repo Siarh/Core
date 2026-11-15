@@ -197,6 +197,147 @@ def _duration_band(seconds: int) -> str:
     return "300+ sec"
 
 
+def build_temporal_performance(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Build observed raw burst/sustained windows and sampled-Resolve summaries per fight."""
+    fight_last_second: dict[str, int] = {}
+    for row in rows:
+        fight = (row.get("fight_id") or "unknown").strip()
+        second = number(row.get("second"))
+        if fight and fight != "unknown" and second is not None:
+            fight_last_second[fight] = max(fight_last_second.get(fight, 0), int(second))
+
+    grouped: dict[tuple[str, str], dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    grouped_events: Counter[tuple[str, str]] = Counter()
+    resolve_by_second: dict[tuple[str, str], dict[int, list[float]]] = defaultdict(lambda: defaultdict(list))
+    profile_by_fight: dict[str, str] = {}
+    targets_by_fight: dict[str, set[str]] = defaultdict(set)
+    target_missing_by_fight: Counter[str] = Counter()
+
+    for row in rows:
+        kind = (row.get("kind") or "").strip().lower()
+        if kind not in {"damage", "healing", "incoming"}:
+            continue
+        fight = (row.get("fight_id") or "unknown").strip()
+        if not fight or fight == "unknown":
+            continue
+        second_value = number(row.get("second"))
+        amount = number(row.get("observed_amount"))
+        if second_value is None or amount is None or amount < 0:
+            continue
+        second = max(0, int(second_value))
+        grouped[(fight, kind)][second] += amount
+        grouped_events[(fight, kind)] += 1
+        profile_by_fight[fight] = (row.get("profile") or "unknown").strip().lower()
+        target_id = (row.get("target_id") or "").strip()
+        if target_id and target_id.lower() not in {"unknown", "none"}:
+            targets_by_fight[fight].add(target_id)
+        else:
+            target_missing_by_fight[fight] += 1
+
+        pool = number(row.get("resolve_pool"))
+        if kind in {"damage", "healing"} and pool is not None:
+            resolve_by_second[(fight, kind)][second].append(max(0.0, min(100.0, pool)))
+
+    burst_windows = (1, 3, 5, 10, 15, 30)
+    sustained_windows = (30, 60, 120, 180, 300)
+    fight_reports: list[dict[str, Any]] = []
+
+    for (fight, kind), totals in sorted(grouped.items()):
+        duration = max(1, fight_last_second.get(fight, max(totals)) + 1)
+        by_second = [0.0] * duration
+        for second, amount in totals.items():
+            if 0 <= second < duration:
+                by_second[second] += amount
+        prefix = [0.0]
+        for amount in by_second:
+            prefix.append(prefix[-1] + amount)
+
+        windows: dict[str, Any] = {}
+        for window in sorted(set(burst_windows + sustained_windows)):
+            label = f"{window}s"
+            if duration < window:
+                windows[label] = {
+                    "status": "insufficient_duration",
+                    "duration_seconds": duration,
+                    "observed_amount": None,
+                    "mean_rate_per_second": None,
+                    "start_second": None,
+                    "end_second": None,
+                }
+                continue
+            best_amount = -1.0
+            best_start = 0
+            for start_second in range(0, duration - window + 1):
+                total = prefix[start_second + window] - prefix[start_second]
+                if total > best_amount:
+                    best_amount = total
+                    best_start = start_second
+            windows[label] = {
+                "status": "calculated",
+                "classification": "DERIVED",
+                "observed_amount": round(best_amount, 4),
+                "mean_rate_per_second": round(best_amount / window, 4),
+                "start_second": best_start,
+                "end_second": best_start + window,
+                "window_seconds": window,
+            }
+
+        resolve = resolve_by_second.get((fight, kind), {})
+        per_second_resolve = [sum(values) / len(values) for values in resolve.values() if values]
+        resolve_summary = None
+        if per_second_resolve:
+            resolve_summary = {
+                "classification": "DERIVED",
+                "samples": len(per_second_resolve),
+                "mean_sampled_pool": round(sum(per_second_resolve) / len(per_second_resolve), 4),
+                "median_sampled_pool": round(median(per_second_resolve), 4),
+                "peak_sampled_pool": round(max(per_second_resolve), 4),
+                "sampled_second_share_above": {
+                    str(threshold): round(sum(1 for value in per_second_resolve if value >= threshold) / len(per_second_resolve), 4)
+                    for threshold in (25, 50, 75, 90)
+                },
+                "method": "mean of event-pool readings within each sampled second; sample share, not time uptime",
+            }
+
+        known_targets = targets_by_fight.get(fight, set())
+        missing_targets = target_missing_by_fight.get(fight, 0)
+        target_classification = (
+            "single_target" if len(known_targets) == 1 and missing_targets == 0
+            else "multi_target_or_aoe" if len(known_targets) > 1 and missing_targets == 0
+            else "unknown"
+        )
+        fight_reports.append({
+            "fight_id": fight,
+            "profile": profile_by_fight.get(fight, "unknown"),
+            "profile_source": "configured_not_automatically_classified",
+            "kind": kind,
+            "classification": "DERIVED",
+            "duration_seconds_estimate": duration,
+            "duration_band": _duration_band(duration),
+            "event_count": grouped_events[(fight, kind)],
+            "target_count": len(known_targets) if missing_targets == 0 else None,
+            "target_type": target_classification,
+            "burst_windows": {f"{w}s": windows[f"{w}s"] for w in burst_windows},
+            "sustained_windows": {f"{w}s": windows[f"{w}s"] for w in sustained_windows},
+            "resolve_sample_summary": resolve_summary,
+            "limitations": [
+                "Окна используют observed_amount callback: это raw reported output, не Effective DPS/HPS.",
+                "Длительность оценена как max(second)+1; точность зависит от полноты события в конце боя.",
+                "Resolve sample share — доля секунд с замерами, а не временной uptime.",
+                "PvE/PvP берётся из выбранного профиля, классификация активности автоматически не доказана.",
+            ],
+        })
+
+    return {
+        "status": "calculated" if fight_reports else "insufficient_data",
+        "classification": "DERIVED",
+        "method": "per-fight elapsed-second aggregation and full rolling windows with zero-filled quiet seconds",
+        "burst_windows_seconds": list(burst_windows),
+        "sustained_windows_seconds": list(sustained_windows),
+        "fights": fight_reports,
+    }
+
+
 def _percentile(values: list[float], fraction: float) -> float:
     ordered = sorted(values)
     if not ordered:
@@ -850,6 +991,7 @@ def build_profile(
         "allocation_budget": allocation_budget,
         "activities": activities,
         "stat_comparison": compare_stat_sets(combat_rows),
+        "temporal_performance": build_temporal_performance(combat_rows),
         "controlled_stat_efficiency": controlled_efficiency,
         "import_warnings": warnings,
         "import_summary": {
@@ -862,6 +1004,7 @@ def build_profile(
             "incoming_events": len(incoming_rows),
             "resistance_families": sorted(resistance_ratings),
             "stat_comparison": compare_stat_sets(combat_rows),
+            "temporal_fight_reports": len(build_temporal_performance(combat_rows)["fights"]),
             "controlled_stat_comparisons": len(controlled_efficiency["comparisons"]),
             "controlled_stat_analysis_status": controlled_efficiency["status"],
             "contaminated_fights_excluded": controlled_efficiency["contaminated_fights_excluded"],
