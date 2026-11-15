@@ -229,11 +229,11 @@ local savedOk, savedCount = AOUA.OnFightStop()
 expect(savedOk, true, "event history persisted")
 expect(savedCount, 4, "persisted event count")
 expect(persistedConfig.aou_evt_count, 4, "event config count")
-expect(persistedConfig.aou_evt_schema, "v1", "event schema version")
+expect(persistedConfig.aou_evt_schema, "v2", "event schema version")
 expect(persistedConfig.aou_rec_count, nil, "legacy record keys untouched")
 local exportOk = AOUA.EventExport(3)
 expect(exportOk, true, "event export success")
-assert(emittedMessages[1] == "AOUCSV|BEGIN|2|3|events", "event export begin marker missing")
+assert(emittedMessages[1] == "AOUCSV|BEGIN|3|3|events", "event export begin marker missing")
 assert(emittedMessages[#emittedMessages] == "AOUCSV|END", "event export end marker missing")
 
 -- The bounded event buffer must keep the newest 2,000 samples without
