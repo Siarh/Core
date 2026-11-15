@@ -804,10 +804,15 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
             delta_stat = increment - (previous_value - current)
             delta_result = score - previous_score
             efficiency = delta_result * 100.0 / delta_stat if delta_stat > 0 else None
+            efficiency_per_stat = delta_result / delta_stat if delta_stat > 0 else None
             relative = ((score / previous_score) ** (100.0 / delta_stat) - 1.0) * 100.0 if previous_score > 0 and score > 0 and delta_stat > 0 else None
             points.append({
                 "stat_value": round(current + increment, 4),
                 "model_result": round(score, 6),
+                "delta_stat": round(delta_stat, 6),
+                "delta_result": round(delta_result, 6),
+                "me_formula": "ME = delta_result / delta_stat",
+                "marginal_efficiency_per_stat": round(efficiency_per_stat, 6) if efficiency_per_stat is not None else None,
                 "marginal_efficiency_per_100": round(efficiency, 6) if efficiency is not None else None,
                 "relative_gain_per_100_percent": round(relative, 6) if relative is not None else None,
             })
