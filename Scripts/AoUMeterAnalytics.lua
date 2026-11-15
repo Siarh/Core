@@ -443,7 +443,7 @@ local function abilityLabel(params, fallbackName)
 end
 
 local isLocalObject
-local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
+local EVENT_COLUMNS = "fight_id|profile|second|kind|observed_amount|target_hp_before|hp_quality|target_max_hp|actor_id|target_id|critical|element|damage_source|resist|absorb|runes_absorb|block|parry|barrier|mount|multiplier_absorb|overall_absorbed|overall_prevented|resolve_pool|recipient|ability|M|R|U|L|S|W|B|C|HPmax|stat_sample_second|stat_sample_age"
 
 local function sampleNumber(value)
     local n = tonumber(value)
@@ -533,6 +533,13 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         AOUA.Session.eventSamplesDropped = AOUA.Session.eventSamplesDropped + 1
     end
     local targetId = (kind == "damage" or kind == "incoming") and params.target or params.unitId
+    if not targetId and kind == "damage" and Optim and type(Optim.GetTarget) == "function" then
+        local ok, target = pcall(Optim.GetTarget)
+        if ok then targetId = target end
+    end
+    local actorId = params.source
+    local targetKey = resourceKey(targetId) or ""
+    local actorKey = resourceKey(actorId) or ""
     local recipient = ""
     if kind == "healing" or kind == "receivedHeal" then
         recipient = isLocalObject(targetId) and "self" or "ally"
@@ -548,7 +555,7 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         tostring(AOUA.Session.fightId or 0), AOUA.Profile or (Optim and Optim.Cfg and Optim.Cfg.mode) or "pve",
         tostring(AOUA.Session.elapsedSeconds or 0), kind,
         sampleNumber(amount), sampleNumber((hpBefore ~= nil) and hpBefore * 100 or nil),
-        hpQuality or "unknown", sampleNumber(targetMaxHp),
+        hpQuality or "unknown", sampleNumber(targetMaxHp), actorKey, targetKey,
         (params.isCritical == nil) and "" or (params.isCritical and "1" or "0"), element,
         eventText(params.damageSource) or "", sampleNumber(params.resist),
         sampleNumber(params.absorb), sampleNumber(params.runesAbsorb),
