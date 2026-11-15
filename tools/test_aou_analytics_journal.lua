@@ -256,42 +256,7 @@ expect(eventTargetRows[1].hpCurrent, 500, "event target HP without selected targ
 expect(eventTargetRows[1].resistSchools[1].amount, 7, "event target resistance without selected target")
 avatar.GetId = originalAvatarGetId
 
--- Simulate the real TUMeter stop/start lifecycle: final target rows stay on
--- the stopped fight and move to Previous when the next fight begins.
-Global = function(name, value) _G[name] = value end
-group = { IsCreatureInGroup = function() return false end }
-dofile("../Scripts/AoUMeterData.lua")
-local function makeFightStub()
-    return {
-        StopFight = function() end,
-        StartFight = function() end
-    }
-end
-local currentFight = makeFightStub()
-local totalFight = makeFightStub()
-local simulatedMeter = setmetatable({
-    FightsList = { [1] = totalFight, [2] = {}, [3] = currentFight },
-    Fight = { Total = 1, Previous = 2, Current = 3 },
-    bCollectData = true,
-    CopyFightFromCurrenToPrev = function(self)
-        local previousRows = {}
-        for i, row in ipairs(self.FightsList[3].AOUATargetRows or {}) do
-            local copied = {}
-            for key, value in pairs(row) do copied[key] = value end
-            previousRows[i] = copied
-        end
-        self.FightsList[2] = { AOUATargetRows = previousRows }
-    end,
-    ResetFight = function() end,
-    RegenCombatantList = function() end
-}, { __index = TUMeter })
-simulatedMeter:Stop()
-expect(currentFight.AOUATargetRows[1].name, "Test Target", "stopped fight keeps target snapshot")
-simulatedMeter:Start()
-expect(simulatedMeter.FightsList[2].AOUATargetRows[1].name, "Test Target", "target snapshot copied to previous fight")
-expect(currentFight.AOUATargetRows, nil, "new current fight does not inherit old targets")
-local clearedRows, clearedTotal = AOUA.GetTargetDisplayRows(4)
-expect(clearedTotal, 0, "new current fight starts with empty target profiles")
+
 
 AOUA.OnHit(
     { ID = 1001 },
@@ -394,5 +359,42 @@ assert(persistedConfig.aou_evt_1:find("|1006.0000|", 1, true),
     "persisted history should begin with newest 1,000 ring rows")
 assert(persistedConfig.aou_evt_1000:find("|2005.0000|", 1, true),
     "persisted history should end with latest event")
+
+-- Simulate the real TUMeter stop/start lifecycle: final target rows stay on
+-- the stopped fight and move to Previous when the next fight begins.
+Global = function(name, value) _G[name] = value end
+group = { IsCreatureInGroup = function() return false end }
+dofile("../Scripts/AoUMeterData.lua")
+local function makeFightStub()
+    return {
+        StopFight = function() end,
+        StartFight = function() end
+    }
+end
+local currentFight = makeFightStub()
+local totalFight = makeFightStub()
+local simulatedMeter = setmetatable({
+    FightsList = { [1] = totalFight, [2] = {}, [3] = currentFight },
+    Fight = { Total = 1, Previous = 2, Current = 3 },
+    bCollectData = true,
+    CopyFightFromCurrenToPrev = function(self)
+        local previousRows = {}
+        for i, row in ipairs(self.FightsList[3].AOUATargetRows or {}) do
+            local copied = {}
+            for key, value in pairs(row) do copied[key] = value end
+            previousRows[i] = copied
+        end
+        self.FightsList[2] = { AOUATargetRows = previousRows }
+    end,
+    ResetFight = function() end,
+    RegenCombatantList = function() end
+}, { __index = TUMeter })
+simulatedMeter:Stop()
+expect(currentFight.AOUATargetRows[1].name, "Test Target", "stopped fight keeps target snapshot")
+simulatedMeter:Start()
+expect(simulatedMeter.FightsList[2].AOUATargetRows[1].name, "Test Target", "target snapshot copied to previous fight")
+expect(currentFight.AOUATargetRows, nil, "new current fight does not inherit old targets")
+local clearedRows, clearedTotal = AOUA.GetTargetDisplayRows(4)
+expect(clearedTotal, 0, "new current fight starts with empty target profiles")
 
 print("DPScope analytics journal regression tests passed.")
