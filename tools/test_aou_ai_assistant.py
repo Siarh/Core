@@ -225,7 +225,7 @@ class AIAssistantTests(unittest.TestCase):
         self.assertIn("не являются измеренным игровым эффектом", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("controlled_stat_efficiency", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("ME = ΔResult / ΔStat", ai.SYSTEM_INSTRUCTIONS)
-        self.assertIn("не ограничивайся первыми 25", ai.SYSTEM_INSTRUCTIONS)
+        self.assertIn("Не ограничивайся первыми 25", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("legacy_exploratory", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не доказывает причинность", ai.SYSTEM_INSTRUCTIONS)
         self.assertIn("не реальный временной uptime", ai.SYSTEM_INSTRUCTIONS)
