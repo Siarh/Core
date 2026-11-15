@@ -858,10 +858,17 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
                 "metric": basis,
             })
 
+    might_is_supplied = "might" in base_stats or "might" in cfg
     return {
         "status": "partial_estimates" if unavailable_stats else ("calculated" if candidates else "insufficient_data"),
         "classification": "ESTIMATED",
         "metric": basis,
+        "baseline_input_quality": {
+            "might": "supplied_profile_or_settings" if might_is_supplied else "assumed_default_20_unmeasured",
+            "absolute_damage_healing_scale_depends_on_might": not might_is_supplied,
+            "resolve_pool": "recorded_per_event_fixed",
+            "luck": "supplied_stat_expected_crit_x2_prior",
+        },
         "metric_per_second": mode in ("dps", "hps"),
         "baseline_model_result": round(baseline, 6),
         "event_count": len(activity.get("samples", []) or []),
@@ -874,7 +881,7 @@ def model_marginal_efficiency(activity: dict[str, Any], base_stats: dict[str, An
         "unavailable_stats": unavailable_stats,
         "interactions": interactions,
         "confidence_interval": None,
-        "note": "Расчётная чувствительность формулы, не ME, измеренная в игре; точность ограничена неполными модификаторами callback.",
+        "note": "Расчётная чувствительность формулы, не ME, измеренная в игре. При отсутствии фактического Могущества абсолютная шкала использует default=20 и остаётся условной; относительное изменение формулы от этого общего множителя не зависит.",
     }
 
 
