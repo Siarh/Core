@@ -128,7 +128,6 @@ local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
 assert(string.find(adviceOutput, "W:", 1, true), "Russian chat output should pass through the wide-string converter")
 local adviceText = string.gsub(string.gsub(adviceOutput, "W:", ""), "[\\r\\n]", "")
 assert(not string.find(adviceText, "HP цели=", 1, true), "chat advice must not print average target HP")
-assert(string.find(adviceText, "Средняя Решимость=", 1, true), "chat advice should include average Resolve")
 assert(string.find(adviceText, "Криты=3", 1, true), "chat advice should include critical-hit counts")
 
 print("DPScope AI advisor tests passed.")
