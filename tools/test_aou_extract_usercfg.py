@@ -49,6 +49,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         rows, summary = parse_dpscope_config(text)
         self.assertEqual(len(rows), 2)
         self.assertEqual(summary["stored_events"], 2)
+        self.assertEqual(summary["source_schema"], "v2")
         self.assertEqual(rows[1].split("|")[2], "2")
 
     def test_ignores_other_addon_tables(self):
@@ -119,6 +120,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         fields = dict(zip(EVENT_COLUMNS.split("|"), rows[0].split("|")))
         self.assertEqual(summary["legacy_rows_upgraded"], 1)
         self.assertEqual(summary["current_schema_rows"], 0)
+        self.assertEqual(summary["source_schema"], "v1")
         self.assertEqual(fields["actor_id"], "")
         self.assertEqual(fields["target_id"], "")
         self.assertEqual(fields["stat_sample_age"], "")
@@ -142,6 +144,7 @@ class UserCfgExtractorTests(unittest.TestCase):
         self.assertEqual(summary["stored_events"], 1000)
         self.assertEqual(summary["rows_read"], 1000)
         self.assertEqual(summary["legacy_rows_upgraded"], 1000)
+        self.assertEqual(summary["source_schema"], "v1")
 
 
 
