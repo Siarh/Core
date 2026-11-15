@@ -565,9 +565,14 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         if kind not in {"damage", "healing", "incoming"}:
             continue
         profile = (row.get("profile") or "").strip().lower()
-        if profile not in {"pve", "pvp"}:
+        if profile not in {"pve", "raid", "pvp", "heal", "tank"}:
             skipped["profile_unknown_or_not_classified"] += 1
             continue
+        profile_environment = (
+            "pve" if profile in {"pve", "raid"}
+            else "pvp" if profile == "pvp"
+            else "unknown_role_profile"
+        )
         fight = (row.get("fight_id") or "unknown").strip()
         if not fight or fight == "unknown":
             skipped["fight_id_unknown"] += 1
@@ -652,7 +657,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
         validated_event_rows += 1
         fight_valid_event_counts[fight] += 1
         base_stratum = (
-            kind, profile, duration, actor_id, target_id,
+            kind, profile, profile_environment, duration, actor_id, target_id,
             identity_quality, snapshot_quality,
             ability.lower(), element, damage_source.lower(),
             hp_band_start, hp_quality, target_hp_scale, resolve_band,
@@ -689,7 +694,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
     def process_context_map(context_map: ContextMap, all_hits_for_luck: bool = False) -> None:
         nonlocal insufficient_pairs, comparison_id
         for stratum, builds in context_map.items():
-            kind, profile, duration, actor_id, target_id, identity_quality, snapshot_quality, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
+            kind, profile, profile_environment, duration, actor_id, target_id, identity_quality, snapshot_quality, ability, element, damage_source, hp_band, hp_quality, hp_scale, resolve_band, crit, recipient = stratum
             if all_hits_for_luck:
                 stat_names = ("luck",)
             elif kind in {"damage", "healing"}:
@@ -784,6 +789,7 @@ def analyze_controlled_stat_efficiency(rows: list[dict[str, str]]) -> dict[str, 
                             "causal_status": "not_proven_unobserved_confounders_remain",
                             "mode": kind,
                             "profile": profile,
+                            "environment_classification": profile_environment,
                             "duration_band": duration,
                             "actor_id": actor_id,
                             "target_id": target_id,
