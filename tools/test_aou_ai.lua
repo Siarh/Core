@@ -57,7 +57,7 @@ expect(rows[3][3], "RES 36.2", "average Resolve")
 expect(rows[4][1], "OptAICrit", "critical profile row")
 expect(rows[4][2], "Крит 3 / Норм 2", "normal and critical counts")
 expect(rows[4][3], "60%", "observed critical share")
-expect(rows[4][4], "x3.09", "per-ability observed critical multiplier")
+expect(rows[4][4], "набл x3.09", "raw observed critical ratio is labelled")
 assert(rows[5][2] ~= "Use /aou ai advice", "AI insight row must contain a real finding")
 assert(rows[6][2] ~= "Use /aou ai advice", "AI next-step row must contain a real action")
 assert(string.find(DPScopeAI.LastSummary, "союзникам", 1, true),
