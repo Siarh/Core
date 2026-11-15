@@ -200,3 +200,11 @@ In-game opponent statistics panel:
 - Exact current/max HP and percentage are shown only from a recent exact health snapshot; otherwise the UI labels pre-hit HP percentage as an estimate or shows unavailable.
 - Displays API-reported resisted damage amounts by school and sample count when present. These are event mitigation amounts, not a character resistance rating.
 - Unknown target types remain separated by ObjectId; no cross-object merging is done in the live panel.
+
+
+Opponent panel readability fix:
+- Replaced the old multi-column spell-detail template with a dedicated full-width single-line target row; the previous columns placed HP and resistance values under ambiguous/misaligned headers.
+- Each line now labels target type/level/quality, HP, and event-reported resisted damage by school.
+- Missing target names, names consisting of question marks, unknown unit categories, unresolved quality enums, unavailable HP and unknown damage schools are omitted instead of shown as fake names or placeholders.
+- Target text conversion now detects UTF-8 versus legacy CP1251 strings before conversion, avoiding turning CP1251 object names into question marks.
+- When no target data is available, the opponent block is hidden rather than showing a placeholder line.
