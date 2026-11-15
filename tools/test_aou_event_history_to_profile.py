@@ -243,7 +243,7 @@ class ChangingStatsTests(unittest.TestCase):
                    if item["stat"] == "mastery" and item["critical"] is False]
         self.assertEqual(len(mastery), 1)
         self.assertEqual(mastery[0]["target_match_method"], "entity_signature")
-        self.assertEqual(mastery[0]["target_name"], "Training Creature")
+        self.assertEqual(mastery[0]["target_name"], "training creature")
         self.assertEqual(mastery[0]["target_match_basis"],
                          "normalized name + level + quality + mob classification")
         self.assertEqual(mastery[0]["comparison_identity_scope"],
