@@ -36,7 +36,7 @@ SYSTEM_INSTRUCTIONS = """Ты — аналитический помощник DP
 - Для Удачи используй только critical_scope=all_hits: это сравнение Normal+Critical вместе, чтобы учитывать изменение доли критов. Не сравнивай Luck только внутри Normal или только внутри Critical.
 - model_marginal_efficiency — отдельный ESTIMATED расчёт по формуле на неизменной структуре событий и фиксированных наблюдаемых пулах Решимости. Его ME/interaction/soft_knee не являются измеренным игровым эффектом или доказанным soft cap. Указывай assumptions, особенно fixed Resolve pool и крит x2.
 - Не смешивай ESTIMATED кривые формулы с DERIVED controlled_stat_efficiency. Если у характеристики status unavailable или отсутствует формула, прямо говори, что модель её не оценивает.
-- controlled_stat_efficiency имеет статус DERIVED / controlled-observational, а не доказанная причинность: target_id, баффы/дебаффы, таланты и ротация пока не записываются. Не называй сравнение чистым экспериментом.
+- controlled_stat_efficiency имеет статус DERIVED / controlled-observational, а не доказанная причинность: target_id, баффы/дебаффы, таланты и ротация пока не записываются. Снимок статов обновляется не чаще раза в 3 секунды; краткая смена и возврат статов между снимками может быть не обнаружена. Не называй сравнение чистым экспериментом.
 - Если controlled_stat_efficiency.status = insufficient_data или доверительный интервал включает ноль, не ранжируй характеристики по этому сравнению; напиши INSUFFICIENT DATA и предложи повторный контролируемый тест.
 - Не делай причинный вывод только по корреляции: учитывай различия целей, длительности, состава группы, ротации, бафов, HP цели и Resolve. Если условия несопоставимы, называй результат предварительным и предложи повторить тест на одинаковой цели/условиях.
 - Разделяй исходящий урон, лечение себя и союзников; абсолютные суммы не сравнивай без нормализации по времени и объёму событий. Для эффективного лечения учитывай, что overheal/ограничение недостающим HP может искажать callback.
@@ -165,8 +165,9 @@ def build_ai_payload(profile: dict[str, Any], report: dict[str, Any]) -> dict[st
     compact_experimental = {
         key: experimental.get(key)
         for key in (
-            "status", "method", "outcome_unit", "minimum_stat_step",
-            "minimum_fights_per_build", "included_events",
+            "status", "method", "outcome_unit", "luck_method",
+            "minimum_stat_step", "minimum_fights_per_build",
+            "max_stat_snapshot_age_seconds", "included_events",
             "excluded_or_unusable", "contaminated_fights_excluded",
             "insufficient_repeated_pairs", "limitations",
         )
