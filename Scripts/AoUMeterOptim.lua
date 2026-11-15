@@ -1396,7 +1396,10 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		N(selfSeg.events),
 		N(Optim.CritModel and Optim.CritModel.normalCount),
 		N(Optim.CritModel and Optim.CritModel.criticalCount),
-		math.floor(N(Optim.CritModel and Optim.CritModel.observedMultiplier) * 100)
+		N(Optim.CritModel and Optim.CritModel.pairedCount),
+		N(Optim.CritModel and Optim.CritModel.abilityCount),
+		math.floor(N(Optim.CritModel and Optim.CritModel.observedMultiplier) * 100),
+		math.floor(N(Optim.CritModel and Optim.CritModel.factor) * 1000)
 	}, "|")
 	local statKey = "compact-healer-v2|" .. table.concat({
 		cfg.mode, cfg.role, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef,
