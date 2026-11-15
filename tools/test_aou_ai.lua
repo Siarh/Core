@@ -126,8 +126,9 @@ local beforeAdvice = #output
 DPScopeAI.OnSlash({ "/aou", "ai", "advice" })
 local adviceOutput = table.concat(output, "\n", beforeAdvice + 1)
 assert(string.find(adviceOutput, "W:", 1, true), "Russian chat output should pass through the wide-string converter")
-assert(not string.find(adviceOutput, "HP цели=", 1, true), "chat advice must not print average target HP")
-assert(string.find(adviceOutput, "Средняя Решимость=", 1, true), "chat advice should include average Resolve")
-assert(string.find(adviceOutput, "Криты=3", 1, true), "chat advice should include critical-hit counts")
+local adviceText = string.gsub(adviceOutput, "W:", "")
+assert(not string.find(adviceText, "HP цели=", 1, true), "chat advice must not print average target HP")
+assert(string.find(adviceText, "Средняя Решимость=", 1, true), "chat advice should include average Resolve")
+assert(string.find(adviceText, "Криты=3", 1, true), "chat advice should include critical-hit counts")
 
 print("DPScope AI advisor tests passed.")
