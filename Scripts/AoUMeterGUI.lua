@@ -98,11 +98,23 @@ local function targetQualityLabel(value)
 		RAID_ELITE = "raid elite", CRITTER = "critter"
 	}
 	if string.match(key, "^ENUM:") then return "" end
-	return labels[key] or ""
+	if labels[key] then return labels[key] end
+	local numeric = tonumber(key)
+	if numeric ~= nil then
+		for _, name in ipairs({
+			"COMMON", "ELITE", "FLAVOR_ELITE", "MINI_BOSS",
+			"BOSS", "RAID_BOSS", "RAID_ELITE", "CRITTER"
+		}) do
+			local constant = _G and _G["UNIT_QUALITY_" .. name] or nil
+			if constant ~= nil and tonumber(constant) == numeric then return labels[name] or "" end
+		end
+	end
+	return ""
 end
 
 local function targetSchoolLabel(value)
 	local key = tostring(value or "UNKNOWN")
+	key = string.gsub(key, "^ENUM_SubElement_", "")
 	local russian = localization == "rus"
 	local labels = russian and {
 		PHYSICAL = "Физ", FIRE = "Огонь", COLD = "Холод", ICE = "Холод",
@@ -524,7 +536,10 @@ function TUMeterGUI:UpdateOpponentInfo()
 			end
 			if unit and type(unit.GetQuality) == "function" then
 				local okQuality, value = pcall(unit.GetQuality, targetId)
-				if okQuality and tonumber(value) then row.quality = tonumber(value) end
+				if okQuality and tonumber(value) then
+					row.quality = tonumber(value)
+					row.qualityName = tostring(value)
+				end
 			end
 			if Optim and type(Optim.GetHealth) == "function" then
 				local okHp, current, maximum, real = pcall(Optim.GetHealth, targetId)
