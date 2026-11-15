@@ -88,6 +88,10 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(mastery[0]["baseline"]["fights"], 3)
         self.assertEqual(mastery[0]["test"]["fights"], 3)
         self.assertEqual(mastery[0]["marginal_efficiency_per_100"], 31.25)
+        self.assertEqual(mastery[0]["delta_stat"], 100)
+        self.assertEqual(mastery[0]["delta_result"], 31.25)
+        self.assertEqual(mastery[0]["marginal_efficiency_per_stat"], 0.3125)
+        self.assertEqual(mastery[0]["me_formula"], "ME = (Result_test - Result_base) / (Stat_test - Stat_base)")
         self.assertEqual(mastery[0]["confidence_interval_95_per_100"], [31.25, 31.25])
         self.assertEqual(critical[0]["marginal_efficiency_per_100"], 62.5)
         self.assertEqual(critical[0]["critical_scope"], "critical_only")
@@ -117,6 +121,8 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(fortitude[0]["mode"], "incoming")
         self.assertEqual(fortitude[0]["profile"], "pvp")
         self.assertEqual(fortitude[0]["marginal_efficiency_per_100"], -62.5)
+        self.assertEqual(fortitude[0]["result_direction"], "minimize")
+        self.assertEqual(fortitude[0]["beneficial_effect_per_100"], 62.5)
 
     def test_other_stat_change_rejects_marginal_comparison(self):
         rows = []
@@ -310,6 +316,29 @@ class ChangingStatsTests(unittest.TestCase):
         self.assertEqual(row["observed_critical_to_normal_average_ratio"], 3.0)
         self.assertEqual(row["classification"], "DERIVED")
         self.assertIn("descriptive_only", row["causal_status"])
+
+
+
+    def test_legacy_rows_produce_only_very_low_exploratory_me(self):
+        rows = []
+        for prefix, mastery, amount in (("base", 1000, 1000), ("test", 1100, 1050)):
+            for fight_number in range(1, 4):
+                for repeat in range(5):
+                    row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
+                    row["actor_id"] = ""
+                    row["target_id"] = ""
+                    row["stat_sample_age"] = ""
+                    rows.append(row)
+        analysis = importer.analyze_controlled_stat_efficiency(rows)
+        self.assertGreaterEqual(analysis["legacy_exploratory_comparison_count"], 1)
+        self.assertEqual(analysis["strict_comparison_count"], 0)
+        item = next(row for row in analysis["comparisons"] if row["stat"] == "mastery")
+        self.assertEqual(item["evidence_tier"], "legacy_exploratory")
+        self.assertEqual(item["confidence"], "VERY_LOW")
+        self.assertEqual(item["identity_quality"], "legacy_identity_unverified")
+        self.assertEqual(item["snapshot_quality"], "legacy_age_unverified")
+        self.assertEqual(item["delta_stat"], 100)
+        self.assertEqual(item["marginal_efficiency_per_stat"], 0.3125)
 
 
 
