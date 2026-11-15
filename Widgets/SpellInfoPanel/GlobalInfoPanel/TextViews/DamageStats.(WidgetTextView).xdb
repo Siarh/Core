@@ -4,9 +4,9 @@
 	<Name>SpellDetailTextViewStats</Name>
 	<Placement>
 		<X>
-			<Align>WIDGET_ALIGN_HIGH</Align>
-			<HighPos>40</HighPos>
-			<Size>160</Size>
+			<Align>WIDGET_ALIGN_LOW</Align>
+			<Pos>132</Pos>
+			<Size>200</Size>
 		</X>
 		<Y>
 			<Align>WIDGET_ALIGN_BOTH</Align>

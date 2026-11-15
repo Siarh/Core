@@ -2,7 +2,7 @@
 <WidgetPanel>
 	<Name>GlobalInfoPanel</Name>
 	<Children>
-		<Item href="GlobalInfoBar/GlobalInfoBar.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
+		<Item href="SpellDetailBar/SpellDetailBar.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
 		<Item href="TextViews/Name.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 		<Item href="TextViews/Count.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 		<Item href="TextViews/DamageStats.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />

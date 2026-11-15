@@ -234,19 +234,60 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 
 	local GlobalInfoData = self.SelectedCombatant:GetGlobalInfoByIndex(GlobalInfoIndex, self.ActiveMode)
 	local GlobalInfoPanel = self.DetailsPanel.GlobalInfoList[GlobalInfoIndex]
+	if not GlobalInfoData or not GlobalInfoPanel or not GlobalInfoPanel.Bar then return end
 
-	if GlobalInfoData and GlobalInfoData.Count > 0 then
+	local isResolve = GlobalInfoData.ID == enumGlobalInfo.Determination
+	local hasSamples = (GlobalInfoData.Count or 0) > 0
+	local currentResolve = nil
+	if isResolve and unit and type(unit.GetRage) == "function" then
+		local resolveUnitId = self.SelectedCombatant.ID
+		if resolveUnitId == nil and avatar and type(avatar.GetId) == "function" then
+			local okId, playerId = pcall(avatar.GetId)
+			if okId then resolveUnitId = playerId end
+		end
+		if resolveUnitId ~= nil then
+			local okRage, value = pcall(unit.GetRage, resolveUnitId)
+			if okRage and type(value) == "number" then currentResolve = value end
+		end
+	end
+
+	-- Keep the Resolve row visible before its first combat sample.
+	if hasSamples or (isResolve and currentResolve ~= nil) then
 		GlobalInfoPanel:Show()
-
 		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
-		GlobalInfoPanel.Bar:SetWidth(396 * (GlobalInfoData.Percentage / 100))
+		GlobalInfoPanel.Bar:SetPosition(0, 15)
+
+		local averagePool = hasSamples and GlobalInfoData.Avg or currentResolve
+		local currentPool = currentResolve ~= nil and currentResolve or averagePool
+		local panelWidth = GlobalInfoPanel:GetWidth()
+		if type(panelWidth) ~= "number" or panelWidth <= 0 then panelWidth = 356 end
+		-- Keep this Resolve strip inside the dedicated 356px row, not the
+		-- 396px spell-detail row used by the other lists.
+		local barWidth = math.min(panelWidth, 356)
+		local percentage = isResolve and currentPool or GlobalInfoData.Percentage
+		percentage = math.max(0, math.min(100, tonumber(percentage) or 0))
+		GlobalInfoPanel.Bar:SetWidth(barWidth * (percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
-		GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count , "%d"))
-		GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min , "%f3K5"))
-		GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg , "%f3K5"))
-		GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max , "%f3K5"))
-		GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage , "%d"))
+		if isResolve then
+			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
+			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
+			if hasSamples then
+				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+			else
+				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
+			end
+		else
+			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
+			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
+			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+		end
 	end
 end
 --------------------------------------------------------------------------------
@@ -598,6 +639,7 @@ function TUMeterGUI:Init()
 	local playerPanelDesc = self.MainPanel:GetChildByName("PlayerInfoPanel"):GetDesc()
 	local spellPanelDesc = self.DetailsPanel:GetChildByName("SpellPanel"):GetDesc()
 	local spellInfoPanelDesc = self.DetailsPanel:GetChildByName("SpellDetailPanel"):GetDesc()
+	local globalInfoPanelDesc = self.DetailsPanel:GetChildByName("GlobalInfoPanel"):GetDesc()
 
 	-------------------------------------------------------------------------------
 	-- Main Panel
@@ -631,7 +673,7 @@ function TUMeterGUI:Init()
 	local GlobalInfoOffset = GlobalInfoHeaderOffset + 18
 	for extraIndex = 1, EXTRATYPES do
 		local wtName = "GlobalInfoPanel" .. extraIndex
-		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, spellInfoPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
 		self.DetailsPanel.GlobalInfoList[extraIndex]:SetPosition(22, GlobalInfoOffset + (extraIndex-1) * 18)
 	end
 
