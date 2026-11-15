@@ -155,6 +155,7 @@ assert(beforeResetEvents > 0, "expected incoming journal data before fight reset
 AOUA.HpCache[2002] = { value = 123, limit = 1000, real = true, second = 99 }
 AOUA.HealthTransitions[2002] = { beforeFrac = 0.5, direction = -1, delta = -10, limit = 1000, exact = true }
 AOUA.OnFightStart()
+expect(next(AOUA.Session.targetProfiles), nil, "live target profiles cleared between fights")
 expect(next(AOUA.HpCache), nil, "HP cache cleared between fights")
 expect(next(AOUA.HealthTransitions), nil, "HP transitions cleared between fights")
 expect(AOUA.Session.journal.incomingStats.events, 0, "incoming journal reset at fight start")
@@ -213,6 +214,18 @@ AOUA.OnHit(
     42,
     { Name = "Recorded damage" }
 )
+local targetRows, targetTotal = AOUA.GetTargetDisplayRows(4)
+expect(targetTotal, 1, "live target profile count")
+expect(targetRows[1].name, "Test Target", "live target name")
+expect(targetRows[1].kind, "mob", "live target category")
+expect(targetRows[1].level, 90, "live target level")
+expect(targetRows[1].quality, 4, "live target quality")
+expect(targetRows[1].hpCurrent, 500, "live target current HP")
+expect(targetRows[1].hpLimit, 1000, "live target maximum HP")
+expect(targetRows[1].hpPercent, 50, "live target HP percent")
+expect(targetRows[1].resistTotal, 10, "live target resisted damage amount")
+expect(targetRows[1].resistSchools[1].element, "PHYSICAL", "live target resistance school")
+expect(targetRows[1].resistSchools[1].samples, 1, "live target resistance sample count")
 AOUA.OnHit(
     { ID = 1001 },
     enumMode.Hps,
@@ -275,6 +288,20 @@ local exportOk = AOUA.EventExport(3)
 expect(exportOk, true, "event export success")
 assert(emittedMessages[1] == "AOUCSV|BEGIN|3|3|events", "event export begin marker missing")
 assert(emittedMessages[#emittedMessages] == "AOUCSV|END", "event export end marker missing")
+
+-- Unknown object kinds must remain separate by ObjectId in the live UI profile.
+AOUA.OnFightStart()
+AOUA.OnHit({ ID = 1001 }, enumMode.Dps,
+    { source = 1001, target = 3001, amount = 20, ability = "Unknown target A" }, nil,
+    { Name = "Unknown target A" })
+AOUA.OnHit({ ID = 1001 }, enumMode.Dps,
+    { source = 1001, target = 3002, amount = 30, ability = "Unknown target B" }, nil,
+    { Name = "Unknown target B" })
+local unknownRows, unknownTotal = AOUA.GetTargetDisplayRows(4)
+expect(unknownTotal, 2, "unknown target object IDs remain separate")
+expect(unknownRows[1].kind, "unknown", "unknown target category")
+expect(unknownRows[1].name, "", "unknown target name remains unavailable")
+AOUA.OnFightStart()
 
 -- The bounded event buffer must keep the newest 2,000 samples without
 -- shifting the whole table on every callback after it fills.
