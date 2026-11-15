@@ -316,7 +316,7 @@ class FormulaTests(unittest.TestCase):
             }],
         }
         stats = {"mastery": 100, "resolve": 0, "ruthlessness": 0, "luck": 0}
-        cfg = {"level": 1, "resolve_coefficient": 0.015, "might": 20}
+        cfg = {"level": 1, "resolve_coefficient": 0.015, "might": 20, "might_source": "assumed_default"}
         result = calc.model_marginal_efficiency(activity, stats, cfg)
 
         self.assertEqual(result["classification"], "ESTIMATED")
