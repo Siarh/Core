@@ -325,9 +325,15 @@ class ChangingStatsTests(unittest.TestCase):
             for fight_number in range(1, 4):
                 for repeat in range(5):
                     row = event("damage", f"{prefix}{fight_number}", 5 + repeat % 3, mastery, amount)
-                    row["actor_id"] = ""
-                    row["target_id"] = ""
-                    row["stat_sample_age"] = ""
+                    row.update({
+                        "S": "500", "W": "600", "B": "700", "C": "800",
+                        "R": "200", "U": "300", "L": "400",
+                        "target_hp_before": "70", "hp_quality": "measured_pre",
+                        "resolve_pool": "54", "critical": "0",
+                        "ability": "Holy Wrath", "damage_source": "spell",
+                        "element": "light", "target_max_hp": "1000000",
+                        "actor_id": "", "target_id": "", "stat_sample_age": "",
+                    })
                     rows.append(row)
         analysis = importer.analyze_controlled_stat_efficiency(rows)
         self.assertGreaterEqual(analysis["legacy_exploratory_comparison_count"], 1)
