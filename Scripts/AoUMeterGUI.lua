@@ -113,6 +113,7 @@ function TUMeterGUI:CreateNewObject(dpsMeter)
 			ActiveMode = enumMode.Dps,          -- Active mode
 			SelectedCombatant = nil,            -- Selected combatant
 			SelectedCombatantInfo = nil,         -- Selected combatant info (id, persistentId, name)
+			HoveringSpellIndex = nil,            -- spell row whose Normal/Critical details are currently shown
 
 			ShowHideBtn = nil,      -- "D" button to show/hide the addon
 			MainPanel = nil,        -- Main panel with player list
@@ -378,6 +379,14 @@ function TUMeterGUI:UpdateSpellList()
 			self:DisplaySpell(spellIndex)
 		end
 		self:UpdateOptim()
+
+		-- UpdateSpellList hides every child before refreshing the spell bars.
+		-- If the pointer remains over a spell, the pointing reaction does not fire
+		-- again; restore that spell's Normal/Critical/Glancing rows explicitly.
+		if self.Hovering and self.HoveringSpellIndex then
+			detailsPanel.SpellDetailsHeaderPanel:Show()
+			self:UpdateSpellDetailsList(self.HoveringSpellIndex)
+		end
 	end
 end
 
