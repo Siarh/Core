@@ -90,7 +90,7 @@ class UserCfgExtractorTests(unittest.TestCase):
             " table_end data",
             "table_end ScriptUserMods_DPScope",
         ])
-        with self.assertRaisesRegex(ValueError, "полей вместо"):
+        with self.assertRaisesRegex(ValueError, "ожидается"):
             parse_dpscope_config(text)
 
     def test_quoted_value_unescapes_quotes(self):
