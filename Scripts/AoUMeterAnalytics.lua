@@ -451,6 +451,27 @@ local function sampleNumber(value)
     return string.format("%.4f", n)
 end
 
+-- Return only an instance identifier, never a resource template path/name.
+-- If the callback does not expose a stable primitive ID, strict experiment
+-- matching receives an empty field and excludes the event.
+local function eventObjectId(value)
+    local valueType = type(value)
+    if valueType == "string" or valueType == "number" then
+        return tostring(value)
+    end
+    if valueType ~= "table" and valueType ~= "userdata" then return nil end
+    for _, methodName in ipairs({ "GetId", "GetInstanceId" }) do
+        local okFn, fn = pcall(function() return value[methodName] end)
+        if okFn and type(fn) == "function" then
+            local okId, id = pcall(fn, value)
+            if okId and (type(id) == "string" or type(id) == "number") then
+                return tostring(id)
+            end
+        end
+    end
+    return nil
+end
+
 -- Refresh innate stats at most once per elapsed fight second interval.
 -- Re-reading the API for every hit would add avoidable work to the combat hot path.
 local STAT_SNAPSHOT_INTERVAL = 3
@@ -538,8 +559,8 @@ local function appendEventSample(kind, params, amount, hpBefore, hpQuality, targ
         if ok then targetId = target end
     end
     local actorId = params.source
-    local targetKey = resourceKey(targetId) or ""
-    local actorKey = resourceKey(actorId) or ""
+    local targetKey = eventObjectId(targetId) or ""
+    local actorKey = eventObjectId(actorId) or ""
     local recipient = ""
     if kind == "healing" or kind == "receivedHeal" then
         recipient = isLocalObject(targetId) and "self" or "ally"
