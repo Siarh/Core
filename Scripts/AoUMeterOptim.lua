@@ -547,6 +547,62 @@ local function fcrit(s)
 	return math.min(850, 500 + (s - 500) * 0.7 * (r + 0.25 * r ^ 5 - 0.5 * r ^ 3))
 end
 
+-- Estimate the critical-hit contribution from real per-ability Normal/Critical
+-- details. The game exposes counts and summed amounts for each ability; a global
+-- assumption that every critical hit is exactly 2x is unnecessarily crude.
+local function estimateCritModel(spells, luck)
+	local normalCount, criticalCount = 0, 0
+	local weightedRatio, ratioWeight, pairedCount, abilityCount = 0, 0, 0, 0
+	for _, spell in pairs(spells or {}) do
+		local details = spell and spell.DetailsList
+		local normal = details and details[enumHit.Normal]
+		local critical = details and details[enumHit.Critical]
+		local nc = math.max(0, N(normal and normal.Count))
+		local cc = math.max(0, N(critical and critical.Count))
+		normalCount = normalCount + nc
+		criticalCount = criticalCount + cc
+		local normalAvg = (nc > 0) and (N(normal.Amount) / nc) or 0
+		local criticalAvg = (cc > 0) and (N(critical.Amount) / cc) or 0
+		if nc > 0 and cc > 0 and normalAvg > 0 and criticalAvg > 0 then
+			local ratio = clamp(criticalAvg / normalAvg, 1, 8)
+			-- Weight each ability by its expected all-normal damage contribution.
+			local weight = normalAvg * (nc + cc)
+			weightedRatio = weightedRatio + ratio * weight
+			ratioWeight = ratioWeight + weight
+			pairedCount = pairedCount + math.min(nc, cc)
+			abilityCount = abilityCount + 1
+		end
+	end
+
+	local hits = normalCount + criticalCount
+	local observedChance = (hits > 0) and (criticalCount / hits) or nil
+	local statChance = math.min(1, fcrit(N(luck)) / 1000)
+	-- Small fight samples are noisy. Shrink observed crit frequency towards the
+	-- Luck-based prior until enough hits have accumulated.
+	local chanceConfidence = hits / (hits + 12)
+	local usedChance = observedChance and
+		(statChance + (observedChance - statChance) * chanceConfidence) or statChance
+	local observedMultiplier = (ratioWeight > 0) and (weightedRatio / ratioWeight) or 2
+	-- A critical/normal pair is needed to estimate each ability's own multiplier.
+	-- For sparse samples, conservatively shrink it towards the old 2x assumption.
+	local ratioConfidence = pairedCount / (pairedCount + 8)
+	local usedMultiplier = 2 + (observedMultiplier - 2) * ratioConfidence
+	local factor = 1 + usedChance * math.max(0, usedMultiplier - 1)
+
+	return {
+		normalCount = normalCount,
+		criticalCount = criticalCount,
+		hitCount = hits,
+		observedChance = observedChance,
+		usedChance = usedChance,
+		observedMultiplier = observedMultiplier,
+		usedMultiplier = usedMultiplier,
+		factor = factor,
+		pairedCount = pairedCount,
+		abilityCount = abilityCount
+	}
+end
+
 local function masteryMult(s)
 	if s >= 0 then return 1 + s / 1000 end
 	return 1 / (1 + math.abs(s) / 1000)
@@ -554,12 +610,13 @@ end
 
 local function lnF(M, R, U, L, pool, h, mm)
 	local c = math.min(1, fcrit(L) / 1000)
+	local critFactor = (Optim.CritModel and Optim.CritModel.factor) or (1 + c)
 	local m = masteryMult(M)
 	local r = 1 + R / 1000 * pool * N(Optim.Cfg.resolveCoef or 0.015)
 	local u = 1 + mm(U) * (1 - h)
 	local tc = (Optim.TargetCaution and h < 0.40) and Optim.TargetCaution or 0
 	return math.log(math.max(m, 1e-12)) + math.log(math.max(r, 1e-12))
-		+ math.log(math.max(u, 1e-12)) + math.log(1 + c)
+		+ math.log(math.max(u, 1e-12)) + math.log(math.max(critFactor, 1e-12))
 		+ math.log(math.max(1 - tc, 0.05))
 end
 
@@ -1185,6 +1242,8 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	end
 	local main = heal and hl or dd
 	local o = main.Opt
+	-- Available even in a no-Resolve-data fight; refined with the live Luck value below.
+	Optim.CritModel = estimateCritModel(main.SpellsList, cfg.L)
 
 	local function makeAIContext()
 		local duration = math.max(N(fightTime), 1)
@@ -1205,6 +1264,12 @@ function Optim.BuildLines(c, fightTime, activeMode)
 			avgResolve = (o and N(o.pw) > 0) and (N(o.ps) / N(o.pw)) or nil,
 			avgTargetHpPct = (o and N(o.hw) > 0) and (N(o.hs) / N(o.hw) * 100) or nil,
 			hpSampleLabel = heal and "получателя" or "цели",
+			critCount = N(Optim.CritModel and Optim.CritModel.criticalCount),
+			normalCount = N(Optim.CritModel and Optim.CritModel.normalCount),
+			critSamples = N(Optim.CritModel and Optim.CritModel.hitCount),
+			critRateObserved = N(Optim.CritModel and Optim.CritModel.observedChance),
+			critMultiplier = N(Optim.CritModel and Optim.CritModel.observedMultiplier),
+			critFactor = N(Optim.CritModel and Optim.CritModel.factor),
 			lowHpEvents = lowHpEvents,
 			incomingPerSecond = N(df and df.Amount) / duration,
 			damagePerSecond = N(dd and dd.Amount) / duration,
@@ -1259,6 +1324,7 @@ function Optim.BuildLines(c, fightTime, activeMode)
 	local fR, bR, eR = pick(totalStats and totalStats.R, cfg.fR, cfg.bR, cfg.eR)
 	local fU, bU, eU = pick(totalStats and totalStats.U, cfg.fU, cfg.bU, cfg.eU)
 	local L = totalStats and totalStats.L and math.floor(totalStats.L.total) or cfg.L
+	Optim.CritModel = estimateCritModel(main.SpellsList, L)
 	local fS, bS, eS = pick(totalStats and totalStats.S, cfg.fS, cfg.bS, cfg.eS)
 	local fW, bW, eW = pick(totalStats and totalStats.W, cfg.fW, cfg.bW, cfg.eW)
 	local fB, bB, eB = pick(totalStats and totalStats.B, cfg.fB, cfg.bB, cfg.eB)
@@ -1325,7 +1391,10 @@ function Optim.BuildLines(c, fightTime, activeMode)
 		math.floor(math.log(selfHealRate + 1) * 8), math.floor(hpMax),
 		math.floor(phi * 100), math.floor((o.eventSamples or o.hpSamples or 0) / 10),
 		math.floor((o.hpSamples or 0) / 10), math.floor((o.poolSamples or 0) / 10),
-		N(selfSeg.events)
+		N(selfSeg.events),
+		N(Optim.CritModel and Optim.CritModel.normalCount),
+		N(Optim.CritModel and Optim.CritModel.criticalCount),
+		math.floor(N(Optim.CritModel and Optim.CritModel.observedMultiplier) * 100)
 	}, "|")
 	local statKey = "compact-healer-v2|" .. table.concat({
 		cfg.mode, cfg.role, cfg.flag, cfg.tw, cfg.bal, cfg.free, cfg.eq, cfg.resolveCoef,
