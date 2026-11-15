@@ -60,7 +60,7 @@ assert(string.find(DPScopeAI.LastSummary, "Следующий шаг", 1, true),
     "AI summary should provide a next test")
 assert(string.find(DPScopeAI.LastSummary, "HP цели=68.4%", 1, true),
     "AI summary should report average target HP")
-assert(string.find(DPScopeAI.LastSummary, "средняя Решимость=36.2", 1, true),
+assert(string.find(DPScopeAI.LastSummary, "Решимость=36.2", 1, true),
     "AI summary should report average Resolve")
 
 local weak = DPScopeAI.Analyze({ mode = "dps", eventCount = 5, hpSamples = 1, poolSamples = 0 })
