@@ -324,7 +324,9 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(result["baseline_model_result"], 1100)
         self.assertEqual(result["curves"]["mastery"]["points"][1]["marginal_efficiency_per_100"], 100)
         self.assertFalse(result["curves"]["luck"]["allocation_eligible"])
-        self.assertFalse(result["curves"]["might"]["allocation_eligible"])
+        self.assertNotIn("might", result["curves"])
+        self.assertIn("might", result["unavailable_stats"])
+        self.assertIn("INSUFFICIENT DATA", result["unavailable_stats"]["might"])
         self.assertIsNone(result["confidence_interval"])
 
         interaction = next(
@@ -380,6 +382,29 @@ class FormulaTests(unittest.TestCase):
         self.assertIn("model_marginal_efficiency", item)
         self.assertEqual(item["model_marginal_efficiency"]["classification"], "ESTIMATED")
         self.assertIn("haste", report["stat_model_registry"])
+
+
+
+    def test_endurance_curve_requires_measured_value_and_class_k(self):
+        activity = {"mode": "tank", "samples": [{
+            "second": 0, "incoming_raw": 1000, "player_hp": 1.0,
+            "damage_school": "physical", "player_resistance": 10
+        }]}
+        missing = calc.model_marginal_efficiency(
+            activity,
+            {"fortitude": 100, "bloodthirst": 100, "caution": 100},
+            {"level": 1, "max_hp": 50000},
+        )
+        self.assertNotIn("endurance", missing["curves"])
+        self.assertIn("endurance", missing["unavailable_stats"])
+
+        no_class_k = calc.model_marginal_efficiency(
+            activity,
+            {"fortitude": 100, "endurance": 500, "bloodthirst": 100, "caution": 100},
+            {"level": 1, "max_hp": 50000},
+        )
+        self.assertNotIn("endurance", no_class_k["curves"])
+        self.assertIn("class_k", no_class_k["unavailable_stats"]["endurance"])
 
 
 
