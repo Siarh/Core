@@ -177,6 +177,9 @@ function AOUA.OnFightStart()
     AOUA.Session.eventSamplesDropped = 0
     AOUA.Session.objectMetadata = {}
     AOUA.Session.objectMetadataCount = 0
+    -- HP transitions from an earlier fight must never leak into the new fight.
+    AOUA.HpCache = {}
+    AOUA.HealthTransitions = {}
     AOUA.Session.eventSampleCount = 0
     AOUA.Session.eventSampleNext = 1
     AOUA.Session.elapsedSeconds = 0

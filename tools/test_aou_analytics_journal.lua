@@ -152,7 +152,11 @@ assert(string.find(eventsText, "Negative net prevented values indicate damage am
 AOUA.OnEventRegistrationStats(3, 3, 3)
 local beforeResetEvents = AOUA.Session.journal.incomingStats.events
 assert(beforeResetEvents > 0, "expected incoming journal data before fight reset")
+AOUA.HpCache[2002] = { value = 123, limit = 1000, real = true, second = 99 }
+AOUA.HealthTransitions[2002] = { beforeFrac = 0.5, direction = -1, delta = -10, limit = 1000, exact = true }
 AOUA.OnFightStart()
+expect(next(AOUA.HpCache), nil, "HP cache cleared between fights")
+expect(next(AOUA.HealthTransitions), nil, "HP transitions cleared between fights")
 expect(AOUA.Session.journal.incomingStats.events, 0, "incoming journal reset at fight start")
 expect(next(AOUA.Session.journal.incomingByAbility), nil, "incoming abilities cleared at fight start")
 expect(next(AOUA.Session.journal.outgoingByAbility), nil, "outgoing abilities cleared at fight start")
