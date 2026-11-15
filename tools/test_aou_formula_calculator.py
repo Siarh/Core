@@ -322,7 +322,12 @@ class FormulaTests(unittest.TestCase):
         self.assertEqual(result["classification"], "ESTIMATED")
         self.assertEqual(result["status"], "partial_estimates")
         self.assertEqual(result["baseline_model_result"], 1100)
-        self.assertEqual(result["curves"]["mastery"]["points"][1]["marginal_efficiency_per_100"], 100)
+        mastery_step = result["curves"]["mastery"]["points"][1]
+        self.assertEqual(mastery_step["delta_stat"], 100)
+        self.assertEqual(mastery_step["delta_result"], 100)
+        self.assertEqual(mastery_step["marginal_efficiency_per_stat"], 1)
+        self.assertEqual(mastery_step["marginal_efficiency_per_100"], 100)
+        self.assertEqual(mastery_step["me_formula"], "ME = delta_result / delta_stat")
         self.assertFalse(result["curves"]["luck"]["allocation_eligible"])
         self.assertNotIn("might", result["curves"])
         self.assertIn("might", result["unavailable_stats"])
