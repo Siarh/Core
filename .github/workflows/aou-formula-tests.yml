@@ -11,6 +11,7 @@ on:
       - "tools/test_aou_analytics_journal.lua"
       - "tools/test_aou_ai.lua"
       - "tools/test_aou_critical_model.lua"
+      - "tools/test_aou_object_id.lua"
       - "tools/test_aou_widget_layout.py"
       - "tools/aou_ai_assistant.py"
       - "tools/README_ollama_ai.txt"

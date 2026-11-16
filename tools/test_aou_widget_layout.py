@@ -134,7 +134,8 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         end = gui.index("\nend", start)
         block = gui[start:end]
         self.assertIn("c and fight and not self.Hovering", block)
-        self.assertIn("c.ID == avatar.GetId()", block)
+        self.assertIn("isAvatarCombatant(c)", block)
+        self.assertNotIn("c.ID == avatar.GetId()", block)
         self.assertIn("Optim.BuildLines, c", block)
 
     def test_resolve_statistics_are_updated_from_combat_events(self):
