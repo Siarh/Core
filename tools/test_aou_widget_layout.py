@@ -24,8 +24,9 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Size>42</Size>", count)
 
         stats = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Pos>132</Pos>", stats)
-        self.assertIn("<Size>200</Size>", stats)
+        self.assertIn("<Align>WIDGET_ALIGN_HIGH</Align>", stats)
+        self.assertIn("<HighPos>0</HighPos>", stats)
+        self.assertIn("<Size>160</Size>", stats)
 
     def test_resolve_min_avg_max_values_align_to_their_headers(self):
         header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
