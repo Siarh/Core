@@ -75,7 +75,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:UpdateMainOpponentInfo()")
-        end = gui.index("\n--==============================================================================\n--================= SPELL PANEL", start)
+        end = gui.index("\nend", start)
         block = gui[start:end]
 
         self.assertIn('"Противники"', block)
