@@ -15,7 +15,7 @@
 		</Y>
 	</Placement>
 	<TransparentInput>true</TransparentInput>
-	<Visible>false</Visible>
+	<Visible>true</Visible>
 	<Enabled>true</Enabled>
 	<FormatFileRef href="DamageStats.txt" />
 	<TextValues />
