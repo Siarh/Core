@@ -625,49 +625,33 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local displayedRows = 0
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
 		local data = rows[i]
-		local parts = { russian and "Цель:" or "Target:" }
+		local parts = {}
 		local name = targetReadableName(data.name)
 		if name ~= "" then parts[#parts + 1] = name end
 
-		local descriptors = {}
 		local kind = targetKindLabel(data.kind)
-		if kind and kind ~= "" then descriptors[#descriptors + 1] = kind end
+		if kind and kind ~= "" then parts[#parts + 1] = kind end
 		if tonumber(data.level) then
-			descriptors[#descriptors + 1] = (russian and "ур. " or "Lv ") .. tostring(math.floor(data.level))
+			parts[#parts + 1] = (russian and "ур. " or "Lv ") .. tostring(math.floor(data.level))
 		end
-		local quality = targetQualityLabel(data.qualityName or data.quality)
-		if quality ~= "" then descriptors[#descriptors + 1] = quality end
-		if #descriptors > 0 then parts[#parts + 1] = table.concat(descriptors, ", ") end
 
 		local hpText = ""
 		if tonumber(data.hpCurrent) and tonumber(data.hpLimit) and data.hpLimit > 0 then
 			hpText = "HP " .. targetCompactNumber(data.hpCurrent) .. "/"
 				.. targetCompactNumber(data.hpLimit) .. " ("
 				.. string.format("%.0f", tonumber(data.hpPercent) or 0) .. "%)"
-		elseif tonumber(data.hpBeforePercent) then
-			local marker = data.hpBeforeQuality == "measured_pre" and "" or "~"
-			hpText = (russian and "HP до удара " or "HP pre-hit ") .. marker
-				.. string.format("%.0f", tonumber(data.hpBeforePercent)) .. "%"
 		elseif tonumber(data.hpCurrentPercent) then
-			hpText = (russian and "HP " or "HP ") .. "~"
-				.. string.format("%.0f", tonumber(data.hpCurrentPercent)) .. "%"
+			-- The game exposes enemy health as valuePercents on a 0..100 scale.
+			-- Show that normalized scale explicitly instead of marking it unknown.
+			local hp = math.max(0, math.min(100, tonumber(data.hpCurrentPercent)))
+			hpText = "HP " .. string.format("%.0f", hp) .. "/100 ("
+				.. string.format("%.0f", hp) .. "%)"
+		elseif tonumber(data.hpBeforePercent) then
+			local hp = math.max(0, math.min(100, tonumber(data.hpBeforePercent)))
+			hpText = "HP ~" .. string.format("%.0f", hp) .. "/100 (~"
+				.. string.format("%.0f", hp) .. "%)"
 		end
 		if hpText ~= "" then parts[#parts + 1] = hpText end
-
-		local schools = data.resistSchools or {}
-		local resistParts = {}
-		for j = 1, math.min(2, #schools) do
-			local school = schools[j]
-			local schoolName = targetSchoolLabel(school.element)
-			local amount = targetCompactNumber(school.amount)
-			if schoolName ~= "" and amount ~= "" then
-				resistParts[#resistParts + 1] = schoolName .. " " .. amount
-					.. " (" .. tostring(tonumber(school.samples) or 0) .. ")"
-			end
-		end
-		if #resistParts > 0 then
-			parts[#parts + 1] = (russian and "сопр. " or "resist ") .. table.concat(resistParts, ", ")
-		end
 
 		local line = table.concat(parts, " | ")
 		if line ~= "" then
@@ -742,27 +726,16 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
 		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
 
-		local targetInsertIndex = nil
-		if hasTargetLine then
-			for i = 1, #lines do
-				if lines[i] and lines[i][1] == "OptR" then
-					targetInsertIndex = i
-					break
-				end
-			end
-			-- When no Resolve row is available (for example an empty fight),
-			-- keep target info visible after the available optimizer rows.
-			if not targetInsertIndex then targetInsertIndex = #lines end
-		end
+		-- Put the target line at the beginning of the analyzer, immediately
+		-- below its title. Shift every stat row by one slot so Resolve and
+		-- Ruthlessness keep their original adjacent spacing.
+		local targetRowOffset = hasTargetLine and 1 or 0
 
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
 			local ln = lines[i]
 			if ln then
-				local slotIndex = i
-				if targetInsertIndex and i > targetInsertIndex then
-					slotIndex = slotIndex + 1
-				end
+				local slotIndex = i + targetRowOffset
 				row:SetPosition(22, y + 18 + (slotIndex - 1) * 18)
 				row:Show()
 				row.Name:SetVal("Name", Optim.Text(ln[1]))
@@ -774,10 +747,9 @@ function TUMeterGUI:UpdateOptim()
 			end
 		end
 
-		local displayRowCount = #lines
-		if targetInsertIndex then
-			displayRowCount = displayRowCount + 1
-			targetPanel:SetPosition(22, y + 18 + targetInsertIndex * 18)
+		local displayRowCount = #lines + targetRowOffset
+		if targetRowOffset > 0 then
+			targetPanel:SetPosition(22, y + 18)
 			targetPanel:Show()
 		end
 		height = y + 18 + displayRowCount * 18 + 20
