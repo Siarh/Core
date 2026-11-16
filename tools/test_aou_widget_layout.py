@@ -22,7 +22,7 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         self.assertIn('GlobalInfoPanel.Damage:SetVal("Max"', gui)
         self.assertNotIn("OpponentPanel", spell_root)
 
-    def test_resolve_bar_keeps_original_global_info_row_layout(self):
+    def test_resolve_bar_and_min_avg_max_columns_remain_aligned(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         global_header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
         global_row = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
@@ -31,17 +31,21 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
             ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.txt",
         ]
 
-        self.assertIn("<Align>WIDGET_ALIGN_HIGH</Align>", global_header)
-        self.assertIn("<Size>160</Size>", global_header)
-        self.assertIn("<Pos>132</Pos>", global_row)
+        self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", global_header)
+        self.assertIn("<Pos>146</Pos>", global_header)
+        self.assertIn("<Size>200</Size>", global_header)
+        self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", global_row)
+        self.assertIn("<Pos>146</Pos>", global_row)
         self.assertIn("<Size>200</Size>", global_row)
-        self.assertNotIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Min', gui)
-        global_update = gui.split("function TUMeterGUI:UpdateList()", 1)[0]
-        self.assertNotIn('setDamageColumnHeader(\n\t\t\t\tdetailsPanel.GlobalInfoHeaderStatsText', gui)
+        self.assertIn('function TUMeterGUI:SetGlobalInfoStatsHeader()', gui)
+        self.assertIn('setDamageColumnHeader(\n\t\tdetails.GlobalInfoHeaderStatsText', gui)
+        self.assertIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Min', gui)
+        self.assertIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Avg', gui)
+        self.assertIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Max', gui)
 
         for path in global_formats:
             with self.subTest(path=path):
-                self.assertNotIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
+                self.assertIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
 
     def test_spell_detail_and_optimizer_columns_remain_monospaced(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
