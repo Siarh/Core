@@ -103,7 +103,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
     def test_target_row_is_inserted_after_resolve_and_shifts_following_rows(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:UpdateOptim()")
-        end = gui.index("\\n--------------------------------------------------------------------------------\\n-- Fill the spell panel", start)
+        end = gui.index("\n--------------------------------------------------------------------------------\n-- Fill the spell panel", start)
         block = gui[start:end]
         self.assertIn('lines[i][1] == "OptR"', block)
         self.assertIn("if targetInsertIndex and i > targetInsertIndex then", block)
