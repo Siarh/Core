@@ -96,7 +96,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         selected_gate = spell_list.index("if self.SelectedCombatant then")
         self.assertLess(target_call, selected_gate)
         self.assertEqual(spell_list.count("self:UpdateOptim()"), 1)
-        self.assertGreater(spell_list.index("self:UpdateOptim()"), spell_list.index("\\n\\tend\\nend"))
+        self.assertGreater(spell_list.index("self:UpdateOptim()"), spell_list.index("if self.Hovering and self.HoveringSpellIndex"))
 
         opponent_start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
         opponent_end = gui.index("\n--------------------------------------------------------------------------------\n-- Stat optimizer block", opponent_start)
