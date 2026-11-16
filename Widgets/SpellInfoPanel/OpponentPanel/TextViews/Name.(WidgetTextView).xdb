@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <WidgetTextView>
 	<Priority>150</Priority>
-	<Name>OpponentLineTextViewName</Name>
+	<Name>TargetInfoTextView</Name>
 	<Placement>
 		<X>
 			<Align>WIDGET_ALIGN_BOTH</Align>

@@ -222,6 +222,24 @@ onMyEvent["EVENT_RAID_MEMBER_STATUS_CHANGED"] = onMyEvent["EVENT_GROUP_CHANGED"]
 onMyEvent["EVENT_RAID_MEMBER_CHANGED"] = onMyEvent["EVENT_GROUP_CHANGED"]
 
 --------------------------------------------------------------------------------
+-- Refresh the target row as soon as the selected target changes.
+onMyEvent["EVENT_AVATAR_TARGET_CHANGED"] = function()
+	local gui = DPSMeterGUI
+	if gui and type(gui.UpdateTargetInfo) == "function" then
+		pcall(gui.UpdateTargetInfo, gui)
+	end
+end
+
+-- Unit level notifications are global; only refresh when they belong to the current target.
+onMyEvent["EVENT_UNIT_LEVEL_CHANGED"] = function(params)
+	local gui = DPSMeterGUI
+	local targetId = gui and gui.TargetInfoTargetId or nil
+	if params and targetId and params.unitId and type(SameObjectId) == "function"
+		and SameObjectId(params.unitId, targetId) then
+		pcall(gui.UpdateTargetInfo, gui)
+	end
+end
+
 -- Event: EVENT_SECOND_TIMER
 --------------------------------------------------------------------------------
 onMyEvent["EVENT_SECOND_TIMER"] = function(params)
@@ -248,8 +266,8 @@ onMyEvent["EVENT_SECOND_TIMER"] = function(params)
 	elseif DPSMeterGUI.DetailsPanel and DPSMeterGUI.DetailsPanel:IsVisible() then
 		-- Keep the selected target fresh after combat stops, without rebuilding
 		-- the spell list/optimizer on every idle timer tick.
-		if type(DPSMeterGUI.UpdateOpponentInfo) == "function" then
-			pcall(DPSMeterGUI.UpdateOpponentInfo, DPSMeterGUI)
+		if type(DPSMeterGUI.UpdateTargetInfo) == "function" then
+			pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)
 		end
 	end
 

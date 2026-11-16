@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <WidgetPanel>
-	<Name>OpponentPanel</Name>
+	<Name>TargetInfoPanel</Name>
 	<Children>
 		<Item href="TextViews/Name.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 	</Children>
