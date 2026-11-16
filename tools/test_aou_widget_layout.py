@@ -23,19 +23,48 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Pos>85</Pos>", count)
         self.assertIn("<Size>42</Size>", count)
 
-        stats = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Align>WIDGET_ALIGN_HIGH</Align>", stats)
-        self.assertIn("<HighPos>0</HighPos>", stats)
-        self.assertIn("<Size>160</Size>", stats)
+        self.assertIn("TGlobalInfoPanelGUI:CreateNewObjectByDesc", gui)
 
-    def test_resolve_min_avg_max_values_align_to_their_headers(self):
-        header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        values = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        for token in ('<Align>WIDGET_ALIGN_HIGH</Align>', '<HighPos>0</HighPos>', '<Size>160</Size>'):
-            self.assertIn(token, header)
-            self.assertIn(token, values)
-        self.assertNotIn('<Pos>132</Pos>', values)
-        self.assertNotIn('<Size>200</Size>', values)
+    def test_min_avg_max_use_independent_matching_fixed_columns(self):
+        columns = (
+            ("Min", 196, 46, "DamageMin.txt"),
+            ("Sep1", 242, 8, "DamageSeparator.txt"),
+            ("Avg", 250, 50, "DamageAvg.txt"),
+            ("Sep2", 300, 8, "DamageSeparator.txt"),
+            ("Max", 308, 48, "DamageMax.txt"),
+        )
+        panel_dirs = (
+            ("GlobalInfoPanel", "SpellDetailTextView"),
+            ("GlobalInfoHeaderPanel", "GlobalInfoHeaderTextView"),
+        )
+        for panel_dir, prefix in panel_dirs:
+            panel = (ROOT / "Widgets/SpellInfoPanel" / panel_dir /
+                     (panel_dir + ".(WidgetPanel).xdb")).read_text(encoding="utf-8")
+            self.assertNotIn("TextViews/DamageStats.(WidgetTextView).xdb", panel)
+            for key, x, width, format_file in columns:
+                view = (ROOT / "Widgets/SpellInfoPanel" / panel_dir / "TextViews" /
+                        f"{key}.(WidgetTextView).xdb").read_text(encoding="utf-8")
+                self.assertIn(f"<Name>{prefix}{key}</Name>", view)
+                self.assertIn(f"<Pos>{x}</Pos>", view)
+                self.assertIn(f"<Size>{width}</Size>", view)
+                self.assertIn(f'href="{format_file}"', view)
+
+        for metric in ("Min", "Avg", "Max"):
+            for panel_dir in ("GlobalInfoPanel", "GlobalInfoHeaderPanel"):
+                fmt_path = (ROOT / "Widgets/SpellInfoPanel" / panel_dir / "TextViews" /
+                            f"Damage{metric}.txt")
+                raw = fmt_path.read_bytes()
+                self.assertTrue(raw.startswith(b"\xff\xfe"))
+                fmt = raw.decode("utf-16")
+                self.assertIn('alignx = "center"', fmt)
+
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        self.assertIn("GlobalInfoPanel.Min:SetVal", gui)
+        self.assertIn("GlobalInfoPanel.Avg:SetVal", gui)
+        self.assertIn("GlobalInfoPanel.Max:SetVal", gui)
+        self.assertIn("dp.OptHeaderMin:SetVal", gui)
+        self.assertIn("dp.OptHeaderAvg:SetVal", gui)
+        self.assertIn("dp.OptHeaderMax:SetVal", gui)
 
     def test_target_row_is_a_dynamic_child_of_the_analyzer_and_drawn_above_global_rows(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
@@ -134,7 +163,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))', block)
         self.assertIn('GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))', block)
         for field in ("Min", "Avg", "Max"):
-            self.assertIn(f'GlobalInfoPanel.Damage:SetVal("{field}"', block)
+            self.assertIn(f'GlobalInfoPanel.{field}:SetVal("{field}"', block)
 
     def test_optimizer_is_limited_to_the_selected_local_player(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")

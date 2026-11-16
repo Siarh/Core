@@ -111,7 +111,6 @@ function TDetailsPanelGUI:CreateNewObject(name)
 
 			GlobalInfoHeaderPanel = widget:GetChildByName("GlobalInfoHeaderPanel"),
 			GlobalInfoHeaderNameText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true),
-			GlobalInfoHeaderStatsText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true),
 			GlobalInfoList = {},     -- Panel extra info list
 			TargetInfoPanel = nil,
 			TargetInfoText = nil,
@@ -181,6 +180,23 @@ function TSpellDetailsPanelGUI:CreateNewObjectByDesc(name, desc, owner)
 			Name = widget:GetChildByName("SpellDetailTextViewName").Widget,
 			Count = widget:GetChildByName("SpellDetailTextViewCount").Widget,
 			Damage = widget:GetChildByName("SpellDetailTextViewStats").Widget,
+			Percent = widget:GetChildByName("SpellDetailTextViewPercentage").Widget,
+		}, { __index = widget })
+end
+
+--------------------------------------------------------------------------------
+-- Type TGlobalInfoPanelGUI
+Global("TGlobalInfoPanelGUI", {})
+--------------------------------------------------------------------------------
+function TGlobalInfoPanelGUI:CreateNewObjectByDesc(name, desc, owner)
+	local widget = TWidget:CreateNewObjectByDesc(name, desc, owner)
+	return setmetatable({
+			Bar = widget:GetChildByName("SpellDetailBar"),
+			Name = widget:GetChildByName("SpellDetailTextViewName").Widget,
+			Count = widget:GetChildByName("SpellDetailTextViewCount").Widget,
+			Min = widget:GetChildByName("SpellDetailTextViewMin").Widget,
+			Avg = widget:GetChildByName("SpellDetailTextViewAvg").Widget,
+			Max = widget:GetChildByName("SpellDetailTextViewMax").Widget,
 			Percent = widget:GetChildByName("SpellDetailTextViewPercentage").Widget,
 		}, { __index = widget })
 end
@@ -369,20 +385,20 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
-				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+				GlobalInfoPanel.Min:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+				GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+				GlobalInfoPanel.Max:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 			else
-				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
+				GlobalInfoPanel.Min:SetVal("Min", userMods.ToWString("-"))
+				GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
+				GlobalInfoPanel.Max:SetVal("Max", userMods.ToWString("-"))
 			end
 		else
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+			GlobalInfoPanel.Min:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+			GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+			GlobalInfoPanel.Max:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 		end
 	end
 end
@@ -569,9 +585,9 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
 		dp.OptHeaderName:SetVal("Name", Optim.Text("OptTitle"))
-		dp.OptHeaderStats:SetVal("Min", Optim.Text("OptNow"))
-		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
-		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
+		dp.OptHeaderMin:SetVal("Min", Optim.Text("OptNow"))
+		dp.OptHeaderAvg:SetVal("Avg", Optim.Text("OptOpt"))
+		dp.OptHeaderMax:SetVal("Max", Optim.Text("OptDiff"))
 
 		local targetRowOffset = 0
 		if hasTargetLine then
@@ -886,7 +902,7 @@ function TUMeterGUI:Init()
 	local GlobalInfoOffset = GlobalInfoHeaderOffset + 18
 	for extraIndex = 1, EXTRATYPES do
 		local wtName = "GlobalInfoPanel" .. extraIndex
-		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.GlobalInfoList[extraIndex] = TGlobalInfoPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
 		self.DetailsPanel.GlobalInfoList[extraIndex]:SetPosition(22, GlobalInfoOffset + (extraIndex-1) * 18)
 		if extraIndex == enumGlobalInfo.Determination then
 			self.DetailsPanel.GlobalInfoList[extraIndex].Bar:Hide()
@@ -952,7 +968,9 @@ function TUMeterGUI:Init()
 	self.DetailsPanel.OptHeader = TWidget:CreateNewObjectByDesc("OptHeaderPanel", optHeaderDesc, self.DetailsPanel)
 	self.DetailsPanel.OptHeader:SetPosition(22, optOffset)
 	self.DetailsPanel.OptHeaderName = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true)
-	self.DetailsPanel.OptHeaderStats = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true)
+	self.DetailsPanel.OptHeaderMin = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewMin", true)
+	self.DetailsPanel.OptHeaderAvg = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewAvg", true)
+	self.DetailsPanel.OptHeaderMax = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewMax", true)
 	self.DetailsPanel.OptList = {}
 	for optIndex = 1, OPTROWS do
 		local wtName = "OptPanel" .. optIndex

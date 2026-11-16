@@ -4,7 +4,11 @@
 	<Children>
 		<Item href="TextViews/Name.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 		<Item href="TextViews/Count.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
-		<Item href="TextViews/DamageStats.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="TextViews/Min.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="TextViews/Sep1.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="TextViews/Avg.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="TextViews/Sep2.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="TextViews/Max.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 		<Item href="TextViews/DamagePercentage.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
 	</Children>
 	<BackLayer href="" />
