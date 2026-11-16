@@ -41,7 +41,7 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
 
         for path in global_formats:
             with self.subTest(path=path):
-                self.assertNotIn('fontname="AllodsConsole"', path.read_text(encoding="utf-8-sig"))
+                self.assertNotIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
 
     def test_spell_detail_and_optimizer_columns_remain_monospaced(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
