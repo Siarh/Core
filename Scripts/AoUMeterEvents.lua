@@ -586,6 +586,13 @@ function metricReset()
 	if AOUA and type(AOUA.OnEventRegistrationStats) == "function" then
 		pcall(AOUA.OnEventRegistrationStats, #paramsBlockDDIN, #paramsBlockHealIN, healthWatchCount)
 	end
+
+	-- metricReset clears all handlers for EVENT_OBJECT_HEALTH_CHANGED before
+	-- rebuilding group filters. Re-arm the one filtered watcher for the current
+	-- target afterward, otherwise its live HP row would stop updating.
+	if DPSMeterGUI and type(DPSMeterGUI.UpdateTargetInfo) == "function" then
+		pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)
+	end
 end
 
 function ReloadPet(params)
