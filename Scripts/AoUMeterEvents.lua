@@ -400,7 +400,12 @@ function GlobalReset()
 
 	TitleGlobalInfoType[enumGlobalInfo.Determination] = GetTextLocalized("Determination")
 
-	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderNameText:SetVal("Name", GetTextLocalized("GlobalInfo"))
+	local globalInfoCaption = GetTextLocalized("GlobalInfo")
+	-- Keep the short Russian caption in the same CP1251 conversion path as other runtime UI text.
+	if localization == "rus" and Optim and type(Optim.ToWString) == "function" then
+		globalInfoCaption = Optim.ToWString("Информация...")
+	end
+	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderNameText:SetVal("Name", globalInfoCaption)
 	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Min", GetTextLocalized("Min"))
 	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Avg", GetTextLocalized("Avg"))
 	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Max", GetTextLocalized("Max"))

@@ -50,10 +50,12 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
 
-    def test_global_info_header_uses_short_russian_caption(self):
-        caption = (ROOT / "Locales/rus/GlobalInfo.txt").read_text(encoding="utf-8").lstrip("\ufeff")
-        self.assertEqual(caption, "Информация...")
-
+    def test_global_info_header_uses_short_russian_caption_at_runtime(self):
+        events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
+        locale = (ROOT / "Locales/rus/GlobalInfo.txt").read_bytes().decode("utf-8-sig")
+        self.assertIn('globalInfoCaption = Optim.ToWString("Информация...")', events)
+        self.assertIn('local globalInfoCaption = GetTextLocalized("GlobalInfo")', events)
+        self.assertEqual(locale, "Глобальная информационная")
     def test_restored_gui_has_no_mixed_in_target_panel_runtime_calls(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
