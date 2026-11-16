@@ -53,7 +53,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         end = gui.index("\nend", start)
         block = gui[start:end]
         self.assertIn("local hasReadableRow = false", block)
-        self.assertIn("if not hasReadableRow and liveCurrentFight then", block)
+        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", block)
         self.assertIn("targetQualityLabel(data.qualityName or data.quality)", block)
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
         self.assertIn("common.IsWString", gui)
