@@ -1,5 +1,0 @@
-﻿<header alignx = "center" fontsize="11" outline="1">
-	<rs class="class">
-		<tip_blue><r name="Min"/></tip_blue>
-	</rs>
-</header>
