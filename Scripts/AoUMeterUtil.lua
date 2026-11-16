@@ -35,6 +35,34 @@ function DeepCopyObject( object )
 	return _copy( object )
 end
 --------------------------------------------------------------------------------
+-- Compare ObjectId values by their stable instance ID.
+-- The game may hand out distinct wrapper objects for the same live object.
+local function objectInstanceKey(value)
+    local valueType = type(value)
+    if valueType == "string" or valueType == "number" then
+        return tostring(value)
+    end
+    if valueType ~= "table" and valueType ~= "userdata" then return nil end
+    for _, methodName in ipairs({ "GetId", "GetInstanceId" }) do
+        local okFn, fn = pcall(function() return value[methodName] end)
+        if okFn and type(fn) == "function" then
+            local okId, id = pcall(fn, value)
+            if okId and (type(id) == "string" or type(id) == "number") then
+                return tostring(id)
+            end
+        end
+    end
+    return nil
+end
+
+function SameObjectId(left, right)
+    if left == nil or right == nil then return false end
+    if left == right then return true end
+    local leftKey = objectInstanceKey(left)
+    local rightKey = objectInstanceKey(right)
+    return leftKey ~= nil and rightKey ~= nil and leftKey == rightKey
+end
+--------------------------------------------------------------------------------
 -- Helper function which return if the unit id is friend (with all checks)
 function IsFriend(id)
     return id and object.IsExist(id) and object.IsUnit(id) and object.IsFriend(id)

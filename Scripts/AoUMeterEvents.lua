@@ -289,7 +289,7 @@ local function CanCollectRawAnalytics(params, personalField, startOnPersonalEven
 		local personal = false
 		if startOnPersonalEvent and params and personalField and avatar and avatar.GetId then
 			local ok, id = pcall(avatar.GetId)
-			personal = ok and params[personalField] == id
+			personal = ok and SameObjectId(params[personalField], id)
 		end
 		-- A raw hit on the local avatar is itself proof of combat. Starting here
 		-- prevents the first incoming strike from being dropped before bCollectData.

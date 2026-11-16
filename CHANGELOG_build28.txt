@@ -221,3 +221,12 @@ Opponent panel fight-history and ObjectId correction:
 - Outgoing-hit owner matching now compares canonical ObjectId values as well as direct equality, covering APIs that return distinct wrapper objects for the same object identifier.
 - `/aou targettest` now reports meter collection state, outgoing callback/owner-match/accepted counters, last event target, and saved current/previous target-row counts. A nil selected target can therefore be distinguished from a missing combat-event path.
 - The Current tab may also show the selected live unit before combat starts or while the meter is idle. This allows target name, type, level, quality and available HP to appear for a selected training dummy; the Previous tab remains restricted to its saved fight snapshot.
+
+
+ObjectId identity and target-panel visibility fix:
+- Added a shared SameObjectId comparison that matches distinct ObjectId wrappers by GetId()/GetInstanceId(), while rejecting missing IDs.
+- Applied canonical matching when resolving the local player and pet owner in combat events, looking up fight combatants, and starting collection from a local incoming hit.
+- The details panel now recognises the local player's selected combatant even when avatar.GetId() returns a different wrapper for the same ObjectId. The optimizer uses the same identity check.
+- This fixes the path where a target could be known by the game API but the addon rejected the associated combatant/event before it reached the live target profile or the saved end-of-fight snapshot.
+- Added runtime Lua tests for numeric/string IDs and separately wrapped ObjectId instances, plus GUI/data/event regression checks.
+- CI validation is required before distribution; actual Sunshine 6.0 client display still requires in-game verification.

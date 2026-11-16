@@ -71,6 +71,21 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local numeric = tonumber(key)", gui)
         self.assertIn("row.qualityName = tostring(value)", block)
 
+    def test_target_and_combatant_checks_use_canonical_object_ids(self):
+        util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
+        data = (ROOT / "Scripts/AoUMeterData.lua").read_text(encoding="utf-8")
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
+
+        self.assertIn("function SameObjectId(left, right)", util)
+        self.assertIn('for _, methodName in ipairs({ "GetId", "GetInstanceId" }) do', util)
+        self.assertIn("SameObjectId(Combatant.ID, member.id)", data)
+        self.assertIn("SameObjectId(ID, C.ID)", data)
+        self.assertIn("local function isAvatarCombatant(combatant)", gui)
+        self.assertIn("and isAvatarCombatant(self.SelectedCombatant)", gui)
+        self.assertIn("isAvatarCombatant(c)", gui)
+        self.assertIn("SameObjectId(params[personalField], id)", events)
+
     def test_optimizer_target_lookup_falls_back_to_avatar_target(self):
         optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
         start = optim.index("function Optim.GetTarget()")

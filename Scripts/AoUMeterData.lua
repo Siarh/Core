@@ -371,9 +371,10 @@ end
 Global("TCombatant", {})
 --------------------------------------------------------------------------------
 function TCombatant:CreateNewObject(member)
-	local pet = IsPlayer(member.id) and (group.IsPlayerInGroup(member.id) or member.id == avatar.GetId())
+	local isAvatar = SameObjectId(member.id, avatar.GetId())
+	local pet = IsPlayer(member.id) and (group.IsPlayerInGroup(member.id) or isAvatar)
 	and unit.GetActivePet(member.id) and object.GetName(unit.GetActivePet(member.id)) or nil
-	local isNear = (member.id == avatar.GetId() or member.state and (member.state == GROUP_MEMBER_STATE_NEAR or member.state == GROUP_MEMBER_STATE_MERC or member.state == RAID_MEMBER_STATE_NEAR)) and true or false
+	local isNear = (isAvatar or member.state and (member.state == GROUP_MEMBER_STATE_NEAR or member.state == GROUP_MEMBER_STATE_MERC or member.state == RAID_MEMBER_STATE_NEAR)) and true or false
 
 	return setmetatable({
 			ID = member.id,				-- ID of the combatant
@@ -504,21 +505,22 @@ end
 -- Update information of a combatant
 --------------------------------------------------------------------------------
 function TCombatant:UpdateCombatant(member)
+	local isAvatar = SameObjectId(member.id, avatar.GetId())
 	if member.state then
-		self.IsNear = (member.id == avatar.GetId() or (member.state == GROUP_MEMBER_STATE_NEAR or member.state == RAID_MEMBER_STATE_NEAR or member.state == GROUP_MEMBER_STATE_MERC)) and true or false
+		self.IsNear = (isAvatar or (member.state == GROUP_MEMBER_STATE_NEAR or member.state == RAID_MEMBER_STATE_NEAR or member.state == GROUP_MEMBER_STATE_MERC)) and true or false
 	end
 	if member.id then self.ID = member.id end
 	if member.persistentId then self.PersistentID = member.persistentId end
 	if member.name then self.Name = member.name end
 	if member.className then self.Class = member.className end
-	self.Pet = IsPlayer(member.id) and (group.IsPlayerInGroup(member.id) or member.id == avatar.GetId())
+	self.Pet = IsPlayer(member.id) and (group.IsPlayerInGroup(member.id) or isAvatar)
 	and unit.GetActivePet(member.id) and object.GetName(unit.GetActivePet(member.id)) or nil
 end
 --------------------------------------------------------------------------------
 -- Update the Range attribute according to the avatar
 --------------------------------------------------------------------------------
 function TCombatant:UpdateRange()	
-	if self.ID == avatar.GetId() then
+	if SameObjectId(self.ID, avatar.GetId()) then
 		self.Range = 0
 	else
 		local pos = nil
@@ -607,7 +609,7 @@ function TFight:GetCombatant(member)
 	end
 	if member.id then
 		for i, Combatant in pairs( self.CombatantsList ) do
-			if Combatant.ID == member.id then
+			if SameObjectId(Combatant.ID, member.id) then
 				return Combatant, i -- Mercenaries should fall here
 			end
 		end
@@ -822,7 +824,7 @@ function TUMeter:GetSourceIdAndVariant(ID)
 	-- look for the type of the source
 	if unit.IsPlayer(ID) or group.IsCreatureInGroup(ID) then
 		for i, C in pairs( self.FightsList[self.Fight.Current].CombatantsList ) do
-			if (ID == C.ID) then
+			if SameObjectId(ID, C.ID) then
 				Variant = 1 -- Player or Mercenary.
 				CombatantID = C.ID
 				break
@@ -831,7 +833,7 @@ function TUMeter:GetSourceIdAndVariant(ID)
 	elseif unit.GetFollowerMaster(ID) then
 		local MasterID = unit.GetFollowerMaster(ID)
 		for i, C in pairs( self.FightsList[self.Fight.Current].CombatantsList ) do
-			if (MasterID == C.ID) then
+			if SameObjectId(MasterID, C.ID) then
 				Variant = 2 -- Player's Pet.
 				CombatantID = C.ID
 				break

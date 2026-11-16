@@ -137,6 +137,13 @@ local function targetSchoolLabel(value)
 	return ""
 end
 
+local function isAvatarCombatant(combatant)
+	if not combatant or not combatant.ID or not avatar or type(avatar.GetId) ~= "function"
+		or type(SameObjectId) ~= "function" then return false end
+	local ok, avatarId = pcall(avatar.GetId)
+	return ok and SameObjectId(combatant.ID, avatarId)
+end
+
 --------------------------------------------------------------------------------
 -- Type TMainPanelGUI
 Global("TMainPanelGUI", {})
@@ -498,7 +505,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 		or self.ActiveFight == self.DPSMeter.Fight.Previous
 	local isCurrentPlayerFight = isOpponentSummaryFight and activeFight
 		and self.SelectedCombatant and avatar and avatar.IsExist and avatar.IsExist()
-		and self.SelectedCombatant.ID == avatar.GetId()
+		and isAvatarCombatant(self.SelectedCombatant)
 	if not isCurrentPlayerFight then
 		dp.OpponentHeader:Hide()
 		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
@@ -735,7 +742,7 @@ function TUMeterGUI:UpdateOptim()
 	local fight = self:GetActiveFight()
 	local lines = nil
 	-- only for the player, and not while a spell is pointed (its details use the lower part of the panel)
-	if c and fight and not self.Hovering and avatar.IsExist() and c.ID == avatar.GetId() then
+	if c and fight and not self.Hovering and avatar.IsExist() and isAvatarCombatant(c) then
 		local ok, res = pcall(Optim.BuildLines, c, fight.Timer:GetElapsedTime(), self.ActiveMode)
 		if ok then
 			lines = res

@@ -66,12 +66,14 @@ jobs:
           luac -p Scripts/AoUMeterData.lua
           luac -p tools/test_aou_analytics_journal.lua
           luac -p tools/test_aou_critical_model.lua
+          luac -p tools/test_aou_object_id.lua
       - name: Run analytics journal regression tests
         working-directory: tools
         run: |
           lua test_aou_analytics_journal.lua
           lua test_aou_ai.lua
           lua test_aou_critical_model.lua
+          lua test_aou_object_id.lua
       - name: Run unit tests and sample profile
         working-directory: tools
         run: |
