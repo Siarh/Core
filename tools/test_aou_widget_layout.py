@@ -112,7 +112,10 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local slotIndex = i + targetRowOffset", block)
         self.assertIn("targetPanel:SetPosition(22, y + 18)", block)
         self.assertIn("local displayRowCount = #lines + targetRowOffset", block)
-        self.assertIn("Resolve and", block)
+        self.assertNotIn('lines[i][1] == "OptR"', block)
+        optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
+        build = optim[optim.index("function Optim.BuildLines("):optim.index("\nend", optim.index("function Optim.BuildLines("))]
+        self.assertLess(build.index('addT("OptR"'), build.index('addT("OptU"'))
 
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
