@@ -87,6 +87,8 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("params.unitId", events)
         metric_reset = events[events.index("function metricReset()"):events.index("function ReloadPet(params)", events.index("function metricReset()"))]
         self.assertIn("common.UnRegisterEvent(\"EVENT_OBJECT_HEALTH_CHANGED\")", metric_reset)
+        self.assertIn('pcall(common.UnRegisterEventHandler, DPSMeterGUI.TargetHealthHandler,', metric_reset)
+        self.assertIn("DPSMeterGUI.TargetHealthRegistered = false", metric_reset)
         self.assertIn("pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)", metric_reset)
 
     def test_target_row_is_updated_after_child_refresh_and_not_inside_optimizer(self):

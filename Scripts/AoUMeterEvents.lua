@@ -588,9 +588,16 @@ function metricReset()
 	end
 
 	-- metricReset clears all handlers for EVENT_OBJECT_HEALTH_CHANGED before
-	-- rebuilding group filters. Re-arm the one filtered watcher for the current
-	-- target afterward, otherwise its live HP row would stop updating.
+	-- rebuilding group filters. Remove our target filter explicitly, clear its
+	-- state flag, then UpdateTargetInfo will register the current target again.
 	if DPSMeterGUI and type(DPSMeterGUI.UpdateTargetInfo) == "function" then
+		local targetId = DPSMeterGUI.TargetInfoTargetId
+		if targetId and DPSMeterGUI.TargetHealthRegistered and common
+			and type(common.UnRegisterEventHandler) == "function" then
+			pcall(common.UnRegisterEventHandler, DPSMeterGUI.TargetHealthHandler,
+				"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId })
+		end
+		DPSMeterGUI.TargetHealthRegistered = false
 		pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)
 	end
 end
