@@ -625,7 +625,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local displayedRows = 0
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
 		local data = rows[i]
-		local parts = {}
+		local parts = { russian and "Цель:" or "Target:" }
 		local name = targetReadableName(data.name)
 		if name ~= "" then parts[#parts + 1] = name end
 
