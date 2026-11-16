@@ -883,15 +883,18 @@ function TUMeterGUI:Init()
 		end
 	end
 
-	-- Reuse the existing XDB target text row to replace the red Resolve separator.
-	local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
+	-- Reuse the existing XDB target text row in the compact strip occupied by
+	-- the old red Resolve separator. The Ability header keeps its original Y.
+	local targetInfoHeight = 12
+	local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 5
 	self.DetailsPanel.TargetInfoPanel = self.DetailsPanel:GetChildByName("TargetInfoPanel")
 	self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget
 	self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)
+	self.DetailsPanel.TargetInfoPanel:SetHeight(targetInfoHeight)
 	self.DetailsPanel.TargetInfoPanel:Hide()
 
-	-- Move the ability table down by exactly one target-info row.
-	local spellHeaderOffset = targetInfoOffset + 18
+	-- Keep the original Ability table coordinate; target text fills the gap.
+	local spellHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
 	self.DetailsPanel.SpellHeaderPanel:SetPosition(22, spellHeaderOffset)
 
 	-- Spell list

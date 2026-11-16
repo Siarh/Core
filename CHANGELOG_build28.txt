@@ -4,7 +4,7 @@ DPScope build 28 - Allods Sunshine 6.0
 Current target row (supersedes earlier target-row placement notes)
 - Reuse the existing XDB text row immediately below the Global Info / Resolve line and before the Ability table.
 - Hide the Resolve progress bar (red separator) so it is replaced by the target text row.
-- Shift the Ability header and its table down by exactly one 18px row; the optimizer rows are not modified.
+- The target text uses a compact 12px row in the old separator strip; the Ability header and its table keep their original coordinates.
 - Refresh the row on EVENT_AVATAR_TARGET_CHANGED, filtered EVENT_OBJECT_HEALTH_CHANGED for the selected ObjectId, and EVENT_UNIT_LEVEL_CHANGED for that unit.
 - Use object.GetHealthInfo.value / limit for exact HP when available; use valuePercents when only percentage is exposed. Unknown exact HP remains ?/? rather than fabricated values.
 
