@@ -1,0 +1,5 @@
+﻿<header alignx = "center" fontsize="11" outline="1">
+	<rs class="class">
+		<tip_red><r name="Max"/></tip_red>
+	</rs>
+</header>
