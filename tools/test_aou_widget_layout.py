@@ -38,12 +38,12 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Name>TargetInfoPanel</Name>", panel)
         self.assertIn('TextViews/Name.(WidgetTextView).xdb', panel)
         self.assertIn("<Name>TargetInfoTextView</Name>", line)
-        self.assertIn("<Size>12</Size>", line)
+        self.assertIn("<Size>13</Size>", line)
         self.assertIn('<header alignx="left" fontsize="11" outline="1">', style)
 
         init = gui[gui.index("function TUMeterGUI:Init()"):]
-        self.assertIn("local targetInfoHeight = 12", init)
-        self.assertIn("local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 5", init)
+        self.assertIn("local targetInfoHeight = 13", init)
+        self.assertIn("local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 6", init)
         self.assertIn('self.DetailsPanel.TargetInfoPanel = self.DetailsPanel:GetChildByName("TargetInfoPanel")', init)
         self.assertIn('self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget', init)
         self.assertIn("self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)", init)

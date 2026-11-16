@@ -11,7 +11,7 @@
 		<Y>
 			<Align>WIDGET_ALIGN_LOW</Align>
 			<Pos>0</Pos>
-			<Size>12</Size>
+			<Size>13</Size>
 		</Y>
 	</Placement>
 	<TransparentInput>true</TransparentInput>

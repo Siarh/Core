@@ -885,8 +885,8 @@ function TUMeterGUI:Init()
 
 	-- Reuse the existing XDB target text row in the compact strip occupied by
 	-- the old red Resolve separator. The Ability header keeps its original Y.
-	local targetInfoHeight = 12
-	local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 5
+	local targetInfoHeight = 13
+	local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 6
 	self.DetailsPanel.TargetInfoPanel = self.DetailsPanel:GetChildByName("TargetInfoPanel")
 	self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget
 	self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)
