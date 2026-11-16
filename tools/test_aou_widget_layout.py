@@ -47,14 +47,14 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)", init)
         self.assertIn("local spellHeaderOffset = targetInfoOffset + 18", init)
 
-        global_info = gui[gui.index("function TUMeterGUI:DisplayGlobalInfo("):gui.index("\\n--------------------------------------------------------------------------------\\n-- The target strip", gui.index("function TUMeterGUI:DisplayGlobalInfo("))]
+        global_info = gui[gui.index("function TUMeterGUI:DisplayGlobalInfo("):gui.index("\n--------------------------------------------------------------------------------\n-- The target strip", gui.index("function TUMeterGUI:DisplayGlobalInfo("))]
         self.assertIn("GlobalInfoPanel.Bar:Hide()", global_info)
         self.assertIn("if isResolve then", global_info)
 
     def test_target_info_reads_current_object_health_and_keeps_unknown_hp_unknown(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:UpdateTargetInfo()")
-        end = gui.index("\\nend", start)
+        end = gui.index("\nend", start)
         block = gui[start:end]
         self.assertIn("avatar.GetTarget", block)
         self.assertIn("object.IsExist", block)
@@ -74,7 +74,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
         sub_start = gui.index("function TUMeterGUI:UpdateTargetHealthSubscription(")
-        sub_end = gui.index("\\nend", sub_start)
+        sub_end = gui.index("\nend", sub_start)
         sub = gui[sub_start:sub_end]
         self.assertIn('common.RegisterEventHandler(self.TargetHealthHandler,', sub)
         self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }', sub)
@@ -88,11 +88,11 @@ class GlobalInfoLayoutTests(unittest.TestCase):
     def test_target_row_is_updated_after_child_refresh_and_not_inside_optimizer(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:UpdateSpellList()")
-        end = gui.index("\\nend", start)
+        end = gui.index("\nend", start)
         spell_list = gui[start:end]
         self.assertLess(spell_list.index("detailsPanel:HideAllChild()"), spell_list.index("self:UpdateTargetInfo()"))
         optim_start = gui.index("function TUMeterGUI:UpdateOptim()")
-        optim_end = gui.index("\\n--------------------------------------------------------------------------------\\n-- Fill the spell panel", optim_start)
+        optim_end = gui.index("\n--------------------------------------------------------------------------------\n-- Fill the spell panel", optim_start)
         optim = gui[optim_start:optim_end]
         self.assertNotIn("TargetInfoPanel", optim)
         self.assertNotIn("OpponentLineVisible", optim)
