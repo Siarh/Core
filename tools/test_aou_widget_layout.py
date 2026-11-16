@@ -22,30 +22,36 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         self.assertIn('GlobalInfoPanel.Damage:SetVal("Max"', gui)
         self.assertNotIn("OpponentPanel", spell_root)
 
-    def test_resolve_columns_use_existing_monospaced_text_views(self):
+    def test_resolve_bar_keeps_original_global_info_row_layout(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         global_header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        formats = [
+        global_row = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        global_formats = [
             ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.txt",
             ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.txt",
+        ]
+
+        self.assertIn("<Align>WIDGET_ALIGN_HIGH</Align>", global_header)
+        self.assertIn("<Size>160</Size>", global_header)
+        self.assertIn("<Pos>132</Pos>", global_row)
+        self.assertIn("<Size>200</Size>", global_row)
+        self.assertNotIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Min', gui)
+        self.assertNotIn('setDamageColumnHeader(', gui.split("function TUMeterGUI:UpdateSpellList()", 1)[1].split("function TUMeterGUI:UpdateValues()", 1)[0])
+
+        for path in global_formats:
+            with self.subTest(path=path):
+                self.assertNotIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
+
+    def test_spell_detail_and_optimizer_columns_remain_monospaced(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        formats = [
             ROOT / "Widgets/SpellInfoPanel/SpellDetailHeaderPanel/TextViews/DamageStats.txt",
             ROOT / "Widgets/SpellInfoPanel/SpellDetailPanel/TextViews/DamageStats.txt",
         ]
-
         self.assertIn("local DAMAGE_COLUMN_WIDTH = 7", gui)
-        self.assertIn("setDamageColumnHeader(", gui)
-        self.assertIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Min', gui)
         self.assertIn('padDamageColumn(common.FormatFloat(spellInfoData.Min', gui)
         self.assertIn('padDamageColumn(cell(ln[2]))', gui)
         self.assertIn("self.DetailsPanel.SpellDetailsHeaderPanel:GetDesc()", gui)
-        self.assertIn("SpellDetailHeaderTextViewStats", gui)
-        self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", global_header)
-        self.assertIn("<Pos>146</Pos>", global_header)
-        self.assertIn("<Size>200</Size>", global_header)
-        global_row = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Pos>146</Pos>", global_row)
-        self.assertIn("<Size>200</Size>", global_row)
-
         for path in formats:
             with self.subTest(path=path):
                 self.assertIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))

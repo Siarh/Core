@@ -307,20 +307,20 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
-				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
-				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
-				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 			else
-				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(userMods.ToWString("-")))
-				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(averagePool, "%f3K5")))
-				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(userMods.ToWString("-")))
+				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
 			end
 		else
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
-			GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
-			GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
+			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 		end
 	end
 end
@@ -446,11 +446,6 @@ function TUMeterGUI:UpdateSpellList()
 		if self.SelectedCombatant.Data[self.ActiveMode].Amount > 0 then
 			detailsPanel.SpellHeaderPanel:Show()
 			detailsPanel.GlobalInfoHeaderPanel:Show()
-			setDamageColumnHeader(
-				detailsPanel.GlobalInfoHeaderStatsText,
-				GetTextLocalized("Min"),
-				GetTextLocalized("Avg"),
-				GetTextLocalized("Max"))
 		end
 		for GlobalInfoIndex = 1, EXTRATYPES do
 			self:DisplayGlobalInfo(GlobalInfoIndex)
