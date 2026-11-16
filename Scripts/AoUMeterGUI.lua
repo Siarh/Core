@@ -5,7 +5,7 @@
 
 -- Current-fight opponent summary shown in the selected player's details panel.
 local TARGET_INFO_ROWS = 1
-local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7
+local TARGET_INFO_HEIGHT = 0 -- target line is inserted dynamically after the optimizer Resolve row
 
 -- WString conversions can return either UTF-8 or legacy CP1251 text,
 -- depending on the object/API path. Only run UTF-8 through the CP1251 encoder.
@@ -468,30 +468,10 @@ end
 -- Collapse or expand the opponent block to the number of readable rows.
 -- All panels below it move together, and the optimizer uses the new top offset.
 --------------------------------------------------------------------------------
-local function movePanelVertically(panel, delta)
-	if not panel or delta == 0 then return end
-	local x, y = panel:GetPosition()
-	panel:SetPosition(x, y + delta)
-end
-
+-- The target row is inserted by UpdateOptim directly after the OptR (Resolve)
+-- row. It must not reserve space between the global info section and abilities.
 local function updateOpponentSectionLayout(dp, displayedRows)
-	local sectionHeight = displayedRows > 0 and (18 + displayedRows * 18 + 7) or 0
-	local previousHeight = tonumber(dp.OpponentSectionHeight) or TARGET_INFO_HEIGHT
-	local delta = sectionHeight - previousHeight
-	if delta ~= 0 then
-		movePanelVertically(dp.SpellHeaderPanel, delta)
-		movePanelVertically(dp.SpellDetailsHeaderPanel, delta)
-		movePanelVertically(dp.OptHeader, delta)
-		for _, list in ipairs({
-			dp.SpellList, dp.SpellInfoList, dp.SpellMissList, dp.SpellBlockList, dp.OptList
-		}) do
-			for _, panel in ipairs(list or {}) do
-				movePanelVertically(panel, delta)
-			end
-		end
-		if dp.OptSpellTop then dp.OptSpellTop = dp.OptSpellTop + delta end
-	end
-	dp.OpponentSectionHeight = sectionHeight
+	dp.OpponentSectionHeight = 0
 end
 
 --------------------------------------------------------------------------------
@@ -638,10 +618,9 @@ function TUMeterGUI:UpdateOpponentInfo()
 
 	local russian = localization == "rus"
 	local W = targetText
-	dp.OpponentHeader:Show()
-	dp.OpponentHeader.Line:SetVal("Name",
-		W(russian and "Цель | тип / ур. / качество | HP | сопр. в событиях"
-			or "Target | type / lvl / quality | HP | event resist"))
+	-- No separate heading: the full-width target line belongs directly below
+	-- the Resolve stat row in the optimizer block.
+	dp.OpponentHeader:Hide()
 
 	local displayedRows = 0
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
@@ -721,6 +700,9 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptList[i]:Hide()
 	end
 	local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)
+	local targetPanel = dp.OpponentList and dp.OpponentList[1]
+	local hasTargetLine = targetPanel and targetPanel:IsVisible()
+	if targetPanel then targetPanel:Hide() end
 
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
@@ -760,11 +742,28 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
 		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
 
+		local targetInsertIndex = nil
+		if hasTargetLine then
+			for i = 1, #lines do
+				if lines[i] and lines[i][1] == "OptR" then
+					targetInsertIndex = i
+					break
+				end
+			end
+			-- When no Resolve row is available (for example an empty fight),
+			-- keep target info visible after the available optimizer rows.
+			if not targetInsertIndex then targetInsertIndex = #lines end
+		end
+
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
 			local ln = lines[i]
 			if ln then
-				row:SetPosition(22, y + 18 + (i - 1) * 18)
+				local slotIndex = i
+				if targetInsertIndex and i > targetInsertIndex then
+					slotIndex = slotIndex + 1
+				end
+				row:SetPosition(22, y + 18 + (slotIndex - 1) * 18)
 				row:Show()
 				row.Name:SetVal("Name", Optim.Text(ln[1]))
 				row.Count:SetVal("Count", W(""))
@@ -774,7 +773,14 @@ function TUMeterGUI:UpdateOptim()
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
-		height = y + 18 + #lines * 18 + 20
+
+		local displayRowCount = #lines
+		if targetInsertIndex then
+			displayRowCount = displayRowCount + 1
+			targetPanel:SetPosition(22, y + 18 + targetInsertIndex * 18)
+			targetPanel:Show()
+		end
+		height = y + 18 + displayRowCount * 18 + 20
 	end
 
 	if dp.OptHeight ~= height then
@@ -1078,7 +1084,8 @@ function TUMeterGUI:Init()
 		Line = headerWidget:GetChildByName("OpponentLineTextViewName").Widget
 	}, { __index = headerWidget })
 	self.DetailsPanel.OpponentHeader:SetPosition(22, opponentHeaderOffset)
-	self.DetailsPanel.OpponentSectionHeight = TARGET_INFO_HEIGHT
+	self.DetailsPanel.OpponentHeader:Hide()
+	self.DetailsPanel.OpponentSectionHeight = 0
 	local opponentRowsOffset = opponentHeaderOffset + 18
 	for opponentIndex = 1, TARGET_INFO_ROWS do
 		local wtName = "OpponentPanel" .. opponentIndex
@@ -1088,10 +1095,12 @@ function TUMeterGUI:Init()
 		}, { __index = widget })
 		self.DetailsPanel.OpponentList[opponentIndex]:SetPosition(
 			22, opponentRowsOffset + (opponentIndex - 1) * 18)
+		self.DetailsPanel.OpponentList[opponentIndex]:Hide()
 	end
 
-	-- SpellHeader
-	local spellHeaderOffset = opponentRowsOffset + TARGET_INFO_ROWS * 18 + 7
+	-- SpellHeader: no blank target block is reserved here; the target row is
+	-- rendered inside the optimizer immediately after its Resolve row.
+	local spellHeaderOffset = opponentHeaderOffset
 	self.DetailsPanel.SpellHeaderPanel:SetPosition(22, spellHeaderOffset)
 
 	-- Spell list

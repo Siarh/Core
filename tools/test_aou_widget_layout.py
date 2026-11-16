@@ -76,11 +76,11 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
 
         self.assertIn("local TARGET_INFO_ROWS = 1", gui)
-        self.assertIn("local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7", gui)
+        self.assertIn("local TARGET_INFO_HEIGHT = 0 -- target line is inserted dynamically after the optimizer Resolve row", gui)
         init = gui[gui.index("function TUMeterGUI:Init()"):]
         self.assertIn("local opponentHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7", init)
         self.assertIn("local opponentRowsOffset = opponentHeaderOffset + 18", init)
-        self.assertIn("local spellHeaderOffset = opponentRowsOffset + TARGET_INFO_ROWS * 18 + 7", init)
+        self.assertIn("local spellHeaderOffset = opponentHeaderOffset", init)
         self.assertNotIn("UpdateMainOpponentInfo", gui)
         self.assertNotIn("MainOpponentHeaderPanel", gui)
         self.assertNotIn("UpdateMainOpponentInfo", events)
@@ -96,10 +96,20 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         opponent_end = gui.index("\n--------------------------------------------------------------------------------\n-- Stat optimizer block", opponent_start)
         block = gui[opponent_start:opponent_end]
         self.assertIn('W(russian and "Цель не определена" or "Target not identified")', block)
-        self.assertIn("dp.OpponentHeader:Show()", block)
-        empty_branch = block[block.index("if displayedRows == 0 then"):]
-        self.assertIn("dp.OpponentList[1]:Show()", empty_branch)
-        self.assertNotIn("dp.OpponentHeader:Hide()", empty_branch)
+        self.assertIn("dp.OpponentHeader:Hide()", block)
+        self.assertIn("dp.OpponentList[1]:Show()", block)
+        self.assertIn('W(russian and "Цель не определена" or "Target not identified")', block)
+
+    def test_target_row_is_inserted_after_resolve_and_shifts_following_rows(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        start = gui.index("function TUMeterGUI:UpdateOptim()")
+        end = gui.index("\\n--------------------------------------------------------------------------------\\n-- Fill the spell panel", start)
+        block = gui[start:end]
+        self.assertIn('lines[i][1] == "OptR"', block)
+        self.assertIn("if targetInsertIndex and i > targetInsertIndex then", block)
+        self.assertIn("slotIndex = slotIndex + 1", block)
+        self.assertIn("targetPanel:SetPosition(22, y + 18 + targetInsertIndex * 18)", block)
+        self.assertIn("displayRowCount = displayRowCount + 1", block)
 
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
@@ -130,17 +140,12 @@ class GlobalInfoLayoutTests(unittest.TestCase):
     def test_opponent_section_collapses_to_visible_row_count(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         self.assertIn("local function updateOpponentSectionLayout(dp, displayedRows)", gui)
-        self.assertIn("local sectionHeight = displayedRows > 0 and (18 + displayedRows * 18 + 7) or 0", gui)
-        self.assertIn("updateOpponentSectionLayout(dp, displayedRows)", gui)
-        self.assertIn("dp.OpponentSectionHeight = sectionHeight", gui)
-        self.assertIn("dp.OptSpellTop = dp.OptSpellTop + delta", gui)
+        self.assertIn("dp.OpponentSectionHeight = 0", gui)
         self.assertIn("local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)", gui)
-        self.assertIn("movePanelVertically(dp.SpellHeaderPanel, delta)", gui)
-        self.assertIn("movePanelVertically(dp.SpellDetailsHeaderPanel, delta)", gui)
-
-        target_row_height = 18 + 1 * 18 + 7
-        self.assertEqual(target_row_height, 43)
-        self.assertEqual(target_row_height, 18 + 1 * 18 + 7)
+        self.assertIn('lines[i][1] == "OptR"', gui)
+        self.assertIn("if targetInsertIndex and i > targetInsertIndex then", gui)
+        self.assertIn("targetPanel:SetPosition(22, y + 18 + targetInsertIndex * 18)", gui)
+        self.assertIn("displayRowCount = displayRowCount + 1", gui)
 
     def test_resolve_value_is_next_to_the_label_and_bar_is_bounded(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
