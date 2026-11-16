@@ -5,7 +5,7 @@
 
 -- Current-fight opponent summary shown in the selected player's details panel.
 local TARGET_INFO_ROWS = 1
-local TARGET_INFO_HEIGHT = 0 -- target line is inserted dynamically after the optimizer Resolve row
+local TARGET_INFO_HEIGHT = 0 -- target line is placed at the start of the optimizer rows
 
 -- WString conversions can return either UTF-8 or legacy CP1251 text,
 -- depending on the object/API path. Only run UTF-8 through the CP1251 encoder.
@@ -366,7 +366,7 @@ function TUMeterGUI:UpdatePlayerList()
 end
 
 --------------------------------------------------------------------------------
--- The target strip occupies the compact slot between Resolve and the spell list.
+-- The target strip is placed at the start of the optimizer block.
 --------------------------------------------------------------------------------
 --==============================================================================
 --================= SPELL PANEL - Spell list ===================================
@@ -618,8 +618,8 @@ function TUMeterGUI:UpdateOpponentInfo()
 
 	local russian = localization == "rus"
 	local W = targetText
-	-- No separate heading: the full-width target line belongs directly below
-	-- the Resolve stat row in the optimizer block.
+	-- No separate heading: the full-width target line belongs at the start
+	-- of the optimizer block, directly below its title.
 	dp.OpponentHeader:Hide()
 
 	local displayedRows = 0

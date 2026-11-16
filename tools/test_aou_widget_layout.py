@@ -57,7 +57,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         block = gui[start:end]
         self.assertIn("if allowCurrentTargetFallback then", block)
         self.assertLess(block.index("avatar.GetTarget"), block.index("addCandidate(eventTarget)"))
-        self.assertIn("targetQualityLabel(data.qualityName or data.quality)", block)
+        self.assertIn("row.qualityName = tostring(value)", block)
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
         self.assertIn("common.IsWString", gui)
         self.assertIn("userMods.FromWString", gui)
@@ -74,12 +74,12 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local numeric = tonumber(key)", gui)
         self.assertIn("row.qualityName = tostring(value)", block)
 
-    def test_target_row_is_under_resolve_in_details_panel(self):
+    def test_target_row_uses_existing_opponent_panel_below_optimizer_title(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
 
         self.assertIn("local TARGET_INFO_ROWS = 1", gui)
-        self.assertIn("local TARGET_INFO_HEIGHT = 0 -- target line is inserted dynamically after the optimizer Resolve row", gui)
+        self.assertIn("local TARGET_INFO_HEIGHT = 0 -- target line is placed at the start of the optimizer rows", gui)
         init = gui[gui.index("function TUMeterGUI:Init()"):]
         self.assertIn("local opponentHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7", init)
         self.assertIn("local opponentRowsOffset = opponentHeaderOffset + 18", init)
