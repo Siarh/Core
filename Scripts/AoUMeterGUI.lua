@@ -137,6 +137,17 @@ end
 --------------------------------------------------------------------------------
 -- Type TUMeter
 Global("TUMeterGUI", {})
+
+-- Keep the Global Info Min / Avg / Max header cells on the same fixed-width grid as the values.
+function TUMeterGUI:SetGlobalInfoStatsHeader()
+	local details = self.DetailsPanel
+	if not details or not details.GlobalInfoHeaderStatsText then return end
+	setDamageColumnHeader(
+		details.GlobalInfoHeaderStatsText,
+		GetTextLocalized("Min"),
+		GetTextLocalized("Avg"),
+		GetTextLocalized("Max"))
+end
 --------------------------------------------------------------------------------
 function TUMeterGUI:CreateNewObject(dpsMeter)
 	return setmetatable({
@@ -307,20 +318,20 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
-				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
 			else
-				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(userMods.ToWString("-")))
+				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(averagePool, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(userMods.ToWString("-")))
 			end
 		else
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
+			GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
+			GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
 		end
 	end
 end
