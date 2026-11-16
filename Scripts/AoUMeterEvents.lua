@@ -406,9 +406,7 @@ function GlobalReset()
 		globalInfoCaption = Optim.ToWString("Информация...")
 	end
 	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderNameText:SetVal("Name", globalInfoCaption)
-	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Min", GetTextLocalized("Min"))
-	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Avg", GetTextLocalized("Avg"))
-	DPSMeterGUI.DetailsPanel.GlobalInfoHeaderStatsText:SetVal("Max", GetTextLocalized("Max"))
+	DPSMeterGUI:SetGlobalInfoStatsHeader()
 
 	DPSMeterGUI.DetailsPanel.SpellHeaderNameText:SetVal("Name", GetTextLocalized("Ability"))
 	DPSMeterGUI.DetailsPanel.SpellHeaderStatsText:SetVal("DamageDone", GetTextLocalized("Dmg"))
