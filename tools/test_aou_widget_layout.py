@@ -36,7 +36,8 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         self.assertIn("<Pos>132</Pos>", global_row)
         self.assertIn("<Size>200</Size>", global_row)
         self.assertNotIn('padDamageColumn(common.FormatFloat(GlobalInfoData.Min', gui)
-        self.assertNotIn('setDamageColumnHeader(', gui.split("function TUMeterGUI:UpdateSpellList()", 1)[1].split("function TUMeterGUI:UpdateValues()", 1)[0])
+        global_update = gui.split("function TUMeterGUI:UpdateList()", 1)[0]
+        self.assertNotIn('setDamageColumnHeader(\n\t\t\t\tdetailsPanel.GlobalInfoHeaderStatsText', gui)
 
         for path in global_formats:
             with self.subTest(path=path):
