@@ -222,28 +222,6 @@ onMyEvent["EVENT_RAID_MEMBER_STATUS_CHANGED"] = onMyEvent["EVENT_GROUP_CHANGED"]
 onMyEvent["EVENT_RAID_MEMBER_CHANGED"] = onMyEvent["EVENT_GROUP_CHANGED"]
 
 --------------------------------------------------------------------------------
--- Refresh the target row as soon as the selected target changes.
-onMyEvent["EVENT_AVATAR_TARGET_CHANGED"] = function()
-	local gui = DPSMeterGUI
-	if gui and type(gui.UpdateTargetInfo) == "function" then
-		pcall(gui.UpdateTargetInfo, gui)
-		if gui.DetailsPanel and gui.DetailsPanel:IsVisible()
-			and type(gui.UpdateOptim) == "function" then
-			pcall(gui.UpdateOptim, gui)
-		end
-	end
-end
-
--- Unit level notifications are global; only refresh when they belong to the current target.
-onMyEvent["EVENT_UNIT_LEVEL_CHANGED"] = function(params)
-	local gui = DPSMeterGUI
-	local targetId = gui and gui.TargetInfoTargetId or nil
-	if params and targetId and params.unitId and type(SameObjectId) == "function"
-		and SameObjectId(params.unitId, targetId) then
-		pcall(gui.UpdateTargetInfo, gui)
-	end
-end
-
 -- Event: EVENT_SECOND_TIMER
 --------------------------------------------------------------------------------
 onMyEvent["EVENT_SECOND_TIMER"] = function(params)
@@ -267,12 +245,6 @@ onMyEvent["EVENT_SECOND_TIMER"] = function(params)
 		DPSMeterGUI:UpdateValues()
 	elseif mustRegenList then
 		DPSMeterGUI:UpdateValues()
-	elseif DPSMeterGUI.DetailsPanel and DPSMeterGUI.DetailsPanel:IsVisible() then
-		-- Keep the selected target fresh after combat stops, without rebuilding
-		-- the spell list/optimizer on every idle timer tick.
-		if type(DPSMeterGUI.UpdateTargetInfo) == "function" then
-			pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)
-		end
 	end
 
 	if mustRegenList and timerToRefresh == 0 then
@@ -317,7 +289,7 @@ local function CanCollectRawAnalytics(params, personalField, startOnPersonalEven
 		local personal = false
 		if startOnPersonalEvent and params and personalField and avatar and avatar.GetId then
 			local ok, id = pcall(avatar.GetId)
-			personal = ok and SameObjectId(params[personalField], id)
+			personal = ok and params[personalField] == id
 		end
 		-- A raw hit on the local avatar is itself proof of combat. Starting here
 		-- prevents the first incoming strike from being dropped before bCollectData.
@@ -589,20 +561,6 @@ function metricReset()
 	-- These are per-target filter/watch counts (normally one per group member), not handler-registration totals.
 	if AOUA and type(AOUA.OnEventRegistrationStats) == "function" then
 		pcall(AOUA.OnEventRegistrationStats, #paramsBlockDDIN, #paramsBlockHealIN, healthWatchCount)
-	end
-
-	-- metricReset clears all handlers for EVENT_OBJECT_HEALTH_CHANGED before
-	-- rebuilding group filters. Remove our target filter explicitly, clear its
-	-- state flag, then UpdateTargetInfo will register the current target again.
-	if DPSMeterGUI and type(DPSMeterGUI.UpdateTargetInfo) == "function" then
-		local targetId = DPSMeterGUI.TargetInfoTargetId
-		if targetId and DPSMeterGUI.TargetHealthRegistered and common
-			and type(common.UnRegisterEventHandler) == "function" then
-			pcall(common.UnRegisterEventHandler, DPSMeterGUI.TargetHealthHandler,
-				"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId })
-		end
-		DPSMeterGUI.TargetHealthRegistered = false
-		pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)
 	end
 end
 

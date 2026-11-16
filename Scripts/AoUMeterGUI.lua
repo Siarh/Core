@@ -3,86 +3,6 @@
 -- Desc: Graphical user interface
 --------------------------------------------------------------------------------
 
--- WString conversions can return either UTF-8 or legacy CP1251 text,
--- depending on the object/API path. Only run UTF-8 through the CP1251 encoder.
-local function targetIsUtf8(value)
-	local i, n = 1, #value
-	while i <= n do
-		local b = string.byte(value, i)
-		if b <= 127 then
-			i = i + 1
-		elseif b >= 194 and b <= 223 then
-			local b2 = string.byte(value, i + 1)
-			if not b2 or b2 < 128 or b2 > 191 then return false end
-			i = i + 2
-		elseif b >= 224 and b <= 239 then
-			local b2, b3 = string.byte(value, i + 1), string.byte(value, i + 2)
-			if not b2 or not b3 or b2 < 128 or b2 > 191 or b3 < 128 or b3 > 191 then return false end
-			if b == 224 and b2 < 160 then return false end
-			if b == 237 and b2 >= 160 then return false end
-			i = i + 3
-		elseif b >= 240 and b <= 244 then
-			local b2, b3, b4 = string.byte(value, i + 1), string.byte(value, i + 2), string.byte(value, i + 3)
-			if not b2 or not b3 or not b4 or b2 < 128 or b2 > 191
-				or b3 < 128 or b3 > 191 or b4 < 128 or b4 > 191 then return false end
-			if b == 240 and b2 < 144 then return false end
-			if b == 244 and b2 > 143 then return false end
-			i = i + 4
-		else
-			return false
-		end
-	end
-	return true
-end
-
-local function targetText(value)
-	local text = tostring(value or "")
-	if userMods and type(userMods.ToWString) == "function" then
-		if localization == "rus" and Optim and type(Optim.ToWString) == "function"
-			and targetIsUtf8(text) then
-			return Optim.ToWString(text)
-		end
-		return userMods.ToWString(text)
-	end
-	return text
-end
-
-local function targetReadableName(value)
-	if value ~= nil and common and type(common.IsWString) == "function"
-		and userMods and type(userMods.FromWString) == "function" then
-		local okWide, isWide = pcall(common.IsWString, value)
-		if okWide and isWide then
-			local okText, plain = pcall(userMods.FromWString, value)
-			if okText and plain ~= nil then value = plain end
-		end
-	end
-	local name = tostring(value or "")
-	name = string.gsub(name, "^%s*(.-)%s*$", "%1")
-	if name == "" or string.match(name, "^userdata:") or string.match(name, "^table:") then return "" end
-	local visible = string.gsub(name, "[%s%?%p]", "")
-	local _, questionCount = string.gsub(name, "%?", "")
-	if visible == "" or string.find(name, "%?%?") or (questionCount >= 2 and questionCount * 2 >= #name) then return "" end
-	return name
-end
-
-local function targetCompactNumber(value)
-	value = tonumber(value)
-	if not value then return "" end
-	if math.abs(value) >= 1000000 then
-		return string.format("%.1fM", value / 1000000)
-	elseif math.abs(value) >= 1000 then
-		return string.format("%.1fK", value / 1000)
-	end
-	return string.format("%.0f", value)
-end
-
-local function isAvatarCombatant(combatant)
-	if not combatant or not combatant.ID or not avatar or type(avatar.GetId) ~= "function"
-		or type(SameObjectId) ~= "function" then return false end
-	local ok, avatarId = pcall(avatar.GetId)
-	return ok and SameObjectId(combatant.ID, avatarId)
-end
-
 --------------------------------------------------------------------------------
 -- Type TMainPanelGUI
 Global("TMainPanelGUI", {})
@@ -111,12 +31,8 @@ function TDetailsPanelGUI:CreateNewObject(name)
 
 			GlobalInfoHeaderPanel = widget:GetChildByName("GlobalInfoHeaderPanel"),
 			GlobalInfoHeaderNameText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true),
+			GlobalInfoHeaderStatsText = widget.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true),
 			GlobalInfoList = {},     -- Panel extra info list
-			TargetInfoPanel = nil,
-			TargetInfoText = nil,
-			TargetInfoTargetId = nil,
-			TargetHealthRegistered = false,
-			TargetHealthHandler = nil,
 
 			SpellHeaderPanel = widget:GetChildByName("SpellHeaderPanel"), -- Header panel
 			SpellHeaderNameText = widget.Widget:GetChildChecked("SpellHeaderTextViewName", true),
@@ -180,23 +96,6 @@ function TSpellDetailsPanelGUI:CreateNewObjectByDesc(name, desc, owner)
 			Name = widget:GetChildByName("SpellDetailTextViewName").Widget,
 			Count = widget:GetChildByName("SpellDetailTextViewCount").Widget,
 			Damage = widget:GetChildByName("SpellDetailTextViewStats").Widget,
-			Percent = widget:GetChildByName("SpellDetailTextViewPercentage").Widget,
-		}, { __index = widget })
-end
-
---------------------------------------------------------------------------------
--- Type TGlobalInfoPanelGUI
-Global("TGlobalInfoPanelGUI", {})
---------------------------------------------------------------------------------
-function TGlobalInfoPanelGUI:CreateNewObjectByDesc(name, desc, owner)
-	local widget = TWidget:CreateNewObjectByDesc(name, desc, owner)
-	return setmetatable({
-			Bar = widget:GetChildByName("SpellDetailBar"),
-			Name = widget:GetChildByName("SpellDetailTextViewName").Widget,
-			Count = widget:GetChildByName("SpellDetailTextViewCount").Widget,
-			Min = widget:GetChildByName("SpellDetailTextViewMin").Widget,
-			Avg = widget:GetChildByName("SpellDetailTextViewAvg").Widget,
-			Max = widget:GetChildByName("SpellDetailTextViewMax").Widget,
 			Percent = widget:GetChildByName("SpellDetailTextViewPercentage").Widget,
 		}, { __index = widget })
 end
@@ -323,9 +222,6 @@ function TUMeterGUI:UpdatePlayerList()
 	end
 end
 
---------------------------------------------------------------------------------
--- The target strip is placed at the start of the optimizer block.
---------------------------------------------------------------------------------
 --==============================================================================
 --================= SPELL PANEL - Spell list ===================================
 --==============================================================================
@@ -358,14 +254,8 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 	-- Keep the Resolve row visible before its first combat sample.
 	if hasSamples or (isResolve and currentResolve ~= nil) then
 		GlobalInfoPanel:Show()
-		if isResolve then
-			-- The old red Resolve bar is replaced by the live target-info row below.
-			GlobalInfoPanel.Bar:Hide()
-		else
-			GlobalInfoPanel.Bar:Show()
-			GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
-			GlobalInfoPanel.Bar:SetPosition(0, 15)
-		end
+		GlobalInfoPanel.Bar:SetColor(HitTypeColors[GlobalInfoData.ID])
+		GlobalInfoPanel.Bar:SetPosition(0, 15)
 
 		local averagePool = hasSamples and GlobalInfoData.Avg or currentResolve
 		local currentPool = currentResolve ~= nil and currentResolve or averagePool
@@ -376,29 +266,27 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 		local barWidth = math.min(panelWidth, 356)
 		local percentage = isResolve and currentPool or GlobalInfoData.Percentage
 		percentage = math.max(0, math.min(100, tonumber(percentage) or 0))
-		if not isResolve then
-			GlobalInfoPanel.Bar:SetWidth(barWidth * (percentage / 100))
-		end
+		GlobalInfoPanel.Bar:SetWidth(barWidth * (percentage / 100))
 
 		GlobalInfoPanel.Name:SetVal("Name", TitleGlobalInfoType[GlobalInfoData.ID])
 		if isResolve then
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
-				GlobalInfoPanel.Min:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-				GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-				GlobalInfoPanel.Max:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 			else
-				GlobalInfoPanel.Min:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
-				GlobalInfoPanel.Max:SetVal("Max", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
 			end
 		else
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Min:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-			GlobalInfoPanel.Avg:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-			GlobalInfoPanel.Max:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
 		end
 	end
 end
@@ -431,129 +319,24 @@ function TUMeterGUI:DisplaySpell(spellIndex)
 	end
 end
 --------------------------------------------------------------------------------
---------------------------------------------------------------------------------
--- Watch only the currently selected target's health changes.
--- RegisterEventHandler's filter activates the personal event for this ObjectId.
---------------------------------------------------------------------------------
-function TUMeterGUI:UpdateTargetHealthSubscription(targetId)
-	local oldId = self.TargetInfoTargetId
-	local sameTarget = oldId and targetId and type(SameObjectId) == "function"
-		and SameObjectId(oldId, targetId)
-	if sameTarget and self.TargetHealthRegistered then return end
-
-	if oldId and self.TargetHealthRegistered and common
-		and type(common.UnRegisterEventHandler) == "function" then
-		pcall(common.UnRegisterEventHandler, self.TargetHealthHandler,
-			"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId }, true)
-	end
-
-	self.TargetInfoTargetId = targetId
-	self.TargetHealthRegistered = false
-	if targetId and self.TargetHealthHandler and common
-		and type(common.RegisterEventHandler) == "function" then
-		local ok = pcall(common.RegisterEventHandler, self.TargetHealthHandler,
-			"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }, true)
-		self.TargetHealthRegistered = ok
-	end
-end
-
---------------------------------------------------------------------------------
--- Draw the live target in the row which replaces the red Resolve separator.
--- Exact HP is displayed only when the API supplies both value and limit.
---------------------------------------------------------------------------------
-function TUMeterGUI:UpdateTargetInfo()
-	local dp = self.DetailsPanel
-	local panel = dp and dp.TargetInfoPanel
-	local text = dp and dp.TargetInfoText
-	if not panel or not text then return end
-
-	local targetId = nil
-	if avatar and type(avatar.GetTarget) == "function" then
-		local ok, id = pcall(avatar.GetTarget)
-		if ok then targetId = id end
-	end
-
-	local exists = false
-	if targetId ~= nil and object and type(object.IsExist) == "function" then
-		local ok, value = pcall(object.IsExist, targetId)
-		exists = ok and value == true
-	end
-
-	if not exists then
-		self:UpdateTargetHealthSubscription(nil)
-		text:SetVal("Name", targetText(localization == "rus" and "Цель не выбрана" or "No target selected"))
-		return
-	end
-
-	self:UpdateTargetHealthSubscription(targetId)
-
-	local targetName = "?"
-	if object and type(object.GetName) == "function" then
-		local ok, value = pcall(object.GetName, targetId)
-		if ok then
-			local readable = targetReadableName(value)
-			if readable ~= "" then targetName = readable end
-		end
-	end
-
-	local levelText = "?"
-	if unit and type(unit.GetLevel) == "function" then
-		local ok, value = pcall(unit.GetLevel, targetId)
-		if ok and tonumber(value) then
-			levelText = string.format("%.0f", tonumber(value))
-		end
-	end
-
-	local currentText, maximumText, percentText = "?", "?", "?"
-	if object and type(object.GetHealthInfo) == "function" then
-		local ok, health = pcall(object.GetHealthInfo, targetId)
-		if ok and type(health) == "table" then
-			local current = tonumber(health.value)
-			local maximum = tonumber(health.limit)
-			local percent = tonumber(health.valuePercents or health.percents)
-
-			if current ~= nil and maximum ~= nil and maximum > 0 then
-				currentText = string.format("%.0f", math.floor(current + 0.5))
-				maximumText = string.format("%.0f", math.floor(maximum + 0.5))
-				if percent == nil then
-					percent = math.floor(current / maximum * 100 + 0.5)
-				end
-			end
-
-			if percent ~= nil then
-				percent = math.max(0, math.min(100, math.floor(percent + 0.5)))
-				percentText = string.format("%.0f", percent)
-			end
-		end
-	end
-
-	local line = string.format("%s | ур. %s | HP %s/%s (%s%%)",
-		targetName, tostring(levelText), currentText, maximumText, percentText)
-	text:SetVal("Name", targetText(line))
-end
-
-
---------------------------------------------------------------------------------
 -- Stat optimizer block (bottom of the details panel, only for the player)
 --------------------------------------------------------------------------------
 function TUMeterGUI:UpdateOptim()
 	local dp = self.DetailsPanel
 	if not dp.OptList then return end
 
-	-- Clear optimizer rows; target text has its own independent row in this block.
+	-- hide the block and restore the original panel height
 	dp.OptHeader:Hide()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
-	local targetPanel = dp.TargetInfoPanel
-	if targetPanel then targetPanel:Hide() end
 	local height = 826
 
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
 	local lines = nil
-	-- Optimizer calculations remain limited to the local player and are hidden during spell hover.
-	if c and fight and not self.Hovering and avatar.IsExist() and isAvatarCombatant(c) then
+	-- only for the player, and not while a spell is pointed (its details use the lower part of the panel)
+	if c and fight and not self.Hovering and avatar.IsExist() and c.ID == avatar.GetId() then
 		local ok, res = pcall(Optim.BuildLines, c, fight.Timer:GetElapsedTime(), self.ActiveMode)
 		if ok then
 			lines = res
@@ -563,45 +346,35 @@ function TUMeterGUI:UpdateOptim()
 		end
 	end
 
-	-- The target row is still useful when the optimizer is disabled or BuildLines returns nil.
-	local hasTargetLine = targetPanel ~= nil and not self.Hovering
-	if lines or hasTargetLine then
+	if lines then
+		-- put the block right after the last displayed spell
 		local n = 0
-		if c and type(c.GetSpellByIndex) == "function" then
-			for i = 1, MAXSPELLS do
-				if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
-			end
+		for i = 1, MAXSPELLS do
+			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
 		end
 		local gap = Settings.OptGap or 36
 		local y = dp.OptSpellTop + n * 18 + gap
 
+		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
+		-- Russian UTF-8 generated at runtime. Use the optimizer's safe converter.
 		local W = Optim.ToWString or userMods.ToWString
+		-- a cell starting with "@" is the key of a localized text
 		local function cell(v)
 			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
 			return W(v)
 		end
-
-		-- Analyzer heading stays first. Target info is the next row, before all stat rows.
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
 		dp.OptHeaderName:SetVal("Name", Optim.Text("OptTitle"))
-		dp.OptHeaderMin:SetVal("Min", Optim.Text("OptNow"))
-		dp.OptHeaderAvg:SetVal("Avg", Optim.Text("OptOpt"))
-		dp.OptHeaderMax:SetVal("Max", Optim.Text("OptDiff"))
+		dp.OptHeaderStats:SetVal("Min", Optim.Text("OptNow"))
+		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
+		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
 
-		local targetRowOffset = 0
-		if hasTargetLine then
-			targetPanel:SetPosition(22, y + 18)
-			targetPanel:Show()
-			targetRowOffset = 1
-		end
-
-		local lineCount = lines and table.getn(lines) or 0
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
-			local ln = lines and lines[i] or nil
+			local ln = lines[i]
 			if ln then
-				row:SetPosition(22, y + 18 + (i - 1 + targetRowOffset) * 18)
+				row:SetPosition(22, y + 18 + (i - 1) * 18)
 				row:Show()
 				row.Name:SetVal("Name", Optim.Text(ln[1]))
 				row.Count:SetVal("Count", W(""))
@@ -611,7 +384,7 @@ function TUMeterGUI:UpdateOptim()
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
-		height = y + 18 + (lineCount + targetRowOffset) * 18 + 20
+		height = y + 18 + #lines * 18 + 20
 	end
 
 	if dp.OptHeight ~= height then
@@ -629,7 +402,6 @@ function TUMeterGUI:UpdateSpellList()
 	detailsPanel:HideAllChild()
 
 	detailsPanel.CloseButton:Show()
-	self:UpdateTargetInfo()
 
 	if self.SelectedCombatant then
 		self.SelectedCombatant:CalculateSpell(self:GetActiveFight().Timer:GetElapsedTime(), self.ActiveMode) -- Important.
@@ -647,6 +419,8 @@ function TUMeterGUI:UpdateSpellList()
 		for spellIndex = 1, MAXSPELLS do
 			self:DisplaySpell(spellIndex)
 		end
+		self:UpdateOptim()
+
 		-- UpdateSpellList hides every child before refreshing the spell bars.
 		-- If the pointer remains over a spell, the pointing reaction does not fire
 		-- again; restore that spell's Normal/Critical/Glancing rows explicitly.
@@ -655,9 +429,6 @@ function TUMeterGUI:UpdateSpellList()
 			self:UpdateSpellDetailsList(self.HoveringSpellIndex)
 		end
 	end
-
-	-- Update the analyzer/target slot even when no combatant row is selected.
-	self:UpdateOptim()
 end
 
 --------------------------------------------------------------------------------
@@ -902,25 +673,11 @@ function TUMeterGUI:Init()
 	local GlobalInfoOffset = GlobalInfoHeaderOffset + 18
 	for extraIndex = 1, EXTRATYPES do
 		local wtName = "GlobalInfoPanel" .. extraIndex
-		self.DetailsPanel.GlobalInfoList[extraIndex] = TGlobalInfoPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
+		self.DetailsPanel.GlobalInfoList[extraIndex] = TSpellDetailsPanelGUI:CreateNewObjectByDesc(wtName, globalInfoPanelDesc, self.DetailsPanel)
 		self.DetailsPanel.GlobalInfoList[extraIndex]:SetPosition(22, GlobalInfoOffset + (extraIndex-1) * 18)
-		if extraIndex == enumGlobalInfo.Determination then
-			self.DetailsPanel.GlobalInfoList[extraIndex].Bar:Hide()
-		end
 	end
 
-	-- Clone the XDB target text row as a dynamic analyzer child. Creating it
-	-- after the GlobalInfo rows keeps it above those rows in the draw order.
-	local targetTemplate = self.DetailsPanel:GetChildByName("TargetInfoPanel")
-	local targetPanelDesc = targetTemplate:GetDesc()
-	targetTemplate:Destroy()
-	self.DetailsPanel.TargetInfoPanel = TWidget:CreateNewObjectByDesc(
-		"TargetInfoAnalyzerPanel", targetPanelDesc, self.DetailsPanel)
-	self.DetailsPanel.TargetInfoPanel:SetHeight(18)
-	self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget
-	self.DetailsPanel.TargetInfoPanel:Hide()
-
-	-- Keep the original Ability table coordinate.
+	-- SpellHeader
 	local spellHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
 	self.DetailsPanel.SpellHeaderPanel:SetPosition(22, spellHeaderOffset)
 
@@ -968,9 +725,7 @@ function TUMeterGUI:Init()
 	self.DetailsPanel.OptHeader = TWidget:CreateNewObjectByDesc("OptHeaderPanel", optHeaderDesc, self.DetailsPanel)
 	self.DetailsPanel.OptHeader:SetPosition(22, optOffset)
 	self.DetailsPanel.OptHeaderName = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true)
-	self.DetailsPanel.OptHeaderMin = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewMin", true)
-	self.DetailsPanel.OptHeaderAvg = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewAvg", true)
-	self.DetailsPanel.OptHeaderMax = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewMax", true)
+	self.DetailsPanel.OptHeaderStats = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true)
 	self.DetailsPanel.OptList = {}
 	for optIndex = 1, OPTROWS do
 		local wtName = "OptPanel" .. optIndex
@@ -980,12 +735,4 @@ function TUMeterGUI:Init()
 	end
 	self.DetailsPanel.OptSpellTop = spellListOffset -- the block is moved right after the last spell in UpdateOptim
 
-	self.TargetHealthHandler = function(params)
-		local watchedId = self.TargetInfoTargetId
-		if watchedId and params and params.id and type(SameObjectId) == "function"
-			and SameObjectId(params.id, watchedId) then
-			self:UpdateTargetInfo()
-		end
-	end
-	self:UpdateTargetInfo()
 end
