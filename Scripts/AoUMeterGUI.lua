@@ -521,9 +521,9 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
-	-- During an active current fight, a live selected target may fill missing
-	-- metadata before the first event profile is available. Archived fights
-	-- must only use their own event-derived snapshot.
+	-- The Current tab may show the currently selected live unit even before
+	-- combat starts. Previous is strictly historical and never reads today's target.
+	local allowCurrentTargetFallback = self.ActiveFight == self.DPSMeter.Fight.Current
 	local hasReadableRow = false
 	for i = 1, #rows do
 		local data = rows[i]
@@ -542,7 +542,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 			break
 		end
 	end
-	if not hasReadableRow and liveCurrentFight then
+	if not hasReadableRow and allowCurrentTargetFallback then
 		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
 		local eventTarget = ev and ev.target or nil
 		local candidates = {}

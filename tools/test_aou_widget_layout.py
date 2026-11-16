@@ -132,9 +132,20 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         data = (ROOT / "Scripts/AoUMeterData.lua").read_text(encoding="utf-8")
         self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", gui)
         self.assertIn("activeFight.AOUATargetRows", gui)
-        self.assertIn("if not hasReadableRow and liveCurrentFight then", gui)
+        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", gui)
         self.assertIn("currentFight.AOUATargetRows = rows", data)
         self.assertIn("if currentFight then currentFight.AOUATargetRows = nil end", data)
+
+    def test_current_target_is_visible_before_combat_starts(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
+        end = gui.index("\nend", start)
+        block = gui[start:end]
+        self.assertIn("local allowCurrentTargetFallback = self.ActiveFight == self.DPSMeter.Fight.Current", block)
+        self.assertIn("local liveCurrentFight = self.ActiveFight == self.DPSMeter.Fight.Current", block)
+        self.assertIn("and self.DPSMeter.bCollectData == true", block)
+        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", block)
+        self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", block)
 
     def test_targettest_reports_outgoing_event_pipeline(self):
         optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
