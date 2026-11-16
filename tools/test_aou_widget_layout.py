@@ -40,8 +40,11 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         self.assertIn("self.DetailsPanel.SpellDetailsHeaderPanel:GetDesc()", gui)
         self.assertIn("SpellDetailHeaderTextViewStats", gui)
         self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", global_header)
-        self.assertIn("<Pos>132</Pos>", global_header)
+        self.assertIn("<Pos>146</Pos>", global_header)
         self.assertIn("<Size>200</Size>", global_header)
+        global_row = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        self.assertIn("<Pos>146</Pos>", global_row)
+        self.assertIn("<Size>200</Size>", global_row)
 
         for path in formats:
             with self.subTest(path=path):
