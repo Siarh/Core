@@ -113,7 +113,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local targetRowOffset = hasTargetLine and 1 or 0", block)
         self.assertIn("local slotIndex = i + targetRowOffset", block)
         self.assertIn("targetPanel:SetPosition(22, y + 18)", block)
-        self.assertIn("local displayRowCount = #lines + targetRowOffset", block)
+        self.assertIn("local displayRowCount = (lines and #lines or 0) + targetRowOffset", block)
         self.assertNotIn('lines[i][1] == "OptR"', block)
         self.assertIn("local hasTargetLine = dp.OpponentLineVisible == true", block)
         self.assertIn("if lines or hasTargetLine then", block)
@@ -157,7 +157,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local targetRowOffset = hasTargetLine and 1 or 0", gui)
         self.assertIn("local slotIndex = i + targetRowOffset", gui)
         self.assertIn("targetPanel:SetPosition(22, y + 18)", gui)
-        self.assertIn("local displayRowCount = #lines + targetRowOffset", gui)
+        self.assertIn("local displayRowCount = (lines and #lines or 0) + targetRowOffset", gui)
 
     def test_resolve_value_is_next_to_the_label_and_bar_is_bounded(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
