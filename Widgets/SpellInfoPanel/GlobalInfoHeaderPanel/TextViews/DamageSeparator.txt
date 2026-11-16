@@ -1,5 +1,0 @@
-﻿<header alignx = "center" fontsize="11" outline="1">
-	<rs class="class">
-		<Neutral>|</Neutral>
-	</rs>
-</header>
