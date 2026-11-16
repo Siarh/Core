@@ -797,8 +797,6 @@ function TUMeterGUI:UpdateSpellList()
 		for spellIndex = 1, MAXSPELLS do
 			self:DisplaySpell(spellIndex)
 		end
-		self:UpdateOptim()
-
 		-- UpdateSpellList hides every child before refreshing the spell bars.
 		-- If the pointer remains over a spell, the pointing reaction does not fire
 		-- again; restore that spell's Normal/Critical/Glancing rows explicitly.
@@ -807,6 +805,9 @@ function TUMeterGUI:UpdateSpellList()
 			self:UpdateSpellDetailsList(self.HoveringSpellIndex)
 		end
 	end
+
+	-- Update the analyzer/target slot even when no combatant row is selected.
+	self:UpdateOptim()
 end
 
 --------------------------------------------------------------------------------
