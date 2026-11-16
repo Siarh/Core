@@ -4,7 +4,7 @@
 --------------------------------------------------------------------------------
 
 -- Current-fight opponent summary shown in the selected player's details panel.
-local TARGET_INFO_ROWS = 4
+local TARGET_INFO_ROWS = 1
 local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7
 
 -- WString conversions can return either UTF-8 or legacy CP1251 text,
@@ -370,191 +370,6 @@ end
 -- secondary spell-details window. The section stays present while idle and
 -- refreshes independently of whether the details window is open.
 --------------------------------------------------------------------------------
-function TUMeterGUI:UpdateMainOpponentInfo()
-	local main = self.MainPanel
-	if not main or not main.MainOpponentHeader or not main.MainOpponentList then return end
-
-	local activeFight = self:GetActiveFight()
-	local rows = {}
-	if self.ActiveFight == self.DPSMeter.Fight.Previous then
-		rows = activeFight and activeFight.AOUATargetRows or {}
-	elseif self.ActiveFight == self.DPSMeter.Fight.Current then
-		local stored = activeFight and activeFight.AOUATargetRows or nil
-		if stored and #stored > 0 and not self.DPSMeter.bCollectData then
-			rows = stored
-		elseif AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
-			local ok, result = pcall(AOUA.GetTargetDisplayRows, TARGET_INFO_ROWS)
-			if ok and type(result) == "table" then rows = result end
-		end
-	end
-
-	local function hasReadableData(row)
-		if not row then return false end
-		if targetReadableName(row.name) ~= "" or targetKindLabel(row.kind) ~= nil
-			or tonumber(row.level) or targetQualityLabel(row.qualityName or row.quality) ~= ""
-			or (tonumber(row.hpCurrent) and tonumber(row.hpLimit) and tonumber(row.hpLimit) > 0)
-			or tonumber(row.hpBeforePercent) or tonumber(row.hpCurrentPercent) then return true end
-		for _, school in ipairs(row.resistSchools or {}) do
-			if targetSchoolLabel(school.element) ~= "" and targetCompactNumber(school.amount) ~= "" then
-				return true
-			end
-		end
-		return false
-	end
-
-	local hasReadableRow = false
-	for i = 1, #rows do
-		if hasReadableData(rows[i]) then hasReadableRow = true; break end
-	end
-
-	-- Before the first attack (or on a quiet target dummy), still show the
-	-- selected live unit. Do not mix a stale event target into a new target.
-	if not hasReadableRow and self.ActiveFight == self.DPSMeter.Fight.Current then
-		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
-		local candidates = {}
-		local function addCandidate(id)
-			if id == nil then return end
-			if object and type(object.IsExist) == "function" then
-				local ok, exists = pcall(object.IsExist, id)
-				if not ok or exists ~= true then return end
-			end
-			if object and type(object.IsUnit) == "function" then
-				local ok, isUnit = pcall(object.IsUnit, id)
-				if not ok or isUnit ~= true then return end
-			end
-			for i = 1, #candidates do
-				if type(SameObjectId) == "function" and SameObjectId(candidates[i], id) then return end
-				if candidates[i] == id then return end
-			end
-			candidates[#candidates + 1] = id
-		end
-		if ev and ev.target then addCandidate(ev.target) end
-		if avatar and type(avatar.GetTarget) == "function" then
-			local ok, id = pcall(avatar.GetTarget)
-			if ok then addCandidate(id) end
-		end
-		if #candidates == 0 and Optim and type(Optim.GetTarget) == "function" then
-			local ok, id = pcall(Optim.GetTarget)
-			if ok then addCandidate(id) end
-		end
-
-		for i = 1, #candidates do
-			local id = candidates[i]
-			local row = { name = "", kind = "unknown", resistSchools = {} }
-			if object and type(object.GetName) == "function" then
-				local ok, value = pcall(object.GetName, id)
-				if ok then row.name = value or "" end
-			end
-			if object and type(object.IsMob) == "function" then
-				local ok, value = pcall(object.IsMob, id)
-				if ok and value == true then row.kind = "mob" end
-			end
-			if row.kind == "unknown" and object and type(object.IsPlayer) == "function" then
-				local ok, value = pcall(object.IsPlayer, id)
-				if ok and value == true then row.kind = "player" end
-			end
-			if row.kind == "unknown" and object and type(object.IsUnit) == "function" then
-				local ok, value = pcall(object.IsUnit, id)
-				if ok and value == true then row.kind = "npc" end
-			end
-			if unit and type(unit.GetLevel) == "function" then
-				local ok, value = pcall(unit.GetLevel, id)
-				if ok and tonumber(value) then row.level = tonumber(value) end
-			end
-			if unit and type(unit.GetQuality) == "function" then
-				local ok, value = pcall(unit.GetQuality, id)
-				if ok and tonumber(value) then row.quality, row.qualityName = tonumber(value), tostring(value) end
-			end
-			if Optim and type(Optim.GetHealth) == "function" then
-				local ok, current, maximum, real = pcall(Optim.GetHealth, id)
-				if ok and real == true and tonumber(current) and tonumber(maximum) and maximum > 0 then
-					row.hpCurrent, row.hpLimit = tonumber(current), tonumber(maximum)
-					row.hpPercent = row.hpCurrent / row.hpLimit * 100
-				elseif ok and real == false and tonumber(current) and current >= 0 and current <= 100 then
-					row.hpCurrentPercent = tonumber(current)
-				end
-			end
-			if targetReadableName(row.name) ~= "" or row.kind ~= "unknown" or tonumber(row.level)
-				or targetQualityLabel(row.qualityName or row.quality) ~= ""
-				or row.hpCurrent or row.hpCurrentPercent then
-				rows = { row }
-				break
-			end
-		end
-	end
-
-	-- The title is permanent so users can locate the section even before a
-	-- target has been selected.
-	local W = targetText
-	main.MainOpponentHeader:Show()
-	main.MainOpponentHeader.Line:SetVal("Name", W(localization == "rus" and "Противники" or "Opponents"))
-
-	local displayedRows = 0
-	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
-		local data = rows[i]
-		if hasReadableData(data) then
-			local parts = {}
-			local name = targetReadableName(data.name)
-			if name ~= "" then parts[#parts + 1] = name end
-			local descriptors = {}
-			local kind = targetKindLabel(data.kind)
-			if kind and kind ~= "" then descriptors[#descriptors + 1] = kind end
-			if tonumber(data.level) then descriptors[#descriptors + 1] = (localization == "rus" and "ур. " or "Lv ") .. tostring(math.floor(data.level)) end
-			local quality = targetQualityLabel(data.qualityName or data.quality)
-			if quality ~= "" then descriptors[#descriptors + 1] = quality end
-			if #descriptors > 0 then parts[#parts + 1] = table.concat(descriptors, ", ") end
-
-			local hpText = ""
-			if tonumber(data.hpCurrent) and tonumber(data.hpLimit) and data.hpLimit > 0 then
-				hpText = "HP " .. targetCompactNumber(data.hpCurrent) .. "/" .. targetCompactNumber(data.hpLimit)
-					.. " (" .. string.format("%.0f", tonumber(data.hpPercent) or 0) .. "%)"
-			elseif tonumber(data.hpBeforePercent) then
-				hpText = (localization == "rus" and "HP до удара ~" or "HP pre-hit ~")
-					.. string.format("%.0f", tonumber(data.hpBeforePercent)) .. "%"
-			elseif tonumber(data.hpCurrentPercent) then
-				hpText = "HP ~" .. string.format("%.0f", tonumber(data.hpCurrentPercent)) .. "%"
-			end
-			if hpText ~= "" then parts[#parts + 1] = hpText end
-
-			local schoolParts = {}
-			for j = 1, math.min(1, #(data.resistSchools or {})) do
-				local school = data.resistSchools[j]
-				local schoolName, amount = targetSchoolLabel(school.element), targetCompactNumber(school.amount)
-				if schoolName ~= "" and amount ~= "" then schoolParts[#schoolParts + 1] = schoolName .. " " .. amount end
-			end
-			if #schoolParts > 0 then parts[#parts + 1] = (localization == "rus" and "сопр. " or "resist ") .. table.concat(schoolParts, ", ") end
-
-			local line = table.concat(parts, " | ")
-			if line ~= "" then
-				displayedRows = displayedRows + 1
-				local panel = main.MainOpponentList[displayedRows]
-				panel:Show()
-				panel.Line:SetVal("Name", W(line))
-			end
-		end
-	end
-	if displayedRows == 0 then
-		displayedRows = 1
-		main.MainOpponentList[1]:Show()
-		main.MainOpponentList[1].Line:SetVal("Name",
-			W(localization == "rus" and "Цель не определена" or "Target not identified"))
-	end
-	for i = displayedRows + 1, TARGET_INFO_ROWS do main.MainOpponentList[i]:Hide() end
-
-	local combatantCount = activeFight and math.min(activeFight:GetCombatantCount(), Settings.MaxCombatants) or 0
-	local baseHeight = 47 + (combatantCount + 1) * 24
-	local headerY = baseHeight + 5
-	local width = math.max(220, (tonumber(main:GetWidth()) or 294) - 40)
-	main.MainOpponentHeader:SetPosition(20, headerY)
-	main.MainOpponentHeader:SetWidth(width)
-	for i = 1, TARGET_INFO_ROWS do
-		local panel = main.MainOpponentList[i]
-		panel:SetPosition(20, headerY + 18 + (i - 1) * 18)
-		panel:SetWidth(width)
-	end
-	main:SetHeight(headerY + 18 + displayedRows * 18 + 8)
-end
-
 --==============================================================================
 --================= SPELL PANEL - Spell list ===================================
 --==============================================================================
@@ -694,8 +509,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local isOpponentSummaryFight = self.ActiveFight == self.DPSMeter.Fight.Current
 		or self.ActiveFight == self.DPSMeter.Fight.Previous
 	local isCurrentPlayerFight = isOpponentSummaryFight and activeFight
-		and self.SelectedCombatant and avatar and avatar.IsExist and avatar.IsExist()
-		and isAvatarCombatant(self.SelectedCombatant)
+		and avatar and avatar.IsExist and avatar.IsExist()
 	if not isCurrentPlayerFight then
 		dp.OpponentHeader:Hide()
 		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
@@ -718,28 +532,12 @@ function TUMeterGUI:UpdateOpponentInfo()
 		if ok then rows, total = result or {}, tonumber(count) or 0 end
 	end
 
-	-- The Current tab may show the currently selected live unit even before
-	-- combat starts. Previous is strictly historical and never reads today's target.
+	-- Current prefers the selected live target while collecting (or when no
+	-- fight snapshot exists). A completed fight with a saved snapshot remains
+	-- historical; Previous never reads today's target.
 	local allowCurrentTargetFallback = self.ActiveFight == self.DPSMeter.Fight.Current
-	local hasReadableRow = false
-	for i = 1, #rows do
-		local data = rows[i]
-		local hasResistance = false
-		for _, school in ipairs(data.resistSchools or {}) do
-			if targetSchoolLabel(school.element) ~= "" and targetCompactNumber(school.amount) ~= "" then
-				hasResistance = true
-				break
-			end
-		end
-		if targetReadableName(data.name) ~= "" or targetKindLabel(data.kind) ~= nil
-			or tonumber(data.level) or targetQualityLabel(data.qualityName or data.quality) ~= ""
-			or (tonumber(data.hpCurrent) and tonumber(data.hpLimit) and tonumber(data.hpLimit) > 0)
-			or tonumber(data.hpBeforePercent) or tonumber(data.hpCurrentPercent) or hasResistance then
-			hasReadableRow = true
-			break
-		end
-	end
-	if not hasReadableRow and allowCurrentTargetFallback then
+		and (liveCurrentFight or not (storedRows and #storedRows > 0))
+	if allowCurrentTargetFallback then
 		local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil
 		local eventTarget = ev and ev.target or nil
 		local candidates = {}
@@ -760,19 +558,19 @@ function TUMeterGUI:UpdateOpponentInfo()
 		local function addCandidate(id)
 			if not isUsableUnitTarget(id) then return end
 			for i = 1, #candidates do
-				if candidates[i] == id then return end
+				if (type(SameObjectId) == "function" and SameObjectId(candidates[i], id))
+					or candidates[i] == id then return end
 			end
 			candidates[#candidates + 1] = id
 		end
 
-		-- A hit event's target can already have despawned (e.g. a killed mob).
-		-- Keep it only while the ObjectId is still a live unit, then fall back
-		-- to the player's current selected target.
-		addCandidate(eventTarget)
+		-- Prefer the target currently selected in-game. Use the most recent hit
+		-- target only when no live selected target is available.
 		if avatar and type(avatar.GetTarget) == "function" then
 			local okTarget, currentTarget = pcall(avatar.GetTarget)
 			if okTarget then addCandidate(currentTarget) end
 		end
+		addCandidate(eventTarget)
 		if #candidates == 0 and Optim and type(Optim.GetTarget) == "function" then
 			local okTarget, currentTarget = pcall(Optim.GetTarget)
 			if okTarget then addCandidate(currentTarget) end
@@ -820,7 +618,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 
 			-- Resistance belongs to the hit-event target only; never attach an
 			-- old hit's mitigation to a different currently selected unit.
-			if targetId == eventTarget then
+			if targetId == eventTarget or (type(SameObjectId) == "function" and SameObjectId(targetId, eventTarget)) then
 				local element = targetSchoolLabel(ev and (ev.sysSubElement or ev.subElement or ev.element))
 				local resisted = targetCompactNumber(ev and ev.resist)
 				if element ~= "" and resisted ~= "" and tonumber(ev and ev.resist) and tonumber(ev.resist) > 0 then
@@ -840,19 +638,12 @@ function TUMeterGUI:UpdateOpponentInfo()
 		end
 	end
 
-	if total <= 0 or #rows == 0 then
-		dp.OpponentHeader:Hide()
-		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
-		updateOpponentSectionLayout(dp, 0)
-		return
-	end
-
 	local russian = localization == "rus"
 	local W = targetText
 	dp.OpponentHeader:Show()
 	dp.OpponentHeader.Line:SetVal("Name",
-		W(russian and "Цель | тип / ур. / качество | HP | сопротивление в событиях"
-			or "Target | type / lvl / quality | HP | resisted damage by school"))
+		W(russian and "Цель | тип / ур. / качество | HP | сопр. в событиях"
+			or "Target | type / lvl / quality | HP | event resist"))
 
 	local displayedRows = 0
 	for i = 1, math.min(#rows, TARGET_INFO_ROWS) do
@@ -909,8 +700,13 @@ function TUMeterGUI:UpdateOpponentInfo()
 			panel.Line:SetVal("Name", W(line))
 		end
 	end
+	if displayedRows == 0 then
+		displayedRows = 1
+		dp.OpponentList[1]:Show()
+		dp.OpponentList[1].Line:SetVal("Name",
+			W(russian and "Цель не определена" or "Target not identified"))
+	end
 	for i = displayedRows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
-	if displayedRows == 0 then dp.OpponentHeader:Hide() end
 	updateOpponentSectionLayout(dp, displayedRows)
 end
 
@@ -998,6 +794,7 @@ function TUMeterGUI:UpdateSpellList()
 	detailsPanel:HideAllChild()
 
 	detailsPanel.CloseButton:Show()
+	self:UpdateOpponentInfo()
 
 	if self.SelectedCombatant then
 		self.SelectedCombatant:CalculateSpell(self:GetActiveFight().Timer:GetElapsedTime(), self.ActiveMode) -- Important.
@@ -1012,7 +809,6 @@ function TUMeterGUI:UpdateSpellList()
 		for GlobalInfoIndex = 1, EXTRATYPES do
 			self:DisplayGlobalInfo(GlobalInfoIndex)
 		end
-		self:UpdateOpponentInfo()
 		for spellIndex = 1, MAXSPELLS do
 			self:DisplaySpell(spellIndex)
 		end
@@ -1041,7 +837,6 @@ function TUMeterGUI:UpdateValues()
 		end
 	end
 	self:UpdatePlayerList()
-	self:UpdateMainOpponentInfo()
 	self:UpdateSpellList()
 end
 
@@ -1256,21 +1051,6 @@ function TUMeterGUI:Init()
 		local wtName = "PlayerPanel" .. playerIndex
 		self.MainPanel.PlayerList[playerIndex] = TPlayerPanelGUI:CreateNewObjectByDesc(wtName, playerPanelDesc, self.MainPanel)
 		self.MainPanel.PlayerList[playerIndex]:SetPosition(20, 47 + playerIndex * 24)
-	end
-
-	-- A permanent target section in the primary DPScope window.
-	local mainOpponentHeaderWidget = TWidget:CreateNewObjectByDesc(
-		"MainOpponentHeaderPanel", opponentPanelDesc, self.MainPanel)
-	self.MainPanel.MainOpponentHeader = setmetatable({
-		Line = mainOpponentHeaderWidget:GetChildByName("OpponentLineTextViewName").Widget
-	}, { __index = mainOpponentHeaderWidget })
-	self.MainPanel.MainOpponentList = {}
-	for opponentIndex = 1, TARGET_INFO_ROWS do
-		local wtName = "MainOpponentPanel" .. opponentIndex
-		local widget = TWidget:CreateNewObjectByDesc(wtName, opponentPanelDesc, self.MainPanel)
-		self.MainPanel.MainOpponentList[opponentIndex] = setmetatable({
-			Line = widget:GetChildByName("OpponentLineTextViewName").Widget
-		}, { __index = widget })
 	end
 
 	-------------------------------------------------------------------------------

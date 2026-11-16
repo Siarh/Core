@@ -52,8 +52,8 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
         end = gui.index("\nend", start)
         block = gui[start:end]
-        self.assertIn("local hasReadableRow = false", block)
-        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", block)
+        self.assertIn("if allowCurrentTargetFallback then", block)
+        self.assertLess(block.index("avatar.GetTarget"), block.index("addCandidate(eventTarget)"))
         self.assertIn("targetQualityLabel(data.qualityName or data.quality)", block)
         self.assertIn("local ev = Optim and Optim.LastEv and Optim.LastEv[enumMode.Dps] or nil", block)
         self.assertIn("common.IsWString", gui)
@@ -71,25 +71,30 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local numeric = tonumber(key)", gui)
         self.assertIn("row.qualityName = tostring(value)", block)
 
-    def test_primary_window_has_a_persistent_opponent_section(self):
+    def test_target_row_is_under_resolve_in_details_panel(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
-        start = gui.index("function TUMeterGUI:UpdateMainOpponentInfo()")
-        end = gui.index("\nend", start)
-        block = gui[start:end]
 
-        self.assertIn('"Противники"', block)
-        self.assertIn('"Цель не определена"', block)
-        self.assertIn("MainOpponentHeader:Show()", block)
-        self.assertIn("activeFight.AOUATargetRows", block)
-        self.assertIn("AOUA.GetTargetDisplayRows", block)
-        self.assertIn("avatar.GetTarget", block)
-        update_values = gui[gui.index("function TUMeterGUI:UpdateValues()"):]
-        self.assertIn("self:UpdateMainOpponentInfo()", update_values)
-        self.assertIn("DPSMeterGUI.UpdateMainOpponentInfo", events)
+        self.assertIn("local TARGET_INFO_ROWS = 1", gui)
+        self.assertIn("local TARGET_INFO_HEIGHT = 18 + TARGET_INFO_ROWS * 18 + 7", gui)
         init = gui[gui.index("function TUMeterGUI:Init()"):]
-        self.assertIn('"MainOpponentHeaderPanel"', init)
-        self.assertIn('"MainOpponentPanel" .. opponentIndex', init)
+        self.assertIn("local opponentHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7", init)
+        self.assertIn("local opponentRowsOffset = opponentHeaderOffset + 18", init)
+        self.assertIn("local spellHeaderOffset = opponentRowsOffset + TARGET_INFO_ROWS * 18 + 7", init)
+        self.assertNotIn("UpdateMainOpponentInfo", gui)
+        self.assertNotIn("MainOpponentHeaderPanel", gui)
+        self.assertNotIn("UpdateMainOpponentInfo", events)
+
+        spell_list = gui[gui.index("function TUMeterGUI:UpdateSpellList()"):]
+        target_call = spell_list.index("self:UpdateOpponentInfo()")
+        selected_gate = spell_list.index("if self.SelectedCombatant then")
+        self.assertLess(target_call, selected_gate)
+
+        opponent = gui[gui.index("function TUMeterGUI:UpdateOpponentInfo()"):]
+        block = opponent[:opponent.index("\nend")]
+        self.assertIn('W(russian and "Цель не определена" or "Target not identified")', block)
+        self.assertIn("dp.OpponentHeader:Show()", block)
+        self.assertNotIn("dp.OpponentHeader:Hide()", block)
 
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
@@ -121,19 +126,16 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         self.assertIn("local function updateOpponentSectionLayout(dp, displayedRows)", gui)
         self.assertIn("local sectionHeight = displayedRows > 0 and (18 + displayedRows * 18 + 7) or 0", gui)
-        self.assertIn("updateOpponentSectionLayout(dp, 0)", gui)
+        self.assertIn("updateOpponentSectionLayout(dp, displayedRows)", gui)
         self.assertIn("dp.OpponentSectionHeight = sectionHeight", gui)
         self.assertIn("dp.OptSpellTop = dp.OptSpellTop + delta", gui)
         self.assertIn("local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)", gui)
         self.assertIn("movePanelVertically(dp.SpellHeaderPanel, delta)", gui)
         self.assertIn("movePanelVertically(dp.SpellDetailsHeaderPanel, delta)", gui)
 
-        full_height = 18 + 4 * 18 + 7
-        self.assertEqual(full_height, 97)
-        self.assertEqual(18 + 1 * 18 + 7, 43)
-        self.assertEqual(18 + 2 * 18 + 7, 61)
-        self.assertEqual(18 + 3 * 18 + 7, 79)
-        self.assertEqual(0, 0)
+        target_row_height = 18 + 1 * 18 + 7
+        self.assertEqual(target_row_height, 43)
+        self.assertEqual(target_row_height, 18 + 1 * 18 + 7)
 
     def test_resolve_value_is_next_to_the_label_and_bar_is_bounded(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
@@ -168,7 +170,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         data = (ROOT / "Scripts/AoUMeterData.lua").read_text(encoding="utf-8")
         self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", gui)
         self.assertIn("activeFight.AOUATargetRows", gui)
-        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", gui)
+        self.assertIn("if allowCurrentTargetFallback then", gui)
         self.assertIn("currentFight.AOUATargetRows = rows", data)
         self.assertIn("if currentFight then currentFight.AOUATargetRows = nil end", data)
 
@@ -180,7 +182,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local allowCurrentTargetFallback = self.ActiveFight == self.DPSMeter.Fight.Current", block)
         self.assertIn("local liveCurrentFight = self.ActiveFight == self.DPSMeter.Fight.Current", block)
         self.assertIn("and self.DPSMeter.bCollectData == true", block)
-        self.assertIn("if not hasReadableRow and allowCurrentTargetFallback then", block)
+        self.assertIn("if allowCurrentTargetFallback then", block)
         self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", block)
 
     def test_targettest_reports_outgoing_event_pipeline(self):

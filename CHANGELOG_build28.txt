@@ -238,3 +238,10 @@ Primary-window target section:
 - When no target is currently identified, the section remains visible and explicitly says "Цель не определена" rather than disappearing.
 - Shows target name, category, level/quality, available HP snapshot or labelled estimate, and the first available event-resistance school sample.
 - Added GUI regression checks for primary-window rendering and idle refresh.
+
+
+Target strip placement correction from in-game screenshot:
+- Removed the separate target block from the primary DPS list; target details now occupy the marked slot in the selected-character details window, immediately below the Resolve row and above the ability list.
+- Reduced the reserved target area from four rows to one compact row (43 layout units), which moves the ability header directly below the target strip.
+- The target row is refreshed whenever the details window is updated, even when no combatant is selected in the DPS list; it remains present with an explicit "Цель не определена" status when there is no readable live/historical target.
+- During an active fight, the currently selected in-game target takes priority over the previous hit target. After combat stops, a saved fight snapshot takes priority; Previous remains historical.
