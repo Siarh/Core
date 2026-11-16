@@ -245,3 +245,5 @@ Target strip placement correction from in-game screenshot:
 - Reduced the reserved target area from four rows to one compact row (43 layout units), which moves the ability header directly below the target strip.
 - The target row is refreshed whenever the details window is updated, even when no combatant is selected in the DPS list; it remains present with an explicit "Цель не определена" status when there is no readable live/historical target.
 - During an active fight, the currently selected in-game target takes priority over the previous hit target. After combat stops, a saved fight snapshot takes priority; Previous remains historical.
+
+- While out of combat, the target strip in the visible details window refreshes once per second independently of spell/optimizer recalculation, so selecting a target after a fight does not require reopening the details panel.

@@ -84,6 +84,8 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertNotIn("UpdateMainOpponentInfo", gui)
         self.assertNotIn("MainOpponentHeaderPanel", gui)
         self.assertNotIn("UpdateMainOpponentInfo", events)
+        self.assertIn("DPSMeterGUI.UpdateOpponentInfo", events)
+        self.assertIn("DPSMeterGUI.DetailsPanel:IsVisible()", events)
 
         spell_list = gui[gui.index("function TUMeterGUI:UpdateSpellList()"):]
         target_call = spell_list.index("self:UpdateOpponentInfo()")
@@ -110,7 +112,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("SameObjectId(Combatant.ID, member.id)", data)
         self.assertIn("SameObjectId(ID, C.ID)", data)
         self.assertIn("local function isAvatarCombatant(combatant)", gui)
-        self.assertIn("and isAvatarCombatant(self.SelectedCombatant)", gui)
+        self.assertNotIn("isAvatarCombatant(self.SelectedCombatant)", gui)
         self.assertIn("isAvatarCombatant(c)", gui)
         self.assertIn("SameObjectId(params[personalField], id)", events)
 

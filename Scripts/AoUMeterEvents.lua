@@ -245,6 +245,12 @@ onMyEvent["EVENT_SECOND_TIMER"] = function(params)
 		DPSMeterGUI:UpdateValues()
 	elseif mustRegenList then
 		DPSMeterGUI:UpdateValues()
+	elseif DPSMeterGUI.DetailsPanel and DPSMeterGUI.DetailsPanel:IsVisible() then
+		-- Keep the selected target fresh after combat stops, without rebuilding
+		-- the spell list/optimizer on every idle timer tick.
+		if type(DPSMeterGUI.UpdateOpponentInfo) == "function" then
+			pcall(DPSMeterGUI.UpdateOpponentInfo, DPSMeterGUI)
+		end
 	end
 
 	if mustRegenList and timerToRefresh == 0 then

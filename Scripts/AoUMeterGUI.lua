@@ -366,9 +366,7 @@ function TUMeterGUI:UpdatePlayerList()
 end
 
 --------------------------------------------------------------------------------
--- Keep target information in the primary DPScope window, not only in the
--- secondary spell-details window. The section stays present while idle and
--- refreshes independently of whether the details window is open.
+-- The target strip occupies the compact slot between Resolve and the spell list.
 --------------------------------------------------------------------------------
 --==============================================================================
 --================= SPELL PANEL - Spell list ===================================
