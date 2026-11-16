@@ -53,7 +53,7 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
     def test_global_info_header_uses_short_russian_caption_at_runtime(self):
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
         locale = (ROOT / "Locales/rus/GlobalInfo.txt").read_bytes().decode("utf-8-sig")
-        count_header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/Count.txt").read_text(encoding="utf-8-sig")
+        count_header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/Count.txt").read_text(encoding="utf-16")
         self.assertIn('globalInfoCaption = Optim.ToWString("Информация...")', events)
         self.assertIn('local globalInfoCaption = GetTextLocalized("GlobalInfo")', events)
         self.assertEqual(locale, "Глобальная информационная")
