@@ -47,7 +47,8 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)", init)
         self.assertIn("local spellHeaderOffset = targetInfoOffset + 18", init)
 
-        global_info = gui[gui.index("function TUMeterGUI:DisplayGlobalInfo("):gui.index("\n--------------------------------------------------------------------------------\n-- The target strip", gui.index("function TUMeterGUI:DisplayGlobalInfo("))]
+        global_start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
+        global_info = gui[global_start:gui.index("\nend", global_start)]
         self.assertIn("GlobalInfoPanel.Bar:Hide()", global_info)
         self.assertIn("if isResolve then", global_info)
 
@@ -76,9 +77,9 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         sub_start = gui.index("function TUMeterGUI:UpdateTargetHealthSubscription(")
         sub_end = gui.index("\nend", sub_start)
         sub = gui[sub_start:sub_end]
-        self.assertIn('common.RegisterEventHandler(self.TargetHealthHandler,', sub)
+        self.assertIn('pcall(common.RegisterEventHandler, self.TargetHealthHandler,', sub)
         self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }', sub)
-        self.assertIn('common.UnRegisterEventHandler(self.TargetHealthHandler,', sub)
+        self.assertIn('pcall(common.UnRegisterEventHandler, self.TargetHealthHandler,', sub)
         self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId }', sub)
         self.assertIn("SameObjectId(params.id, watchedId)", gui)
         self.assertIn('onMyEvent["EVENT_AVATAR_TARGET_CHANGED"]', events)
