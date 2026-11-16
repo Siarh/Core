@@ -100,6 +100,40 @@ function TSpellDetailsPanelGUI:CreateNewObjectByDesc(name, desc, owner)
 		}, { __index = widget })
 end
 
+-- Keep Min / Avg / Max in fixed-width columns inside one existing TextView.
+-- AllodsConsole is monospaced, so padding is based on displayed characters.
+local DAMAGE_COLUMN_WIDTH = 7
+local function padDamageColumn(value)
+	if value == nil or not userMods
+		or type(userMods.FromWString) ~= "function"
+		or type(userMods.ToWString) ~= "function" then
+		return value
+	end
+
+	local ok, text = pcall(userMods.FromWString, value)
+	if not ok or type(text) ~= "string" then return value end
+
+	-- Count UTF-8 codepoints or single-byte Russian/English characters.
+	local length = 0
+	for i = 1, #text do
+		local byte = string.byte(text, i)
+		if byte < 128 or byte >= 192 then length = length + 1 end
+	end
+
+	local padding = DAMAGE_COLUMN_WIDTH - length
+	if padding <= 0 then return value end
+	local okWide, padded = pcall(userMods.ToWString, text .. string.rep(" ", padding))
+	if okWide and padded ~= nil then return padded end
+	return value
+end
+
+local function setDamageColumnHeader(textView, minValue, avgValue, maxValue)
+	if not textView then return end
+	textView:SetVal("Min", padDamageColumn(minValue))
+	textView:SetVal("Avg", padDamageColumn(avgValue))
+	textView:SetVal("Max", padDamageColumn(maxValue))
+end
+
 --------------------------------------------------------------------------------
 -- Type TUMeter
 Global("TUMeterGUI", {})
@@ -273,20 +307,20 @@ function TUMeterGUI:DisplayGlobalInfo(GlobalInfoIndex)
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))
 			if hasSamples then
-				GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
 			else
-				GlobalInfoPanel.Damage:SetVal("Min", userMods.ToWString("-"))
-				GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(averagePool, "%f3K5"))
-				GlobalInfoPanel.Damage:SetVal("Max", userMods.ToWString("-"))
+				GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(userMods.ToWString("-")))
+				GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(averagePool, "%f3K5")))
+				GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(userMods.ToWString("-")))
 			end
 		else
 			GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(GlobalInfoData.Count, "%d"))
 			GlobalInfoPanel.Percent:SetVal("Percentage", common.FormatInt(GlobalInfoData.Percentage, "%d"))
-			GlobalInfoPanel.Damage:SetVal("Min", common.FormatFloat(GlobalInfoData.Min, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Avg", common.FormatFloat(GlobalInfoData.Avg, "%f3K5"))
-			GlobalInfoPanel.Damage:SetVal("Max", common.FormatFloat(GlobalInfoData.Max, "%f3K5"))
+			GlobalInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(GlobalInfoData.Min, "%f3K5")))
+			GlobalInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(GlobalInfoData.Avg, "%f3K5")))
+			GlobalInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(GlobalInfoData.Max, "%f3K5")))
 		end
 	end
 end
@@ -366,9 +400,9 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
 		dp.OptHeaderName:SetVal("Name", Optim.Text("OptTitle"))
-		dp.OptHeaderStats:SetVal("Min", Optim.Text("OptNow"))
-		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
-		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
+		dp.OptHeaderStats:SetVal("Min", padDamageColumn(Optim.Text("OptNow")))
+		dp.OptHeaderStats:SetVal("Avg", padDamageColumn(Optim.Text("OptOpt")))
+		dp.OptHeaderStats:SetVal("Max", padDamageColumn(Optim.Text("OptDiff")))
 
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
@@ -378,9 +412,9 @@ function TUMeterGUI:UpdateOptim()
 				row:Show()
 				row.Name:SetVal("Name", Optim.Text(ln[1]))
 				row.Count:SetVal("Count", W(""))
-				row.Damage:SetVal("Min", cell(ln[2]))
-				row.Damage:SetVal("Avg", cell(ln[3]))
-				row.Damage:SetVal("Max", cell(ln[4]))
+				row.Damage:SetVal("Min", padDamageColumn(cell(ln[2])))
+				row.Damage:SetVal("Avg", padDamageColumn(cell(ln[3])))
+				row.Damage:SetVal("Max", padDamageColumn(cell(ln[4])))
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
@@ -412,6 +446,11 @@ function TUMeterGUI:UpdateSpellList()
 		if self.SelectedCombatant.Data[self.ActiveMode].Amount > 0 then
 			detailsPanel.SpellHeaderPanel:Show()
 			detailsPanel.GlobalInfoHeaderPanel:Show()
+			setDamageColumnHeader(
+				detailsPanel.GlobalInfoHeaderStatsText,
+				GetTextLocalized("Min"),
+				GetTextLocalized("Avg"),
+				GetTextLocalized("Max"))
 		end
 		for GlobalInfoIndex = 1, EXTRATYPES do
 			self:DisplayGlobalInfo(GlobalInfoIndex)
@@ -425,6 +464,11 @@ function TUMeterGUI:UpdateSpellList()
 		-- If the pointer remains over a spell, the pointing reaction does not fire
 		-- again; restore that spell's Normal/Critical/Glancing rows explicitly.
 		if self.Hovering and self.HoveringSpellIndex then
+			setDamageColumnHeader(
+				detailsPanel.SpellDetailsHeaderStatsText,
+				GetTextLocalized("Min"),
+				GetTextLocalized("Avg"),
+				GetTextLocalized("Max"))
 			detailsPanel.SpellDetailsHeaderPanel:Show()
 			self:UpdateSpellDetailsList(self.HoveringSpellIndex)
 		end
@@ -463,9 +507,9 @@ function TUMeterGUI:DisplaySpellDetails(spellInfoData, spellInfoPanel, title)
 
 		spellInfoPanel.Name:SetVal("Name", title[spellInfoData.ID])
 		spellInfoPanel.Count:SetVal("Count", common.FormatInt(spellInfoData.Count , "%d"))
-		spellInfoPanel.Damage:SetVal("Min", common.FormatFloat(spellInfoData.Min , "%f3K5"))
-		spellInfoPanel.Damage:SetVal("Avg", common.FormatFloat(spellInfoData.Avg , "%f3K5"))
-		spellInfoPanel.Damage:SetVal("Max", common.FormatFloat(spellInfoData.Max , "%f3K5"))
+		spellInfoPanel.Damage:SetVal("Min", padDamageColumn(common.FormatFloat(spellInfoData.Min , "%f3K5")))
+		spellInfoPanel.Damage:SetVal("Avg", padDamageColumn(common.FormatFloat(spellInfoData.Avg , "%f3K5")))
+		spellInfoPanel.Damage:SetVal("Max", padDamageColumn(common.FormatFloat(spellInfoData.Max , "%f3K5")))
 		spellInfoPanel.Percent:SetVal("Percentage", common.FormatInt(spellInfoData.Percentage , "%d"))
 	end
 end
@@ -721,11 +765,13 @@ function TUMeterGUI:Init()
 
 	-- Stat optimizer block (below the block list): header + rows
 	local optOffset = blockDamageOffset + BLOCKDMGTYPES * 18 + 14
-	local optHeaderDesc = self.DetailsPanel.GlobalInfoHeaderPanel:GetDesc()
+	-- Optimizer rows use the 396px SpellDetailPanel layout. Clone its matching
+	-- header, not the narrower GlobalInfo header used for Resolve.
+	local optHeaderDesc = self.DetailsPanel.SpellDetailsHeaderPanel:GetDesc()
 	self.DetailsPanel.OptHeader = TWidget:CreateNewObjectByDesc("OptHeaderPanel", optHeaderDesc, self.DetailsPanel)
 	self.DetailsPanel.OptHeader:SetPosition(22, optOffset)
-	self.DetailsPanel.OptHeaderName = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewName", true)
-	self.DetailsPanel.OptHeaderStats = self.DetailsPanel.OptHeader.Widget:GetChildChecked("GlobalInfoHeaderTextViewStats", true)
+	self.DetailsPanel.OptHeaderName = self.DetailsPanel.OptHeader.Widget:GetChildChecked("SpellDetailHeaderTextViewName", true)
+	self.DetailsPanel.OptHeaderStats = self.DetailsPanel.OptHeader.Widget:GetChildChecked("SpellDetailHeaderTextViewStats", true)
 	self.DetailsPanel.OptList = {}
 	for optIndex = 1, OPTROWS do
 		local wtName = "OptPanel" .. optIndex
