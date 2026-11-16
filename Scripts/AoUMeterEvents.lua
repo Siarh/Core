@@ -227,6 +227,10 @@ onMyEvent["EVENT_AVATAR_TARGET_CHANGED"] = function()
 	local gui = DPSMeterGUI
 	if gui and type(gui.UpdateTargetInfo) == "function" then
 		pcall(gui.UpdateTargetInfo, gui)
+		if gui.DetailsPanel and gui.DetailsPanel:IsVisible()
+			and type(gui.UpdateOptim) == "function" then
+			pcall(gui.UpdateOptim, gui)
+		end
 	end
 end
 

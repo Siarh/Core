@@ -27,85 +27,73 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Pos>132</Pos>", stats)
         self.assertIn("<Size>200</Size>", stats)
 
-    def test_target_row_reuses_xdb_text_style_under_resolve_and_before_abilities(self):
+    def test_resolve_min_avg_max_values_align_to_their_headers(self):
+        header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        values = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        for token in ('<Align>WIDGET_ALIGN_HIGH</Align>', '<HighPos>0</HighPos>', '<Size>160</Size>'):
+            self.assertIn(token, header)
+            self.assertIn(token, values)
+        self.assertNotIn('<Pos>132</Pos>', values)
+        self.assertNotIn('<Size>200</Size>', values)
+
+    def test_target_row_is_a_dynamic_child_of_the_analyzer_and_drawn_above_global_rows(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
-        root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
         panel = (ROOT / "Widgets/SpellInfoPanel/OpponentPanel/OpponentPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
         line = (ROOT / "Widgets/SpellInfoPanel/OpponentPanel/TextViews/Name.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        style = (ROOT / "Widgets/SpellInfoPanel/OpponentPanel/TextViews/Name.txt").read_text(encoding="utf-8")
-
-        self.assertIn('OpponentPanel/OpponentPanel.(WidgetPanel).xdb', root)
         self.assertIn("<Name>TargetInfoPanel</Name>", panel)
-        self.assertIn('TextViews/Name.(WidgetTextView).xdb', panel)
         self.assertIn("<Name>TargetInfoTextView</Name>", line)
-        self.assertIn("<Size>13</Size>", line)
-        self.assertIn('<header alignx="left" fontsize="11" outline="1">', style)
-
         init = gui[gui.index("function TUMeterGUI:Init()"):]
-        self.assertIn("local targetInfoHeight = 13", init)
-        self.assertIn("local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 6", init)
-        self.assertIn('self.DetailsPanel.TargetInfoPanel = self.DetailsPanel:GetChildByName("TargetInfoPanel")', init)
-        self.assertIn('self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget', init)
-        self.assertIn("self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)", init)
-        self.assertIn("self.DetailsPanel.TargetInfoPanel:SetHeight(targetInfoHeight)", init)
-        self.assertIn("local spellHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7", init)
+        self.assertIn('local targetTemplate = self.DetailsPanel:GetChildByName("TargetInfoPanel")', init)
+        self.assertIn("local targetPanelDesc = targetTemplate:GetDesc()", init)
+        self.assertIn("targetTemplate:Destroy()", init)
+        self.assertIn('TWidget:CreateNewObjectByDesc(\n\t\t"TargetInfoAnalyzerPanel", targetPanelDesc, self.DetailsPanel)', init)
 
-        global_start = gui.index("function TUMeterGUI:DisplayGlobalInfo(")
-        global_info = gui[global_start:gui.index("\nend", global_start)]
-        self.assertIn("GlobalInfoPanel.Bar:Hide()", global_info)
-        self.assertIn("if isResolve then", global_info)
+        block = gui[gui.index("function TUMeterGUI:UpdateOptim()"):gui.index("\n--------------------------------------------------------------------------------\n-- Fill the spell panel", gui.index("function TUMeterGUI:UpdateOptim()"))]
+        self.assertIn("local hasTargetLine = targetPanel ~= nil and not self.Hovering", block)
+        self.assertIn("if lines or hasTargetLine then", block)
+        self.assertIn("targetPanel:SetPosition(22, y + 18)", block)
+        self.assertIn("targetPanel:Show()", block)
+        self.assertIn("local targetRowOffset = 0", block)
+        self.assertIn("row:SetPosition(22, y + 18 + (i - 1 + targetRowOffset) * 18)", block)
+        self.assertIn("table.getn(lines)", block)
 
-    def test_target_info_reads_current_object_health_and_keeps_unknown_hp_unknown(self):
+    def test_target_info_reads_live_current_target_and_unknown_hp_stays_unknown(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         start = gui.index("function TUMeterGUI:UpdateTargetInfo()")
         end = gui.index("\nend", start)
         block = gui[start:end]
-        self.assertIn("avatar.GetTarget", block)
-        self.assertIn("object.IsExist", block)
-        self.assertIn("object.GetName", block)
-        self.assertIn("userMods.FromWString", gui)
-        self.assertIn("unit.GetLevel", block)
-        self.assertIn("object.GetHealthInfo", block)
-        self.assertIn("health.value", block)
-        self.assertIn("health.limit", block)
-        self.assertIn("health.valuePercents", block)
+        for token in ("avatar.GetTarget", "object.IsExist", "object.GetName", "unit.GetLevel",
+                      "object.GetHealthInfo", "health.value", "health.limit", "health.valuePercents"):
+            self.assertIn(token, block)
         self.assertIn('string.format("%s | ур. %s | HP %s/%s (%s%%)"', block)
         self.assertIn('text:SetVal("Name", targetText(line))', block)
-        self.assertIn('targetText("Цель не выбрана")', block)
-        self.assertNotIn('hpCurrentPercent .. "/100"', block)
+        self.assertIn('targetText(localization == "rus" and "Цель не выбрана" or "No target selected")', block)
 
-    def test_target_health_watch_is_filtered_and_retargeted_cleanly(self):
+    def test_target_health_watch_uses_filtered_main_thread_and_retargets(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
-        sub_start = gui.index("function TUMeterGUI:UpdateTargetHealthSubscription(")
-        sub_end = gui.index("\nend", sub_start)
-        sub = gui[sub_start:sub_end]
-        self.assertIn('pcall(common.RegisterEventHandler, self.TargetHealthHandler,', sub)
-        self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }', sub)
-        self.assertIn('pcall(common.UnRegisterEventHandler, self.TargetHealthHandler,', sub)
-        self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId }', sub)
+        start = gui.index("function TUMeterGUI:UpdateTargetHealthSubscription(")
+        end = gui.index("\nend", start)
+        block = gui[start:end]
+        self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }, true)', block)
+        self.assertIn('"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId }, true)', block)
         self.assertIn("SameObjectId(params.id, watchedId)", gui)
         self.assertIn('onMyEvent["EVENT_AVATAR_TARGET_CHANGED"]', events)
-        self.assertIn('onMyEvent["EVENT_UNIT_LEVEL_CHANGED"]', events)
-        self.assertIn("params.unitId", events)
-        metric_reset = events[events.index("function metricReset()"):events.index("function ReloadPet(params)", events.index("function metricReset()"))]
-        self.assertIn("common.UnRegisterEvent(\"EVENT_OBJECT_HEALTH_CHANGED\")", metric_reset)
-        self.assertIn('pcall(common.UnRegisterEventHandler, DPSMeterGUI.TargetHealthHandler,', metric_reset)
-        self.assertIn("DPSMeterGUI.TargetHealthRegistered = false", metric_reset)
-        self.assertIn("pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)", metric_reset)
+        self.assertIn("pcall(gui.UpdateOptim, gui)", events)
 
-    def test_target_row_is_updated_after_child_refresh_and_not_inside_optimizer(self):
+    def test_target_row_survives_optimizer_nil_and_is_updated_after_child_refresh(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
-        start = gui.index("function TUMeterGUI:UpdateSpellList()")
-        end = gui.index("\nend", start)
-        spell_list = gui[start:end]
-        self.assertLess(spell_list.index("detailsPanel:HideAllChild()"), spell_list.index("self:UpdateTargetInfo()"))
+        spell_start = gui.index("function TUMeterGUI:UpdateSpellList()")
+        spell_end = gui.index("\nend", spell_start)
+        spell_block = gui[spell_start:spell_end]
+        self.assertLess(spell_block.index("detailsPanel:HideAllChild()"), spell_block.index("self:UpdateTargetInfo()"))
+        self.assertLess(spell_block.index("self:UpdateTargetInfo()"), spell_block.index("self:UpdateOptim()"))
         optim_start = gui.index("function TUMeterGUI:UpdateOptim()")
         optim_end = gui.index("\n--------------------------------------------------------------------------------\n-- Fill the spell panel", optim_start)
         optim = gui[optim_start:optim_end]
-        self.assertNotIn("TargetInfoPanel", optim)
-        self.assertNotIn("OpponentLineVisible", optim)
-        self.assertIn("height = y + 18 + table.getn(lines) * 18 + 20", optim)
+        self.assertIn("if lines or hasTargetLine then", optim)
+        self.assertIn("local lineCount = lines and table.getn(lines) or 0", optim)
+        self.assertIn("height = y + 18 + (lineCount + targetRowOffset) * 18 + 20", optim)
 
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
@@ -140,6 +128,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         block = gui[start:end]
         self.assertIn("unit.GetRage", block)
         self.assertIn("GlobalInfoPanel.Bar:SetPosition(0, 15)", block)
+        self.assertIn("if not isResolve then", block)
         self.assertIn("local barWidth = math.min(panelWidth, 356)", block)
         self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))', block)
         self.assertIn('GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))', block)

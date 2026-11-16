@@ -428,7 +428,7 @@ function TUMeterGUI:UpdateTargetHealthSubscription(targetId)
 	if oldId and self.TargetHealthRegistered and common
 		and type(common.UnRegisterEventHandler) == "function" then
 		pcall(common.UnRegisterEventHandler, self.TargetHealthHandler,
-			"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId })
+			"EVENT_OBJECT_HEALTH_CHANGED", { id = oldId }, true)
 	end
 
 	self.TargetInfoTargetId = targetId
@@ -436,7 +436,7 @@ function TUMeterGUI:UpdateTargetHealthSubscription(targetId)
 	if targetId and self.TargetHealthHandler and common
 		and type(common.RegisterEventHandler) == "function" then
 		local ok = pcall(common.RegisterEventHandler, self.TargetHealthHandler,
-			"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId })
+			"EVENT_OBJECT_HEALTH_CHANGED", { id = targetId }, true)
 		self.TargetHealthRegistered = ok
 	end
 end
@@ -465,8 +465,7 @@ function TUMeterGUI:UpdateTargetInfo()
 
 	if not exists then
 		self:UpdateTargetHealthSubscription(nil)
-		text:SetVal("Name", targetText("Цель не выбрана"))
-		panel:Show()
+		text:SetVal("Name", targetText(localization == "rus" and "Цель не выбрана" or "No target selected"))
 		return
 	end
 
@@ -515,7 +514,6 @@ function TUMeterGUI:UpdateTargetInfo()
 	local line = string.format("%s | ур. %s | HP %s/%s (%s%%)",
 		targetName, tostring(levelText), currentText, maximumText, percentText)
 	text:SetVal("Name", targetText(line))
-	panel:Show()
 end
 
 
@@ -526,17 +524,19 @@ function TUMeterGUI:UpdateOptim()
 	local dp = self.DetailsPanel
 	if not dp.OptList then return end
 
-	-- hide the block and restore the original panel height
+	-- Clear optimizer rows; target text has its own independent row in this block.
 	dp.OptHeader:Hide()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
+	local targetPanel = dp.TargetInfoPanel
+	if targetPanel then targetPanel:Hide() end
 	local height = 826
 
 	local c = self.SelectedCombatant
 	local fight = self:GetActiveFight()
 	local lines = nil
-	-- only for the player, and not while a spell is pointed (its details use the lower part of the panel)
+	-- Optimizer calculations remain limited to the local player and are hidden during spell hover.
 	if c and fight and not self.Hovering and avatar.IsExist() and isAvatarCombatant(c) then
 		local ok, res = pcall(Optim.BuildLines, c, fight.Timer:GetElapsedTime(), self.ActiveMode)
 		if ok then
@@ -547,23 +547,25 @@ function TUMeterGUI:UpdateOptim()
 		end
 	end
 
-	if lines then
-		-- put the block right after the last displayed spell
+	-- The target row is still useful when the optimizer is disabled or BuildLines returns nil.
+	local hasTargetLine = targetPanel ~= nil and not self.Hovering
+	if lines or hasTargetLine then
 		local n = 0
-		for i = 1, MAXSPELLS do
-			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
+		if c and type(c.GetSpellByIndex) == "function" then
+			for i = 1, MAXSPELLS do
+				if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
+			end
 		end
 		local gap = Settings.OptGap or 36
 		local y = dp.OptSpellTop + n * 18 + gap
 
-		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
-		-- Russian UTF-8 generated at runtime. Use the optimizer's safe converter.
 		local W = Optim.ToWString or userMods.ToWString
-		-- a cell starting with "@" is the key of a localized text
 		local function cell(v)
 			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
 			return W(v)
 		end
+
+		-- Analyzer heading stays first. Target info is the next row, before all stat rows.
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
 		dp.OptHeaderName:SetVal("Name", Optim.Text("OptTitle"))
@@ -571,11 +573,19 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
 		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
 
+		local targetRowOffset = 0
+		if hasTargetLine then
+			targetPanel:SetPosition(22, y + 18)
+			targetPanel:Show()
+			targetRowOffset = 1
+		end
+
+		local lineCount = lines and table.getn(lines) or 0
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
-			local ln = lines[i]
+			local ln = lines and lines[i] or nil
 			if ln then
-				row:SetPosition(22, y + 18 + (i - 1) * 18)
+				row:SetPosition(22, y + 18 + (i - 1 + targetRowOffset) * 18)
 				row:Show()
 				row.Name:SetVal("Name", Optim.Text(ln[1]))
 				row.Count:SetVal("Count", W(""))
@@ -585,7 +595,7 @@ function TUMeterGUI:UpdateOptim()
 				row.Percent:SetVal("Percentage", W(""))
 			end
 		end
-		height = y + 18 + table.getn(lines) * 18 + 20
+		height = y + 18 + (lineCount + targetRowOffset) * 18 + 20
 	end
 
 	if dp.OptHeight ~= height then
@@ -883,17 +893,18 @@ function TUMeterGUI:Init()
 		end
 	end
 
-	-- Reuse the existing XDB target text row in the compact strip occupied by
-	-- the old red Resolve separator. The Ability header keeps its original Y.
-	local targetInfoHeight = 13
-	local targetInfoOffset = GlobalInfoOffset + EXTRATYPES * 18 - 6
-	self.DetailsPanel.TargetInfoPanel = self.DetailsPanel:GetChildByName("TargetInfoPanel")
+	-- Clone the XDB target text row as a dynamic analyzer child. Creating it
+	-- after the GlobalInfo rows keeps it above those rows in the draw order.
+	local targetTemplate = self.DetailsPanel:GetChildByName("TargetInfoPanel")
+	local targetPanelDesc = targetTemplate:GetDesc()
+	targetTemplate:Destroy()
+	self.DetailsPanel.TargetInfoPanel = TWidget:CreateNewObjectByDesc(
+		"TargetInfoAnalyzerPanel", targetPanelDesc, self.DetailsPanel)
+	self.DetailsPanel.TargetInfoPanel:SetHeight(18)
 	self.DetailsPanel.TargetInfoText = self.DetailsPanel.TargetInfoPanel:GetChildByName("TargetInfoTextView").Widget
-	self.DetailsPanel.TargetInfoPanel:SetPosition(22, targetInfoOffset)
-	self.DetailsPanel.TargetInfoPanel:SetHeight(targetInfoHeight)
 	self.DetailsPanel.TargetInfoPanel:Hide()
 
-	-- Keep the original Ability table coordinate; target text fills the gap.
+	-- Keep the original Ability table coordinate.
 	local spellHeaderOffset = GlobalInfoOffset + EXTRATYPES * 18 + 7
 	self.DetailsPanel.SpellHeaderPanel:SetPosition(22, spellHeaderOffset)
 
