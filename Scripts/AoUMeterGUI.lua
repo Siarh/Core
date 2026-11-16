@@ -176,6 +176,7 @@ function TDetailsPanelGUI:CreateNewObject(name)
 			GlobalInfoList = {},     -- Panel extra info list
 			OpponentHeader = nil,
 			OpponentList = {},
+			OpponentLineVisible = false,
 
 			SpellHeaderPanel = widget:GetChildByName("SpellHeaderPanel"), -- Header panel
 			SpellHeaderNameText = widget.Widget:GetChildChecked("SpellHeaderTextViewName", true),
@@ -489,6 +490,7 @@ function TUMeterGUI:UpdateOpponentInfo()
 	local isCurrentPlayerFight = isOpponentSummaryFight and activeFight
 		and avatar and avatar.IsExist and avatar.IsExist()
 	if not isCurrentPlayerFight then
+		dp.OpponentLineVisible = false
 		dp.OpponentHeader:Hide()
 		for i = 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
 		updateOpponentSectionLayout(dp, 0)
@@ -668,6 +670,9 @@ function TUMeterGUI:UpdateOpponentInfo()
 			W(russian and "Цель не определена" or "Target not identified"))
 	end
 	for i = displayedRows + 1, TARGET_INFO_ROWS do dp.OpponentList[i]:Hide() end
+	-- Keep target availability independent from widget visibility: UpdateOptim
+	-- and spell-hover refreshes can temporarily hide the row.
+	dp.OpponentLineVisible = displayedRows > 0
 	updateOpponentSectionLayout(dp, displayedRows)
 end
 
@@ -678,14 +683,15 @@ function TUMeterGUI:UpdateOptim()
 	local dp = self.DetailsPanel
 	if not dp.OptList then return end
 
-	-- hide the block and restore the original panel height
+	-- Hide only the optimizer stat rows. The target's logical visibility is
+	-- stored separately because spell-hover refreshes may hide its widget.
 	dp.OptHeader:Hide()
 	for i = 1, OPTROWS do
 		dp.OptList[i]:Hide()
 	end
 	local height = 826 + (dp.OpponentSectionHeight or TARGET_INFO_HEIGHT)
 	local targetPanel = dp.OpponentList and dp.OpponentList[1]
-	local hasTargetLine = targetPanel and targetPanel:IsVisible()
+	local hasTargetLine = dp.OpponentLineVisible == true
 	if targetPanel then targetPanel:Hide() end
 
 	local c = self.SelectedCombatant
@@ -702,15 +708,18 @@ function TUMeterGUI:UpdateOptim()
 		end
 	end
 
-	if lines then
-		-- put the block right after the last displayed spell
-		local n = 0
+	-- Calculate the optimizer's position even when BuildLines returns nil.
+	-- The target row is independent of optimizer data and must remain visible.
+	local n = 0
+	if c and type(c.GetSpellByIndex) == "function" then
 		for i = 1, MAXSPELLS do
 			if c:GetSpellByIndex(i, self.ActiveMode) then n = i else break end
 		end
-		local gap = Settings.OptGap or 36
-		local y = dp.OptSpellTop + n * 18 + gap
+	end
+	local gap = Settings.OptGap or 36
+	local y = (tonumber(dp.OptSpellTop) or 0) + n * 18 + gap
 
+	if lines or hasTargetLine then
 		-- A normal optimizer value is ASCII/numeric, but AI rows can contain
 		-- Russian UTF-8 generated at runtime. Use the optimizer's safe converter.
 		local W = Optim.ToWString or userMods.ToWString
@@ -719,6 +728,7 @@ function TUMeterGUI:UpdateOptim()
 			if string.sub(v, 1, 1) == "@" then return Optim.Text(string.sub(v, 2)) end
 			return W(v)
 		end
+
 		dp.OptHeader:SetPosition(22, y)
 		dp.OptHeader:Show()
 		dp.OptHeaderName:SetVal("Name", Optim.Text("OptTitle"))
@@ -726,14 +736,13 @@ function TUMeterGUI:UpdateOptim()
 		dp.OptHeaderStats:SetVal("Avg", Optim.Text("OptOpt"))
 		dp.OptHeaderStats:SetVal("Max", Optim.Text("OptDiff"))
 
-		-- Put the target line at the beginning of the analyzer, immediately
-		-- below its title. Shift every stat row by one slot so Resolve and
-		-- Ruthlessness keep their original adjacent spacing.
+		-- The target occupies exactly one slot immediately below the analyzer
+		-- title. Every optimizer row gets the same offset, preserving the
+		-- original Resolve-to-Ruthlessness distance.
 		local targetRowOffset = hasTargetLine and 1 or 0
-
 		for i = 1, OPTROWS do
 			local row = dp.OptList[i]
-			local ln = lines[i]
+			local ln = lines and lines[i] or nil
 			if ln then
 				local slotIndex = i + targetRowOffset
 				row:SetPosition(22, y + 18 + (slotIndex - 1) * 18)
@@ -747,8 +756,8 @@ function TUMeterGUI:UpdateOptim()
 			end
 		end
 
-		local displayRowCount = #lines + targetRowOffset
-		if targetRowOffset > 0 then
+		local displayRowCount = (lines and #lines or 0) + targetRowOffset
+		if targetRowOffset > 0 and targetPanel then
 			targetPanel:SetPosition(22, y + 18)
 			targetPanel:Show()
 		end
