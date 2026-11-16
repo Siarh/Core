@@ -84,7 +84,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn('onMyEvent["EVENT_AVATAR_TARGET_CHANGED"]', events)
         self.assertIn('onMyEvent["EVENT_UNIT_LEVEL_CHANGED"]', events)
         self.assertIn("params.unitId", events)
-        metric_reset = events[events.index("function metricReset()"):events.index("\\nend", events.index("function metricReset()"))]
+        metric_reset = events[events.index("function metricReset()"):events.index("function ReloadPet(params)", events.index("function metricReset()"))]
         self.assertIn("common.UnRegisterEvent(\"EVENT_OBJECT_HEALTH_CHANGED\")", metric_reset)
         self.assertIn("pcall(DPSMeterGUI.UpdateTargetInfo, DPSMeterGUI)", metric_reset)
 
