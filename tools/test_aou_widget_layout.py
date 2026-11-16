@@ -36,7 +36,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertNotIn("Без имени", gui)
         self.assertNotIn("Unnamed", gui)
         self.assertNotIn("Нет данных о целях", gui)
-        self.assertIn("resisted damage by school", gui)
+        self.assertIn("event resist", gui)
 
         root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
         self.assertIn('OpponentPanel/OpponentPanel.(WidgetPanel).xdb', root)
@@ -90,11 +90,14 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         selected_gate = spell_list.index("if self.SelectedCombatant then")
         self.assertLess(target_call, selected_gate)
 
-        opponent = gui[gui.index("function TUMeterGUI:UpdateOpponentInfo()"):]
-        block = opponent[:opponent.index("\nend")]
+        opponent_start = gui.index("function TUMeterGUI:UpdateOpponentInfo()")
+        opponent_end = gui.index("\n--------------------------------------------------------------------------------\n-- Stat optimizer block", opponent_start)
+        block = gui[opponent_start:opponent_end]
         self.assertIn('W(russian and "Цель не определена" or "Target not identified")', block)
         self.assertIn("dp.OpponentHeader:Show()", block)
-        self.assertNotIn("dp.OpponentHeader:Hide()", block)
+        empty_branch = block[block.index("if displayedRows == 0 then"):]
+        self.assertIn("dp.OpponentList[1]:Show()", empty_branch)
+        self.assertNotIn("dp.OpponentHeader:Hide()", empty_branch)
 
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
@@ -184,6 +187,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("and self.DPSMeter.bCollectData == true", block)
         self.assertIn("if allowCurrentTargetFallback then", block)
         self.assertIn("self.ActiveFight == self.DPSMeter.Fight.Previous", block)
+        self.assertIn("and (liveCurrentFight or not (storedRows and #storedRows > 0))", block)
 
     def test_targettest_reports_outgoing_event_pipeline(self):
         optim = (ROOT / "Scripts/AoUMeterOptim.lua").read_text(encoding="utf-8")
