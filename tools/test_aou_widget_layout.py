@@ -24,40 +24,18 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("<Size>42</Size>", count)
 
         stats = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
-        self.assertIn("<Visible>false</Visible>", stats)
-        self.assertIn("TGlobalInfoPanelGUI:CreateNewObjectByDesc", gui)
+        self.assertIn("<Align>WIDGET_ALIGN_HIGH</Align>", stats)
+        self.assertIn("<HighPos>0</HighPos>", stats)
+        self.assertIn("<Size>160</Size>", stats)
 
-    def test_min_avg_max_are_three_fixed_centered_columns(self):
-        columns = (
-            ("Min", 132, 57, "DamageMin.txt"),
-            ("Sep1", 189, 9, "DamageSeparator.txt"),
-            ("Avg", 198, 57, "DamageAvg.txt"),
-            ("Sep2", 255, 9, "DamageSeparator.txt"),
-            ("Max", 264, 57, "DamageMax.txt"),
-        )
-        panel_dirs = (
-            ("GlobalInfoPanel", "SpellDetailTextView"),
-            ("GlobalInfoHeaderPanel", "GlobalInfoHeaderTextView"),
-        )
-        for panel_dir, prefix in panel_dirs:
-            for key, x, width, format_file in columns:
-                view = (ROOT / "Widgets/SpellInfoPanel" / panel_dir / "TextViews" /
-                        f"{key}.(WidgetTextView).xdb").read_text(encoding="utf-8")
-                self.assertIn(f"<Name>{prefix}{key}</Name>", view)
-                self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", view)
-                self.assertIn(f"<Pos>{x}</Pos>", view)
-                self.assertIn(f"<Size>{width}</Size>", view)
-                self.assertIn(f'href="{format_file}"', view)
-
-        for metric in ("Min", "Avg", "Max"):
-            for panel_dir in ("GlobalInfoPanel", "GlobalInfoHeaderPanel"):
-                fmt = (ROOT / "Widgets/SpellInfoPanel" / panel_dir / "TextViews" /
-                       f"Damage{metric}.txt").read_text(encoding="utf-8")
-                self.assertIn('alignx = "center"', fmt)
-        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
-        init = gui[gui.index("function TUMeterGUI:Init()"):]
-        self.assertLess(init.index('self.DetailsPanel.OptHeaderStats ='),
-                        init.index('self.DetailsPanel.GlobalInfoHeaderStatsText:Hide()'))
+    def test_resolve_min_avg_max_values_align_to_their_headers(self):
+        header = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        values = (ROOT / "Widgets/SpellInfoPanel/GlobalInfoPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        for token in ('<Align>WIDGET_ALIGN_HIGH</Align>', '<HighPos>0</HighPos>', '<Size>160</Size>'):
+            self.assertIn(token, header)
+            self.assertIn(token, values)
+        self.assertNotIn('<Pos>132</Pos>', values)
+        self.assertNotIn('<Size>200</Size>', values)
 
     def test_target_row_is_a_dynamic_child_of_the_analyzer_and_drawn_above_global_rows(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
@@ -156,7 +134,7 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn('GlobalInfoPanel.Count:SetVal("Count", common.FormatInt(currentPool, "%d%%"))', block)
         self.assertIn('GlobalInfoPanel.Percent:SetVal("Percentage", userMods.ToWString(""))', block)
         for field in ("Min", "Avg", "Max"):
-            self.assertIn(f'GlobalInfoPanel.{field}:SetVal("{field}"', block)
+            self.assertIn(f'GlobalInfoPanel.Damage:SetVal("{field}"', block)
 
     def test_optimizer_is_limited_to_the_selected_local_player(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
