@@ -71,6 +71,26 @@ class GlobalInfoLayoutTests(unittest.TestCase):
         self.assertIn("local numeric = tonumber(key)", gui)
         self.assertIn("row.qualityName = tostring(value)", block)
 
+    def test_primary_window_has_a_persistent_opponent_section(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
+        start = gui.index("function TUMeterGUI:UpdateMainOpponentInfo()")
+        end = gui.index("\nend", start)
+        block = gui[start:end]
+
+        self.assertIn('"Противники"', block)
+        self.assertIn('"Цель не определена"', block)
+        self.assertIn("MainOpponentHeader:Show()", block)
+        self.assertIn("activeFight.AOUATargetRows", block)
+        self.assertIn("AOUA.GetTargetDisplayRows", block)
+        self.assertIn("avatar.GetTarget", block)
+        update_values = gui[gui.index("function TUMeterGUI:UpdateValues()"):]
+        self.assertIn("self:UpdateMainOpponentInfo()", update_values)
+        self.assertIn("DPSMeterGUI.UpdateMainOpponentInfo", events)
+        init = gui[gui.index("function TUMeterGUI:Init()"):]
+        self.assertIn('"MainOpponentHeaderPanel"', init)
+        self.assertIn('"MainOpponentPanel" .. opponentIndex', init)
+
     def test_target_and_combatant_checks_use_canonical_object_ids(self):
         util = (ROOT / "Scripts/AoUMeterUtil.lua").read_text(encoding="utf-8")
         data = (ROOT / "Scripts/AoUMeterData.lua").read_text(encoding="utf-8")

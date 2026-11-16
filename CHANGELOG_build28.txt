@@ -230,3 +230,11 @@ ObjectId identity and target-panel visibility fix:
 - This fixes the path where a target could be known by the game API but the addon rejected the associated combatant/event before it reached the live target profile or the saved end-of-fight snapshot.
 - Added runtime Lua tests for numeric/string IDs and separately wrapped ObjectId instances, plus GUI/data/event regression checks.
 - CI validation is required before distribution; actual Sunshine 6.0 client display still requires in-game verification.
+
+
+Primary-window target section:
+- Added a permanent "Противники" block directly to the main DPScope window, below the player damage rows; target information is no longer confined to the secondary spell-details window.
+- The section refreshes every second while the meter is idle and the secondary details panel is closed. It uses live target/event profiles, the just-completed fight snapshot, or the Previous fight snapshot according to the selected fight tab.
+- When no target is currently identified, the section remains visible and explicitly says "Цель не определена" rather than disappearing.
+- Shows target name, category, level/quality, available HP snapshot or labelled estimate, and the first available event-resistance school sample.
+- Added GUI regression checks for primary-window rendering and idle refresh.

@@ -247,6 +247,11 @@ onMyEvent["EVENT_SECOND_TIMER"] = function(params)
 		DPSMeterGUI:UpdateValues()
 	end
 
+	-- Refresh the main-window target section even while the meter is idle.
+	if DPSMeterGUI and type(DPSMeterGUI.UpdateMainOpponentInfo) == "function" then
+		pcall(DPSMeterGUI.UpdateMainOpponentInfo, DPSMeterGUI)
+	end
+
 	if mustRegenList and timerToRefresh == 0 then
 		mustRegenList = false
 	end
