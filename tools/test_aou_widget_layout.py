@@ -51,7 +51,7 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
                 self.assertIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
 
     def test_global_info_header_uses_short_russian_caption(self):
-        caption = (ROOT / "Locales/rus/GlobalInfo.txt").read_text(encoding="utf-8").lstrip("\\ufeff")
+        caption = (ROOT / "Locales/rus/GlobalInfo.txt").read_text(encoding="utf-8").lstrip("\ufeff")
         self.assertEqual(caption, "Информация...")
 
     def test_restored_gui_has_no_mixed_in_target_panel_runtime_calls(self):
