@@ -3,7 +3,7 @@ group = {
     IsCreatureInGroup = function() return false end
 }
 
-dofile("Scripts/AoUMeterUtil.lua")
+dofile("../Scripts/AoUMeterUtil.lua")
 
 local first = {
     GetId = function() return 18051 end
