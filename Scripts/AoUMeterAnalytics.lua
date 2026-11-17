@@ -245,6 +245,9 @@ function AOUA.OnFightStart()
         outgoingHitOtherCombatant = 0, outgoingHitRejected = 0,
         lastOutgoingTarget = "", lastOutgoingAmount = 0
     }
+    if type(AOUA.SeedWillControlBuffs) == "function" then
+        pcall(AOUA.SeedWillControlBuffs)
+    end
 end
 
 function AOUA.OnFightSecond()
