@@ -845,14 +845,13 @@ end
 local function willFinalizeSegment(now)
     local w = AOUA.Session.willControl
     if not w.active then return end
-    local finish = now
-    for _, effect in pairs(w.effects or {}) do
-        if effect and tonumber(effect.expiresAtMs) and effect.expiresAtMs < finish then
-            finish = effect.expiresAtMs
-        end
-    end
-    local start = tonumber(w.segmentStartMs) or finish
-    local seconds = math.max(0, math.floor((finish - start) / 1000))
+    -- A finalization caused by death/combat end should use the actual event time.
+    -- Expired buff entries are cleaned by willRefreshActive; an effect that is
+    -- still active at this point contributes up to 'now'.
+    willRefreshActive(now)
+    if not w.active then return end
+    local start = tonumber(w.segmentStartMs) or now
+    local seconds = math.max(0, math.floor((now - start) / 1000))
     w.totalSeconds = w.totalSeconds + seconds
     if seconds > w.maxSegmentSeconds then w.maxSegmentSeconds = seconds end
     w.segments = w.segments + 1
