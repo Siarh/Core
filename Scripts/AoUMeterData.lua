@@ -1209,6 +1209,12 @@ function TUMeter:Stop()
 			currentFight.AOUATargetRows = rows
 		end
 	end
+	if currentFight and AOUA and type(AOUA.GetWillControlSummary) == "function" then
+		local ok, summary = pcall(AOUA.GetWillControlSummary)
+		if ok and type(summary) == "table" then
+			currentFight.AOUAWillControl = summary
+		end
+	end
 
 	-- Persist the separate raw-event history without touching the legacy /aou rec store.
 	if AOUA and type(AOUA.OnFightStop) == "function" then
