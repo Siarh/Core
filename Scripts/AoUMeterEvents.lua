@@ -344,6 +344,34 @@ onGenEvent["EVENT_AVATAR_CREATED"] = function(params)
 	GlobalReset()
 end
 
+local willTrackingRegistered = false
+
+local function RegisterWillControlTracking()
+	if willTrackingRegistered or not common or type(common.RegisterEventHandler) ~= "function" then return end
+	if not avatar or type(avatar.GetId) ~= "function" then return end
+	local ok, avatarId = pcall(avatar.GetId)
+	if not ok or not avatarId then return end
+
+	-- These are personal events for the avatar only. The buff API exposes
+	-- duration/remaining time, which lets Analytics count full control seconds.
+	common.RegisterEventHandler(AOUA.OnWillControlBuffAdded,
+		"EVENT_OBJECT_BUFF_ADDED", { objectId = avatarId })
+	common.RegisterEventHandler(AOUA.OnWillControlBuffChanged,
+		"EVENT_OBJECT_BUFF_CHANGED", { objectId = avatarId })
+	common.RegisterEventHandler(AOUA.OnWillControlBuffRemoved,
+		"EVENT_OBJECT_BUFF_REMOVED", { objectId = avatarId })
+	common.RegisterEventHandler(function(params)
+		if AOUA and type(AOUA.OnWillControlCombatStatus) == "function" then
+			pcall(AOUA.OnWillControlCombatStatus, params)
+		end
+	end, "EVENT_OBJECT_COMBAT_STATUS_CHANGED", { objectId = avatarId })
+	common.RegisterEventHandler(function(params)
+		if AOUA and type(AOUA.OnWillControlAliveChanged) == "function" then
+			pcall(AOUA.OnWillControlAliveChanged, params)
+		end
+	end, "EVENT_AVATAR_ALIVE_CHANGED")
+	willTrackingRegistered = true
+end
 
 function GlobalReset()
 	-- Since AO 2.0.03, localization must be applied here
@@ -356,6 +384,8 @@ function GlobalReset()
 
 	-- Load the stat optimizer settings
 	if Optim and Optim.LoadCfg then Optim.LoadCfg() end
+
+	RegisterWillControlTracking()
 
 	-- Create the DPSMeter here
 	DPSMeterGUI = TUMeterGUI:CreateNewObject(TUMeter:CreateNewObject())
