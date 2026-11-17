@@ -525,6 +525,48 @@ function TUMeterGUI:SetTargetDisplayValues()
 	textView:SetVal("TargetHealth", healthText)
 end
 
+function TUMeterGUI:SetWillControlDisplayValue()
+	local textView = self.DetailsPanel and self.DetailsPanel.PlayerNameText
+	if not textView then return end
+
+	local summary
+	if AOUA and type(AOUA.GetWillControlSummary) == "function" then
+		local ok, value = pcall(AOUA.GetWillControlSummary)
+		if ok and type(value) == "table" then summary = value end
+	end
+	if not summary or not summary.will or not summary.expectedSeconds then
+		textView:SetVal("WillInfo", userMods.ToWString(""))
+		return
+	end
+
+	local isRussian = localization == "rus"
+	local willText = string.format("%d", math.floor(summary.will + 0.5))
+	local expectedText = string.format("%d%s", summary.expectedSeconds, isRussian and "с" or "s")
+	local observed = math.floor(tonumber(summary.maxControlSeconds) or 0)
+	local observedText = string.format("%d%s", observed, isRussian and "с" or "s")
+	local text
+
+	if summary.thresholdReached then
+		if summary.thresholdMinWill then
+			local maxWill = summary.thresholdMaxWill and string.format("-%d", summary.thresholdMaxWill) or "+"
+			text = string.format("%s: %s → %s | %s: %s | %s %d%s",
+				isRussian and "Воля" or "Will", willText, expectedText,
+				isRussian and "контроль" or "control", observedText,
+				isRussian and "порог достигнут" or "threshold reached",
+				summary.thresholdMinWill, maxWill)
+		else
+			text = string.format("%s: %s → %s | %s: %s",
+				isRussian and "Воля" or "Will", willText, expectedText,
+				isRussian and "контроль" or "control", observedText)
+		end
+	else
+		text = string.format("%s: %s → %s | %s: %s < %s",
+			isRussian and "Воля" or "Will", willText, expectedText,
+			isRussian and "контроль" or "control", observedText, expectedText)
+	end
+	textView:SetVal("WillInfo", targetDisplayWString(text))
+end
+
 -- Fill the spell panel
 --------------------------------------------------------------------------------
 function TUMeterGUI:UpdateSpellList()
@@ -540,6 +582,7 @@ function TUMeterGUI:UpdateSpellList()
 
 		detailsPanel.PlayerNameText:SetVal("Name", self.SelectedCombatant.Name)
 		self:SetTargetDisplayValues()
+		self:SetWillControlDisplayValue()
 		detailsPanel.PlayerNameText:Show(true)
 
 		if self.SelectedCombatant.Data[self.ActiveMode].Amount > 0 then
