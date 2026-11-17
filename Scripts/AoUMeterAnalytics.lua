@@ -928,6 +928,37 @@ function AOUA.UpdateWillControlSeconds()
     willRefreshActive(now)
 end
 
+function AOUA.FinalizeWillControl()
+    ensureSession()
+    if AOUA.Session.willControl.active then
+        willFinalizeSegment(willNowMs())
+    end
+end
+
+function AOUA.OnWillControlCombatStatus(params)
+    if type(params) ~= "table" or not isLocalObject(params.objectId) then return end
+    if params.inCombat == false then
+        AOUA.FinalizeWillControl()
+        local w = AOUA.Session.willControl
+        w.effects = {}
+        w.active = false
+        w.segmentStartMs = nil
+        w.resetReason = "combat_end"
+    end
+end
+
+function AOUA.OnWillControlAliveChanged(params)
+    if type(params) ~= "table" then return end
+    if params.alive == false then
+        AOUA.FinalizeWillControl()
+        local w = AOUA.Session.willControl
+        w.effects = {}
+        w.active = false
+        w.segmentStartMs = nil
+        w.resetReason = "death"
+    end
+end
+
 function AOUA.ResetWillControl(reason)
     ensureSession()
     local w = AOUA.Session.willControl
@@ -1221,6 +1252,7 @@ end
 function AOUA.OnFightStop()
     ensureSession()
     if not AOUA.Session.started then return true, 0 end
+    AOUA.FinalizeWillControl()
     AOUA.Session.started = false
     local ok, count = persistEventSamples()
     AOUA.Session.persistedEvents = ok and count or 0
