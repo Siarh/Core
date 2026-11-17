@@ -115,7 +115,14 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         for tag in ("TargetName", "TargetLevel", "TargetType", "TargetHealth"):
             with self.subTest(tag=tag):
                 self.assertIn(f'<r name="{tag}"/>', title_format)
-        self.assertIn("<Size>34</Size>", title_widget)
+        self.assertIn("<Size>50</Size>", title_widget)
+        self.assertIn("function TUMeterGUI:SetWillControlDisplayValue()", gui)
+        self.assertIn("function AOUA.GetWillControlSummary()", analytics)
+        self.assertIn("function AOUA.OnWillControlBuffAdded(params)", analytics)
+        self.assertIn("EVENT_OBJECT_BUFF_ADDED", analytics)
+        self.assertIn("EVENT_OBJECT_BUFF_CHANGED", analytics)
+        self.assertIn("EVENT_OBJECT_BUFF_REMOVED", analytics)
+        self.assertIn('<r name="WillInfo"/>', title_format)
         spell_root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
         self.assertNotIn("TargetInfoPanel", spell_root)
 
