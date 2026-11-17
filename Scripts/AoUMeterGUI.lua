@@ -134,6 +134,34 @@ local function setDamageColumnHeader(textView, minValue, avgValue, maxValue)
 	textView:SetVal("Max", padDamageColumn(maxValue))
 end
 
+-- Labels for the best-damage target shown in the existing details title.
+local TARGET_QUALITY_LABELS = {
+	COMMON = { rus = "Обычный", eng = "Common" },
+	ELITE = { rus = "Элитный", eng = "Elite" },
+	FLAVOR_ELITE = { rus = "Сюжетный элитный", eng = "Flavor elite" },
+	MINI_BOSS = { rus = "Мини-босс", eng = "Mini-boss" },
+	BOSS = { rus = "Босс", eng = "Boss" },
+	RAID_BOSS = { rus = "Рейдовый босс", eng = "Raid boss" },
+	RAID_ELITE = { rus = "Рейдовый элитный", eng = "Raid elite" },
+	CRITTER = { rus = "Существо", eng = "Critter" }
+}
+
+local TARGET_KIND_LABELS = {
+	mob = { rus = "Моб", eng = "Mob" },
+	npc = { rus = "НПС", eng = "NPC" },
+	player = { rus = "Игрок", eng = "Player" },
+	unknown = { rus = "Неизвестно", eng = "Unknown" }
+}
+
+local function targetDisplayWString(value)
+	value = tostring(value or "")
+	if Optim and type(Optim.ToWString) == "function" then
+		return Optim.ToWString(value)
+	end
+	return userMods.ToWString(value)
+end
+
+
 --------------------------------------------------------------------------------
 -- Type TUMeter
 Global("TUMeterGUI", {})
@@ -438,6 +466,65 @@ function TUMeterGUI:UpdateOptim()
 	end
 end
 --------------------------------------------------------------------------------
+-- Return the most significant target for the selected fight.
+-- Current fight rows are live; completed fights use the snapshot stored at Stop().
+function TUMeterGUI:GetActiveTargetDisplayRow()
+	local fight = self:GetActiveFight()
+	if not fight then return nil end
+
+	if self.ActiveFight == self.DPSMeter.Fight.Current
+		and AOUA and type(AOUA.GetTargetDisplayRows) == "function" then
+		local ok, rows = pcall(AOUA.GetTargetDisplayRows, 1)
+		if ok and type(rows) == "table" then return rows[1] end
+	end
+
+	local rows = fight.AOUATargetRows
+	if type(rows) == "table" then return rows[1] end
+	return nil
+end
+
+-- Populate independent tags so target names keep their original game encoding
+-- while Russian labels go through the addon's UTF-8 -> CP1251 conversion.
+function TUMeterGUI:SetTargetDisplayValues()
+	local textView = self.DetailsPanel and self.DetailsPanel.PlayerNameText
+	if not textView then return end
+
+	local target = self:GetActiveTargetDisplayRow()
+	local isRussian = localization == "rus"
+	if not target then
+		textView:SetVal("TargetName", targetDisplayWString(isRussian and "Цель не определена" or "Target unavailable"))
+		textView:SetVal("TargetLevel", userMods.ToWString(""))
+		textView:SetVal("TargetType", userMods.ToWString(""))
+		textView:SetVal("TargetHealth", userMods.ToWString(""))
+		return
+	end
+
+	local targetName = target.name
+	if type(targetName) ~= "string" or targetName == "" then
+		targetName = isRussian and "Неизвестная цель" or "Unknown target"
+		textView:SetVal("TargetName", targetDisplayWString(targetName))
+	else
+		-- Analytics converts Object names from WString to the current game codepage.
+		textView:SetVal("TargetName", userMods.ToWString(targetName))
+	end
+
+	local level = tonumber(target.level)
+	local levelText = level and string.format("%d%s", math.floor(level), isRussian and " ур." or " lvl") or "?"
+	textView:SetVal("TargetLevel", targetDisplayWString(levelText))
+
+	local qualityName = type(target.qualityName) == "string" and target.qualityName or ""
+	local qualityLabels = TARGET_QUALITY_LABELS[qualityName]
+	local kindLabels = TARGET_KIND_LABELS[target.kind or "unknown"] or TARGET_KIND_LABELS.unknown
+	local qualityText = qualityLabels and qualityLabels[isRussian and "rus" or "eng"] or kindLabels[isRussian and "rus" or "eng"]
+	textView:SetVal("TargetType", targetDisplayWString(qualityText))
+
+	local maxHealth = tonumber(target.hpLimit)
+	local healthText = maxHealth and maxHealth > 0
+		and common.FormatInt(math.floor(maxHealth + 0.5), "%d")
+		or userMods.ToWString("?")
+	textView:SetVal("TargetHealth", healthText)
+end
+
 -- Fill the spell panel
 --------------------------------------------------------------------------------
 function TUMeterGUI:UpdateSpellList()
@@ -452,6 +539,7 @@ function TUMeterGUI:UpdateSpellList()
 		self.SelectedCombatant:CalculateSpell(self:GetActiveFight().Timer:GetElapsedTime(), self.ActiveMode) -- Important.
 
 		detailsPanel.PlayerNameText:SetVal("Name", self.SelectedCombatant.Name)
+		self:SetTargetDisplayValues()
 		detailsPanel.PlayerNameText:Show(true)
 
 		if self.SelectedCombatant.Data[self.ActiveMode].Amount > 0 then

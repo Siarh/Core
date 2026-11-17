@@ -96,6 +96,29 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
         self.assertIn('<r name="Count"/>', optimizer_count)
         self.assertNotIn('<r name="Count"/>#', optimizer_count)
 
+    def test_target_summary_reuses_the_existing_two_line_title(self):
+        gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
+        analytics = (ROOT / "Scripts/AoUMeterAnalytics.lua").read_text(encoding="utf-8")
+        title_format = (ROOT / "Widgets/SpellInfoPanel/TextViews/Name.txt").read_text(encoding="utf-8-sig")
+        title_widget = (ROOT / "Widgets/SpellInfoPanel/TextViews/SpellPlayerName.(WidgetTextView).xdb").read_text(encoding="utf-8")
+
+        self.assertIn("function TUMeterGUI:GetActiveTargetDisplayRow()", gui)
+        self.assertIn("pcall(AOUA.GetTargetDisplayRows, 1)", gui)
+        self.assertIn("fight.AOUATargetRows", gui)
+        self.assertIn('SetVal("TargetName"', gui)
+        self.assertIn('SetVal("TargetLevel"', gui)
+        self.assertIn('SetVal("TargetType"', gui)
+        self.assertIn('SetVal("TargetHealth"', gui)
+        self.assertIn("function AOUA.GetTargetDisplayRows(limit)", analytics)
+        self.assertIn("row.hpLimit = profile.hpLimit", analytics)
+        self.assertIn("<br>", title_format)
+        for tag in ("TargetName", "TargetLevel", "TargetType", "TargetHealth"):
+            with self.subTest(tag=tag):
+                self.assertIn(f'<r name="{tag}"/>', title_format)
+        self.assertIn("<Size>34</Size>", title_widget)
+        spell_root = (ROOT / "Widgets/SpellInfoPanel/SpellInfoPanel.(WidgetPanel).xdb").read_text(encoding="utf-8")
+        self.assertNotIn("TargetInfoPanel", spell_root)
+
     def test_restored_gui_has_no_mixed_in_target_panel_runtime_calls(self):
         gui = (ROOT / "Scripts/AoUMeterGUI.lua").read_text(encoding="utf-8")
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
