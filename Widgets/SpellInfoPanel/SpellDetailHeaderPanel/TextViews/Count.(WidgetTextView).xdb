@@ -4,9 +4,9 @@
 	<Name>SpellDetailHeaderTextViewCount</Name>
 	<Placement>
 		<X>
-			<Align>WIDGET_ALIGN_HIGH</Align>
-			<HighPos>0</HighPos>
-			<Size>200</Size>
+			<Align>WIDGET_ALIGN_LOW</Align>
+			<Pos>136</Pos>
+			<Size>55</Size>
 		</X>
 		<Y>
 			<Align>WIDGET_ALIGN_BOTH</Align>
