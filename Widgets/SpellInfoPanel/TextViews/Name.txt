@@ -2,7 +2,8 @@
 	<rs class="class">
 		<Neutral>
 			<r name="Name"/> ( <r name="Mode"/> - <r name="Fight"/> )
-			<br><r name="TargetName"/> | <r name="TargetLevel"/> | <r name="TargetType"/> | <r name="TargetHealth"/></br>
+			<br><r name="TargetName"/> | <r name="TargetLevel"/> | <r name="TargetType"/> | <r name="TargetHealth"/>
+			<br><r name="WillInfo"/></br>
 		</Neutral>
 	</rs>
 </header>
