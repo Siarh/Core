@@ -530,9 +530,14 @@ function TUMeterGUI:SetWillControlDisplayValue()
 	if not textView then return end
 
 	local summary
-	if AOUA and type(AOUA.GetWillControlSummary) == "function" then
-		local ok, value = pcall(AOUA.GetWillControlSummary)
-		if ok and type(value) == "table" then summary = value end
+	local fight = self:GetActiveFight()
+	if self.ActiveFight == self.DPSMeter.Fight.Current then
+		if AOUA and type(AOUA.GetWillControlSummary) == "function" then
+			local ok, value = pcall(AOUA.GetWillControlSummary)
+			if ok and type(value) == "table" then summary = value end
+		end
+	elseif fight and type(fight.AOUAWillControl) == "table" then
+		summary = fight.AOUAWillControl
 	end
 	if not summary or not summary.will or not summary.expectedSeconds then
 		textView:SetVal("WillInfo", userMods.ToWString(""))
