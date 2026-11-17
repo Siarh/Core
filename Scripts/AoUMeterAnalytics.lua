@@ -809,12 +809,16 @@ local function willRefreshActive(now)
     local active = false
     local latestExpiry = nil
     for buffId, effect in pairs(w.effects or {}) do
-        if effect and tonumber(effect.expiresAtMs) and effect.expiresAtMs > now then
+        local expiresAt = effect and tonumber(effect.expiresAtMs) or nil
+        if expiresAt and expiresAt > now then
             active = true
-            if latestExpiry == nil or effect.expiresAtMs > latestExpiry then
-                latestExpiry = effect.expiresAtMs
+            if latestExpiry == nil or expiresAt > latestExpiry then
+                latestExpiry = expiresAt
             end
         else
+            if expiresAt and (latestExpiry == nil or expiresAt > latestExpiry) then
+                latestExpiry = expiresAt
+            end
             w.effects[buffId] = nil
         end
     end
@@ -823,6 +827,7 @@ local function willRefreshActive(now)
         w.segmentStartMs = now
     elseif not active and w.active then
         local finish = latestExpiry or now
+        if finish > now then finish = now end
         local start = tonumber(w.segmentStartMs) or finish
         local seconds = math.max(0, math.floor((finish - start) / 1000))
         w.totalSeconds = w.totalSeconds + seconds
