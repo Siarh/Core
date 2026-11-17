@@ -97,7 +97,13 @@ local function freshSession()
         elapsedSeconds = 0, fightId = 0, statSnapshot = nil,
         statSnapshotSecond = nil, statSnapshotAttemptSecond = nil,
         objectMetadata = {}, objectMetadataCount = 0,
-        targetProfiles = {}, targetProfileCount = 0, started = false
+        targetProfiles = {}, targetProfileCount = 0,
+        willControl = {
+            effects = {}, active = false, segmentStartMs = nil,
+            totalSeconds = 0, maxSegmentSeconds = 0, segments = 0,
+            lastEventMs = nil
+        },
+        started = false
     }
 end
 
@@ -173,6 +179,15 @@ local function ensureSession()
     AOUA.Session.objectMetadataCount = tonumber(AOUA.Session.objectMetadataCount) or 0
     AOUA.Session.targetProfiles = AOUA.Session.targetProfiles or {}
     AOUA.Session.targetProfileCount = tonumber(AOUA.Session.targetProfileCount) or 0
+    AOUA.Session.willControl = AOUA.Session.willControl or {
+        effects = {}, active = false, segmentStartMs = nil,
+        totalSeconds = 0, maxSegmentSeconds = 0, segments = 0,
+        lastEventMs = nil
+    }
+    AOUA.Session.willControl.effects = AOUA.Session.willControl.effects or {}
+    AOUA.Session.willControl.totalSeconds = tonumber(AOUA.Session.willControl.totalSeconds) or 0
+    AOUA.Session.willControl.maxSegmentSeconds = tonumber(AOUA.Session.willControl.maxSegmentSeconds) or 0
+    AOUA.Session.willControl.segments = tonumber(AOUA.Session.willControl.segments) or 0
     AOUA.Session.eventSampleCount = math.max(0, math.min(EVENT_BUFFER_LIMIT,
         math.floor(tonumber(AOUA.Session.eventSampleCount) or #AOUA.Session.eventSamples)))
     AOUA.Session.eventSampleNext = math.floor(tonumber(AOUA.Session.eventSampleNext) or
@@ -197,6 +212,11 @@ function AOUA.OnFightStart()
     AOUA.Session.objectMetadataCount = 0
     AOUA.Session.targetProfiles = {}
     AOUA.Session.targetProfileCount = 0
+    AOUA.Session.willControl = {
+        effects = {}, active = false, segmentStartMs = nil,
+        totalSeconds = 0, maxSegmentSeconds = 0, segments = 0,
+        lastEventMs = nil
+    }
     -- HP transitions from an earlier fight must never leak into the new fight.
     AOUA.HpCache = {}
     AOUA.HealthTransitions = {}
@@ -231,6 +251,7 @@ function AOUA.OnFightSecond()
     ensureSession()
     if AOUA.Session.started then
         AOUA.Session.elapsedSeconds = AOUA.Session.elapsedSeconds + 1
+        AOUA.UpdateWillControlSeconds()
     end
 end
 
@@ -722,6 +743,264 @@ end
 -- Re-reading the API for every hit would add avoidable work to the combat hot path.
 local STAT_SNAPSHOT_INTERVAL = 3
 local SNAPSHOT_STAT_KEYS = { "M", "R", "U", "L", "S", "W", "B", "C" }
+
+-- Willpower is a PvP mechanic: only full seconds actually spent under a control
+-- effect contribute to its hidden 0..100% resistance bar. The client exposes
+-- control buffs and their remaining duration, so keep a union of those intervals
+-- instead of sampling a visual state once per second.
+local WILL_CONTROL_TOKENS = {
+    "stun", "fear", "silence", "blind", "disable", "immobil", "freeze",
+    "sleep", "charm", "hypnosis", "astral", "knockback", "disarm", "slow",
+    "snare", "оглуш", "страх", "немот", "ослеп", "обездвиж", "замороз",
+    "усып", "очар", "гипноз", "астрал", "отбрасыв", "обезоруж", "замедл"
+}
+local WILL_GROUP_TOKENS = {
+    "slow", "stun", "fear", "silence", "blind", "disable",
+    "enum_diminishinggroup", "diminishinggroup",
+    "замедл", "оглуш", "страх", "немот", "ослеп", "обездвиж"
+}
+
+local function willNowMs()
+    if common and type(common.GetAbsTimeMs) == "function" then
+        local ok, value = pcall(common.GetAbsTimeMs)
+        if ok and tonumber(value) then return tonumber(value) end
+    end
+    return (tonumber(AOUA.Session.elapsedSeconds) or 0) * 1000
+end
+
+local function lowerText(value)
+    local s = eventText(value)
+    return s and string.lower(s) or ""
+end
+
+local function hasWillToken(value, tokens)
+    local s = lowerText(value)
+    if s == "" then return false end
+    for i = 1, #tokens do
+        if string.find(s, tokens[i], 1, true) then return true end
+    end
+    return false
+end
+
+local function isWillControlBuff(info)
+    if type(info) ~= "table" then return false, "unknown" end
+
+    -- Prefer the server/client diminishing-group metadata when it is exposed
+    -- by the buff resource. This is the strongest signal available to addons.
+    if type(info.groups) == "table" then
+        for groupName, enabled in pairs(info.groups) do
+            if enabled and hasWillToken(groupName, WILL_GROUP_TOKENS) then
+                return true, "diminishing_group"
+            end
+        end
+    end
+
+    -- Some builds do not expose the diminishing group in buff metadata.
+    -- Fall back to the system name / localized name. This is deliberately
+    -- conservative and is reported as heuristic in the exported summary.
+    if hasWillToken(info.sysName, WILL_CONTROL_TOKENS) or hasWillToken(info.name, WILL_CONTROL_TOKENS) then
+        return true, "name_heuristic"
+    end
+    return false, "unknown"
+end
+
+local function willRefreshActive(now)
+    local w = AOUA.Session.willControl
+    local active = false
+    local latestExpiry = nil
+    for buffId, effect in pairs(w.effects or {}) do
+        if effect and tonumber(effect.expiresAtMs) and effect.expiresAtMs > now then
+            active = true
+            if latestExpiry == nil or effect.expiresAtMs > latestExpiry then
+                latestExpiry = effect.expiresAtMs
+            end
+        else
+            w.effects[buffId] = nil
+        end
+    end
+    if active and not w.active then
+        w.active = true
+        w.segmentStartMs = now
+    elseif not active and w.active then
+        local finish = latestExpiry or now
+        local start = tonumber(w.segmentStartMs) or finish
+        local seconds = math.max(0, math.floor((finish - start) / 1000))
+        w.totalSeconds = w.totalSeconds + seconds
+        if seconds > w.maxSegmentSeconds then w.maxSegmentSeconds = seconds end
+        w.segments = w.segments + 1
+        w.active = false
+        w.segmentStartMs = nil
+    end
+    return active
+end
+
+local function willFinalizeSegment(now)
+    local w = AOUA.Session.willControl
+    if not w.active then return end
+    local finish = now
+    for _, effect in pairs(w.effects or {}) do
+        if effect and tonumber(effect.expiresAtMs) and effect.expiresAtMs < finish then
+            finish = effect.expiresAtMs
+        end
+    end
+    local start = tonumber(w.segmentStartMs) or finish
+    local seconds = math.max(0, math.floor((finish - start) / 1000))
+    w.totalSeconds = w.totalSeconds + seconds
+    if seconds > w.maxSegmentSeconds then w.maxSegmentSeconds = seconds end
+    w.segments = w.segments + 1
+    w.active = false
+    w.segmentStartMs = nil
+end
+
+local function willUpsertBuff(buffId)
+    if not buffId or not object or type(object.GetBuffInfo) ~= "function" then return end
+    local ok, info = pcall(object.GetBuffInfo, buffId)
+    if not ok or type(info) ~= "table" then return end
+    local isControl, confidence = isWillControlBuff(info)
+    local now = willNowMs()
+    if not isControl then
+        AOUA.Session.willControl.effects[buffId] = nil
+        willRefreshActive(now)
+        return
+    end
+    local remaining = tonumber(info.remainingMs)
+    if remaining == nil or remaining <= 0 then
+        AOUA.Session.willControl.effects[buffId] = nil
+        willRefreshActive(now)
+        return
+    end
+    -- Update the interval before changing the active set, so a genuine gap
+    -- between two controls is not silently merged into one long control.
+    willRefreshActive(now)
+    AOUA.Session.willControl.effects[buffId] = {
+        expiresAtMs = now + remaining,
+        confidence = confidence
+    }
+    AOUA.Session.willControl.lastEventMs = now
+    willRefreshActive(now)
+end
+
+function AOUA.OnWillControlBuffAdded(params)
+    if type(params) ~= "table" or not isLocalObject(params.objectId) then return end
+    ensureSession()
+    if not AOUA.Session.started then return end
+    willUpsertBuff(params.buffId)
+end
+
+function AOUA.OnWillControlBuffChanged(params)
+    if type(params) ~= "table" or not isLocalObject(params.objectId) then return end
+    ensureSession()
+    if not AOUA.Session.started then return end
+    willUpsertBuff(params.buffId)
+end
+
+function AOUA.OnWillControlBuffRemoved(params)
+    if type(params) ~= "table" or not isLocalObject(params.objectId) then return end
+    ensureSession()
+    if not AOUA.Session.started then return end
+    local now = willNowMs()
+    AOUA.Session.willControl.effects[params.buffId] = nil
+    willRefreshActive(now)
+end
+
+function AOUA.SeedWillControlBuffs()
+    ensureSession()
+    if not object or type(object.GetBuffs) ~= "function" or not avatar or type(avatar.GetId) ~= "function" then return end
+    local okId, id = pcall(avatar.GetId)
+    if not okId then return end
+    local ok, buffs = pcall(object.GetBuffs, id, false)
+    if not ok or type(buffs) ~= "table" then return end
+    for _, buffId in pairs(buffs) do willUpsertBuff(buffId) end
+end
+
+function AOUA.UpdateWillControlSeconds()
+    ensureSession()
+    if not AOUA.Session.started then return end
+    local now = willNowMs()
+    willRefreshActive(now)
+end
+
+function AOUA.ResetWillControl(reason)
+    ensureSession()
+    local w = AOUA.Session.willControl
+    if w.active then willFinalizeSegment(willNowMs()) end
+    w.effects = {}
+    w.active = false
+    w.segmentStartMs = nil
+    w.totalSeconds = 0
+    w.maxSegmentSeconds = 0
+    w.segments = 0
+    w.lastEventMs = nil
+    w.resetReason = reason
+end
+
+local WILL_THRESHOLDS = {
+    { seconds = 25, minWill = 1, maxWill = 2 },
+    { seconds = 20, minWill = 3, maxWill = 5 },
+    { seconds = 17, minWill = 6, maxWill = 12 },
+    { seconds = 15, minWill = 13, maxWill = 21 },
+    { seconds = 13, minWill = 22, maxWill = 33 },
+    { seconds = 12, minWill = 34, maxWill = 50 },
+    { seconds = 10, minWill = 51, maxWill = 91 },
+    { seconds = 9, minWill = 92, maxWill = 115 },
+    { seconds = 8, minWill = 116, maxWill = 169 },
+    { seconds = 7, minWill = 170, maxWill = 226 },
+    { seconds = 6, minWill = 227, maxWill = 315 },
+    { seconds = 5, minWill = 316, maxWill = 466 },
+    { seconds = 4, minWill = 467, maxWill = 732 },
+    { seconds = 3, minWill = 733, maxWill = 1176 },
+    { seconds = 2, minWill = 1177, maxWill = 2413 },
+    { seconds = 1, minWill = 2414, maxWill = nil }
+}
+
+local function willExpectedSeconds(will)
+    will = tonumber(will)
+    if not will or will <= 0 then return nil, nil end
+    local p = math.min(900, 1.6 * will / (1 + will ^ 1.05 / 1000)) / 1000
+    local t = (p / 0.05) ^ 0.75
+    local increment = math.ceil(150 / (t / p - t))
+    return math.ceil(100 / increment), increment
+end
+
+local function willThresholdRange(seconds)
+    for i = 1, #WILL_THRESHOLDS do
+        if WILL_THRESHOLDS[i].seconds == seconds then return WILL_THRESHOLDS[i] end
+    end
+    return nil
+end
+
+function AOUA.GetWillControlSummary()
+    ensureSession()
+    local will
+    if unit and type(unit.GetWill) == "function" and avatar and type(avatar.GetId) == "function" then
+        local okId, id = pcall(avatar.GetId)
+        if okId then
+            local ok, value = pcall(unit.GetWill, id)
+            if ok then will = tonumber(value) end
+        end
+    end
+    if will == nil and AOUA.Session.statSnapshot then
+        will = tonumber(AOUA.Session.statSnapshot.W)
+    end
+    local expected, increment = willExpectedSeconds(will)
+    local w = AOUA.Session.willControl
+    if w.active then willRefreshActive(willNowMs()) end
+    local range = expected and willThresholdRange(expected) or nil
+    return {
+        will = will,
+        expectedSeconds = expected,
+        increment = increment,
+        totalControlSeconds = w.totalSeconds,
+        maxControlSeconds = w.maxSegmentSeconds,
+        segments = w.segments,
+        thresholdReached = expected and w.maxSegmentSeconds >= expected or false,
+        thresholdMinWill = range and range.minWill or nil,
+        thresholdMaxWill = range and range.maxWill or nil,
+        resetReason = w.resetReason,
+        pvpOnly = true
+    }
+end
+
 
 local function captureStatSnapshot()
     local session = AOUA.Session
