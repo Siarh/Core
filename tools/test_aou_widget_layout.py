@@ -61,6 +61,28 @@ class BackupRestoreCompatibilityTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn('fontname="AllodsConsole"', path.read_text(encoding="utf-16"))
 
+    def test_spell_detail_hit_counts_have_their_own_column(self):
+        header_name = (ROOT / "Widgets/SpellInfoPanel/SpellDetailHeaderPanel/TextViews/Name.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        row_name = (ROOT / "Widgets/SpellInfoPanel/SpellDetailPanel/TextViews/Name.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        header_count = (ROOT / "Widgets/SpellInfoPanel/SpellDetailHeaderPanel/TextViews/Count.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        row_count = (ROOT / "Widgets/SpellInfoPanel/SpellDetailPanel/TextViews/Count.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        header_stats = (ROOT / "Widgets/SpellInfoPanel/SpellDetailHeaderPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+        row_stats = (ROOT / "Widgets/SpellInfoPanel/SpellDetailPanel/TextViews/DamageStats.(WidgetTextView).xdb").read_text(encoding="utf-8")
+
+        # Name: x=5..135; Count: x=136..191; Min/Avg/Max: x=196..356.
+        for text_view in (header_name, row_name):
+            with self.subTest(view="name"):
+                self.assertIn("<HighPos>261</HighPos>", text_view)
+        for text_view in (header_count, row_count):
+            with self.subTest(view="count"):
+                self.assertIn("<Align>WIDGET_ALIGN_LOW</Align>", text_view)
+                self.assertIn("<Pos>136</Pos>", text_view)
+                self.assertIn("<Size>55</Size>", text_view)
+        for text_view in (header_stats, row_stats):
+            with self.subTest(view="stats"):
+                self.assertIn("<HighPos>40</HighPos>", text_view)
+                self.assertIn("<Size>160</Size>", text_view)
+
     def test_global_info_and_optimizer_headers_have_no_trailing_hash(self):
         events = (ROOT / "Scripts/AoUMeterEvents.lua").read_text(encoding="utf-8")
         locale = (ROOT / "Locales/rus/GlobalInfo.txt").read_bytes().decode("utf-8-sig")
