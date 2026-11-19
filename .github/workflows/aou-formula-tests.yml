@@ -95,7 +95,7 @@ jobs:
           mkdir -p package/DPScope/tools
           cp -a Scripts Locales Widgets package/DPScope/
           cp -a "AddonDesc.(UIAddon).xdb" AoUMeterSettings.txt AoU_ChatLog_To_CSV.html \
-            README_Optimizer.txt CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
+            README_Optimizer.txt MANUAL_DPScope_ru.md CHANGELOG_build28.txt desc.txt name.txt package/DPScope/
           cp -a tools/aou_formula_calculator.py tools/aou_event_history_to_profile.py \
             tools/aou_profile_template.json tools/aou_ai_assistant.py tools/aou_ai_companion.py tools/aou_extract_usercfg.py \
             tools/README_formula_calculator.txt tools/README_ollama_ai.txt package/DPScope/tools/
